@@ -11,8 +11,7 @@ kubectl apply -f deployment/deployment.yaml -f deployment/service.yaml
 ```
 
 `testdata` contains
-* three JSON POST bodies (to simulate data from Alert Manager)
-* a Kubernetes manifest to create an instance of the custom resource
+* a JSON POST bodies (to simulate data from Alert Manager)
 
 # to simulate an alert via curl
 ```sh
