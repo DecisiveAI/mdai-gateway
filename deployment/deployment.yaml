@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: event-handler-webservice
+  namespace: mdai
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: event-handler-webservice
+  template:
+    metadata:
+      labels:
+        app: event-handler-webservice
+    spec:
+      serviceAccountName: mdai-operator-controller-manager
+      containers:
+      - name: event-handler-webservice
+        image: event-handler-webservice:0.0.1
+        ports:
+        - containerPort: 8081
