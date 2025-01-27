@@ -138,8 +138,7 @@ func handleAlertsPost(ctx context.Context, clientset kubernetes.Interface, valke
 				log.Printf("Skipping alert because could not unmarshal action_context for alert, payload: %v", alert)
 				continue
 			}
-			var relevantLabels *[]string = nil
-
+			relevantLabels := make([]string, 0)
 			if err := json.Unmarshal([]byte(relevantLabelsJson), &relevantLabels); err != nil {
 				log.Printf("Skipping alert because could not unmarshal relevant_labels for alert, payload: %v", alert)
 				continue
@@ -153,27 +152,35 @@ func handleAlertsPost(ctx context.Context, clientset kubernetes.Interface, valke
 				variableUpdate = actionContext.Resolved.VariableUpdate
 			}
 
-			var result valkey.ValkeyResult
-
-			for _, element := range *relevantLabels {
-				switch variableUpdate.Operation {
-				case AddElement:
-					result = valkeyClient.Do(ctx, valkeyClient.B().Sadd().Key(variableUpdate.VariableRef).Member(alert.Labels[element]).Build())
+			switch variableUpdate.Operation {
+			case AddElement:
+				for _, element := range relevantLabels {
 					log.Printf("adding element for %s", variableUpdate.VariableRef)
-					break
-				case RemoveElement:
-					result = valkeyClient.Do(ctx, valkeyClient.B().Srem().Key(variableUpdate.VariableRef).Member(alert.Labels[element]).Build())
-					log.Printf("removing element for %s", variableUpdate.VariableRef)
-					break
-				case ReplaceValue:
-					log.Printf("replacing value for %s", variableUpdate.VariableRef)
-					result = valkeyClient.Do(ctx, valkeyClient.B().Set().Key(variableUpdate.VariableRef).Value(alert.Labels[element]).Build())
-					break
+					if result := valkeyClient.Do(ctx, valkeyClient.B().Sadd().Key(variableUpdate.VariableRef).Member(alert.Labels[element]).Build()); result.Error() != nil {
+						log.Printf("valkey error: %v", result.Error())
+						http.Error(w, "valkey error: "+result.Error().Error(), http.StatusInternalServerError)
+					}
 				}
-				if result.Error() != nil {
+				break
+			case RemoveElement:
+				for _, element := range relevantLabels {
+					log.Printf("removing element for %s", variableUpdate.VariableRef)
+					if result := valkeyClient.Do(ctx, valkeyClient.B().Srem().Key(variableUpdate.VariableRef).Member(alert.Labels[element]).Build()); result.Error() != nil {
+						log.Printf("valkey error: %v", result.Error())
+						http.Error(w, "valkey error: "+result.Error().Error(), http.StatusInternalServerError)
+					}
+				}
+				break
+			case ReplaceValue:
+				if len(relevantLabels) > 1 {
+					log.Printf("Multiple relevantLabels found for replace action, taking first label: '%s', all labels: %v", relevantLabels[0], relevantLabels)
+				}
+				log.Printf("replacing value for %s", variableUpdate.VariableRef)
+				if result := valkeyClient.Do(ctx, valkeyClient.B().Set().Key(variableUpdate.VariableRef).Value(alert.Labels[relevantLabels[0]]).Build()); result.Error() != nil {
 					log.Printf("valkey error: %v", result.Error())
 					http.Error(w, "valkey error: "+result.Error().Error(), http.StatusInternalServerError)
 				}
+				break
 			}
 		}
 		w.WriteHeader(http.StatusOK)
