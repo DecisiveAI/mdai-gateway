@@ -9,6 +9,7 @@ import (
 	"log"
 	"maps"
 	"net/http"
+	"os"
 	"slices"
 
 	"github.com/decisiveai/event-handler-webservice/types"
@@ -50,15 +51,20 @@ func main() {
 		log.Fatalf("failed to get kubernetes clientset: %v", err)
 	}
 
-	secrets, err := clientset.CoreV1().Secrets(namespace).Get(ctx, valkeySecretName, metav1.GetOptions{})
-	if err != nil {
-		log.Fatalf("failed to get secrets: %v", err)
+	valkeyPassword := GetEnvVariableWithDefault("VALKEY_PASSWORD", "")
+	if valkeyPassword == "" {
+		secrets, err := clientset.CoreV1().Secrets(namespace).Get(ctx, valkeySecretName, metav1.GetOptions{})
+		if err != nil {
+			log.Fatalf("failed to get secrets: %v", err)
+		}
+		valkeyPassword = string(secrets.Data["VALKEY_PASSWORD"])
 	}
 
 	valkeyClient, err := valkey.NewClient(valkey.ClientOption{
 		InitAddress: []string{"mdai-valkey-primary.mdai.svc.cluster.local:6379"}, // []string{string(secrets.Data["VALKEY_ENDPOINT"])},
-		Password:    string(secrets.Data["VALKEY_PASSWORD"]),
+		Password:    valkeyPassword,
 	})
+
 	if err != nil {
 		log.Fatalf("failed to get valkey client: %v", err)
 	}
@@ -66,6 +72,13 @@ func main() {
 
 	log.Println("Starting server on :8081")
 	log.Fatal(http.ListenAndServe(":8081", nil))
+}
+
+func GetEnvVariableWithDefault(key, defaultValue string) string {
+	if value, exists := os.LookupEnv(key); exists {
+		return value
+	}
+	return defaultValue
 }
 
 func handleAlertsPost(ctx context.Context, clientset kubernetes.Interface, valkeyClient valkey.Client) http.HandlerFunc {
