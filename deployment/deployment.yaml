@@ -17,5 +17,8 @@ spec:
       containers:
       - name: event-handler-webservice
         image: event-handler-webservice:0.0.1
+        env:
+          - name: VALKEY_PASSWORD
+            value: abc
         ports:
         - containerPort: 8081
