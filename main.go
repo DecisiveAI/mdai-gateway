@@ -5,19 +5,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"log"
-	"maps"
-	"net/http"
-	"os"
-	"slices"
-
 	"github.com/decisiveai/event-handler-webservice/types"
 	"github.com/valkey-io/valkey-go"
 	"gopkg.in/yaml.v3"
+	"io"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
+	"log"
+	"net/http"
+	"os"
 )
 
 const (
@@ -88,10 +85,10 @@ func handleAlertsPost(ctx context.Context, clientset kubernetes.Interface, valke
 			return
 		}
 
-		config, err := getConfig(ctx, clientset)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
+		//config, err := getConfig(ctx, clientset)
+		//if err != nil {
+		//	http.Error(w, err.Error(), http.StatusInternalServerError)
+		//}
 
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -100,52 +97,83 @@ func handleAlertsPost(ctx context.Context, clientset kubernetes.Interface, valke
 			return
 		}
 
+		log.Printf("payload: %v", string(body))
+
 		var payload types.AlertManagerPayload
 		if err := json.Unmarshal(body, &payload); err != nil {
 			log.Printf("invalid json: %v", body)
 			http.Error(w, "Invalid JSON", http.StatusBadRequest)
 			return
 		}
-		evaluationsMap := make(map[string]types.Evaluation, len(config.Evaluations))
-		for _, evaluation := range config.Evaluations {
-			evaluationsMap[string(evaluation.Name)] = evaluation
-		}
-		evaluations := slices.Collect(maps.Keys(evaluationsMap))
 
-		variablesMap := make(map[string]types.Variable, len(config.Variables))
-		for _, variable := range config.Variables {
-			variablesMap[variable.StorageKey] = variable
-		}
+		//evaluationsMap := make(map[string]types.Evaluation, len(config.Evaluations))
+		//for _, evaluation := range config.Evaluations {
+		//	evaluationsMap[string(evaluation.Name)] = evaluation
+		//}
+		//evaluations := slices.Collect(maps.Keys(evaluationsMap))
+		//
+		//variablesMap := make(map[string]types.Variable, len(config.Variables))
+		//for _, variable := range config.Variables {
+		//	variablesMap[variable.StorageKey] = variable
+		//}
 
 		for _, alert := range payload.Alerts {
-			if !slices.Contains(evaluations, alert.Labels["alertname"]) {
-				log.Printf("alert %s not found in evaluations", alert.Labels["alertname"])
+			//if !slices.Contains(evaluations, alert.Labels["alertname"]) {
+			//	log.Printf("alert %s not found in evaluations", alert.Labels["alertname"])
+			//	continue
+			//}
+			actionContextJson := alert.Annotations["action_context"]
+			if actionContextJson == "" {
+				log.Printf("Skipping alert because no action_context found in alert annotations, payload: %v", alert)
 				continue
 			}
-			alertName := alert.Labels["alertname"]
+			relevantLabelsJson := alert.Annotations["relevant_labels"]
+			if actionContextJson == "" {
+				log.Printf("Skipping alert because no relevant_labels found in alert annotations, payload:  %v", alert)
+				continue
+			}
+
+			var actionContext *types.PrometheusAlertEvaluationStatus = nil
+			if err := json.Unmarshal([]byte(actionContextJson), &actionContext); err != nil {
+				log.Printf("Skipping alert because could not unmarshal action_context for alert, payload: %v", alert)
+				continue
+			}
+			var relevantLabels *[]string = nil
+
+			if err := json.Unmarshal([]byte(relevantLabelsJson), &relevantLabels); err != nil {
+				log.Printf("Skipping alert because could not unmarshal relevant_labels for alert, payload: %v", alert)
+				continue
+			}
+
 			var variableUpdate *types.VariableUpdate
 			switch alert.Status {
 			case "firing":
-				variableUpdate = evaluationsMap[alertName].Status.Firing.VariableUpdate
+				variableUpdate = actionContext.Firing.VariableUpdate
 			case "resolved":
-				variableUpdate = evaluationsMap[alertName].Status.Resolved.VariableUpdate
+				variableUpdate = actionContext.Resolved.VariableUpdate
 			}
 
 			var result valkey.ValkeyResult
-			switch variableUpdate.Operation {
-			case AddElement:
-				result = valkeyClient.Do(ctx, valkeyClient.B().Sadd().Key(variableUpdate.VariableRef).Member(alert.Annotations["service_name"]).Build())
-				log.Printf("adding element for %s", variableUpdate.VariableRef)
-			case RemoveElement:
-				result = valkeyClient.Do(ctx, valkeyClient.B().Srem().Key(variableUpdate.VariableRef).Member(alert.Annotations["service_name"]).Build())
-				log.Printf("removing element for %s", variableUpdate.VariableRef)
-			case ReplaceValue:
-				log.Printf("replacing value for %s", variableUpdate.VariableRef)
-				result = valkeyClient.Do(ctx, valkeyClient.B().Set().Key(variableUpdate.VariableRef).Value(alert.Annotations["service_name"]).Build())
-			}
-			if result.Error() != nil {
-				log.Printf("valkey error: %v", result.Error())
-				http.Error(w, "valkey error: "+result.Error().Error(), http.StatusInternalServerError)
+
+			for _, element := range *relevantLabels {
+				switch variableUpdate.Operation {
+				case AddElement:
+					result = valkeyClient.Do(ctx, valkeyClient.B().Sadd().Key(variableUpdate.VariableRef).Member(alert.Labels[element]).Build())
+					log.Printf("adding element for %s", variableUpdate.VariableRef)
+					break
+				case RemoveElement:
+					result = valkeyClient.Do(ctx, valkeyClient.B().Srem().Key(variableUpdate.VariableRef).Member(alert.Labels[element]).Build())
+					log.Printf("removing element for %s", variableUpdate.VariableRef)
+					break
+				case ReplaceValue:
+					log.Printf("replacing value for %s", variableUpdate.VariableRef)
+					result = valkeyClient.Do(ctx, valkeyClient.B().Set().Key(variableUpdate.VariableRef).Value(alert.Labels[element]).Build())
+					break
+				}
+				if result.Error() != nil {
+					log.Printf("valkey error: %v", result.Error())
+					http.Error(w, "valkey error: "+result.Error().Error(), http.StatusInternalServerError)
+				}
 			}
 		}
 		w.WriteHeader(http.StatusOK)
