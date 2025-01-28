@@ -102,24 +102,24 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 		}
 
 		for _, alert := range payload.Alerts {
-			actionContextJson := alert.Annotations["action_context"]
-			if actionContextJson == "" {
+			actionContextJSON := alert.Annotations["action_context"]
+			if actionContextJSON == "" {
 				log.Printf("Skipping alert because no action_context found in alert annotations, payload: %v", alert)
 				continue
 			}
-			relevantLabelsJson := alert.Annotations["relevant_labels"]
-			if actionContextJson == "" {
+			relevantLabelsJSON := alert.Annotations["relevant_labels"]
+			if relevantLabelsJSON == "" {
 				log.Printf("Skipping alert because no relevant_labels found in alert annotations, payload:  %v", alert)
 				continue
 			}
 
 			var actionContext *types.PrometheusAlertEvaluationStatus
-			if err := json.Unmarshal([]byte(actionContextJson), &actionContext); err != nil {
+			if err := json.Unmarshal([]byte(actionContextJSON), &actionContext); err != nil {
 				log.Printf("Skipping alert because could not unmarshal action_context for alert, payload: %v", alert)
 				continue
 			}
 			relevantLabels := make([]string, 0)
-			if err := json.Unmarshal([]byte(relevantLabelsJson), &relevantLabels); err != nil {
+			if err := json.Unmarshal([]byte(relevantLabelsJSON), &relevantLabels); err != nil {
 				log.Printf("Skipping alert because could not unmarshal relevant_labels for alert, payload: %v", alert)
 				continue
 			}
