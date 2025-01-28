@@ -4,21 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/decisiveai/event-handler-webservice/types"
-	"github.com/valkey-io/valkey-go"
 	"io"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/clientcmd"
 	"log"
 	"net/http"
 	"os"
+
+	"github.com/decisiveai/event-handler-webservice/types"
+	"github.com/valkey-io/valkey-go"
 )
 
 const (
-	namespace               = "mdai"
-	configmapName           = "mdai-event-handler-config"
-	valkeySecretName        = "valkey-secret"
 	valkeyEndpointEnvVarKey = "VALKEY_ENDPOINT"
 	valkeyPasswordEnvVarKey = "VALKEY_PASSWORD"
 
@@ -33,36 +28,12 @@ const (
 	ReplaceValue  = "mdai/replace_value"
 )
 
-var ()
-
 func main() {
 	ctx := context.Background()
-	config, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
-		clientcmd.NewDefaultClientConfigLoadingRules(),
-		&clientcmd.ConfigOverrides{},
-	).ClientConfig()
-	if err != nil {
-		log.Fatalf("failed to get kubernetes config: %v", err)
-	}
 
-	clientset, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		log.Fatalf("failed to get kubernetes clientset: %v", err)
-	}
-
-	valkeyPassword := getEnvVariableWithDefault(valkeyPasswordEnvVarKey, "")
-	if valkeyPassword == "" {
-		secrets, err := clientset.CoreV1().Secrets(namespace).Get(ctx, valkeySecretName, metav1.GetOptions{})
-		if err != nil {
-			log.Fatalf("failed to get secrets: %v", err)
-		}
-		valkeyPassword = string(secrets.Data["VALKEY_PASSWORD"])
-	}
-
-	valkeyEndpointEnvVar := getEnvVariableWithDefault(valkeyEndpointEnvVarKey, "")
 	valkeyClient, err := valkey.NewClient(valkey.ClientOption{
-		InitAddress: []string{valkeyEndpointEnvVar}, // []string{string(secrets.Data["VALKEY_ENDPOINT"])},
-		Password:    valkeyPassword,
+		InitAddress: []string{getEnvVariableWithDefault(valkeyEndpointEnvVarKey, "mdai-valkey-primary.mdai.svc.cluster.local:6379")},
+		Password:    getEnvVariableWithDefault(valkeyPasswordEnvVarKey, ""),
 	})
 
 	if err != nil {
