@@ -141,7 +141,6 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 						http.Error(w, "valkey error: "+result.Error().Error(), http.StatusInternalServerError)
 					}
 				}
-				break
 			case RemoveElement:
 				for _, element := range relevantLabels {
 					log.Printf("removing element for %s", variableUpdate.VariableRef)
@@ -150,7 +149,6 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 						http.Error(w, "valkey error: "+result.Error().Error(), http.StatusInternalServerError)
 					}
 				}
-				break
 			case ReplaceValue:
 				if len(relevantLabels) > 1 {
 					log.Printf("Multiple relevantLabels found for replace action, taking first label: '%s', all labels: %v", relevantLabels[0], relevantLabels)
@@ -160,7 +158,6 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 					log.Printf("valkey error: %v", result.Error())
 					http.Error(w, "valkey error: "+result.Error().Error(), http.StatusInternalServerError)
 				}
-				break
 			}
 		}
 		w.WriteHeader(http.StatusOK)
