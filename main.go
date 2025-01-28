@@ -3,11 +3,9 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"github.com/decisiveai/event-handler-webservice/types"
 	"github.com/valkey-io/valkey-go"
-	"gopkg.in/yaml.v3"
 	"io"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -18,20 +16,24 @@ import (
 )
 
 const (
-	namespace        = "mdai"
-	configmapName    = "mdai-event-handler-config"
-	valkeySecretName = "valkey-secret"
+	namespace               = "mdai"
+	configmapName           = "mdai-event-handler-config"
+	valkeySecretName        = "valkey-secret"
+	valkeyEndpointEnvVarKey = "VALKEY_ENDPOINT"
+	valkeyPasswordEnvVarKey = "VALKEY_PASSWORD"
+
+	firingStatus   = "firing"
+	resolvedStatus = "resolved"
+
+	actionContextAnnotationsKey  = "action_context"
+	relevantLabelsAnnotationsKey = "relevant_labels"
 
 	AddElement    = "mdai/add_element"
 	RemoveElement = "mdai/remove_element"
 	ReplaceValue  = "mdai/replace_value"
 )
 
-var (
-	errFailedToGetConfigMap    = errors.New("failed to get ConfigMap")
-	errFailedToUnmarshalConfig = errors.New("failed to unmarshal config")
-	errNoConfigFound           = errors.New("no config found")
-)
+var ()
 
 func main() {
 	ctx := context.Background()
@@ -48,7 +50,7 @@ func main() {
 		log.Fatalf("failed to get kubernetes clientset: %v", err)
 	}
 
-	valkeyPassword := getEnvVariableWithDefault("VALKEY_PASSWORD", "")
+	valkeyPassword := getEnvVariableWithDefault(valkeyPasswordEnvVarKey, "")
 	if valkeyPassword == "" {
 		secrets, err := clientset.CoreV1().Secrets(namespace).Get(ctx, valkeySecretName, metav1.GetOptions{})
 		if err != nil {
@@ -57,8 +59,9 @@ func main() {
 		valkeyPassword = string(secrets.Data["VALKEY_PASSWORD"])
 	}
 
+	valkeyEndpointEnvVar := getEnvVariableWithDefault(valkeyEndpointEnvVarKey, "")
 	valkeyClient, err := valkey.NewClient(valkey.ClientOption{
-		InitAddress: []string{"mdai-valkey-primary.mdai.svc.cluster.local:6379"}, // []string{string(secrets.Data["VALKEY_ENDPOINT"])},
+		InitAddress: []string{valkeyEndpointEnvVar}, // []string{string(secrets.Data["VALKEY_ENDPOINT"])},
 		Password:    valkeyPassword,
 	})
 
@@ -102,12 +105,12 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 		}
 
 		for _, alert := range payload.Alerts {
-			actionContextJSON := alert.Annotations["action_context"]
+			actionContextJSON := alert.Annotations[actionContextAnnotationsKey]
 			if actionContextJSON == "" {
 				log.Printf("Skipping alert because no action_context found in alert annotations, payload: %v", alert)
 				continue
 			}
-			relevantLabelsJSON := alert.Annotations["relevant_labels"]
+			relevantLabelsJSON := alert.Annotations[relevantLabelsAnnotationsKey]
 			if relevantLabelsJSON == "" {
 				log.Printf("Skipping alert because no relevant_labels found in alert annotations, payload:  %v", alert)
 				continue
@@ -126,9 +129,9 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 
 			var variableUpdate *types.VariableUpdate
 			switch alert.Status {
-			case "firing":
+			case firingStatus:
 				variableUpdate = actionContext.Firing.VariableUpdate
-			case "resolved":
+			case resolvedStatus:
 				variableUpdate = actionContext.Resolved.VariableUpdate
 			}
 
@@ -165,25 +168,4 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintf(w, `{"success": "variable(s) updated"}`)
 	}
-}
-
-func getConfig(ctx context.Context, clientset kubernetes.Interface) (*types.Config, error) {
-	configMap, err := clientset.CoreV1().ConfigMaps(namespace).Get(ctx, configmapName, metav1.GetOptions{})
-	if err != nil {
-		log.Printf("failed to get configmap: %v", err)
-		return nil, errFailedToGetConfigMap
-	}
-
-	configYAML, configYAMLExists := configMap.Data["config.yaml"]
-	if !configYAMLExists {
-		log.Printf("no config found")
-		return nil, errNoConfigFound
-	}
-
-	var config types.Config
-	if err := yaml.Unmarshal([]byte(configYAML), &config); err != nil {
-		log.Printf("failed to unmarshal config: %v", err)
-		return nil, errFailedToUnmarshalConfig
-	}
-	return &config, nil
 }
