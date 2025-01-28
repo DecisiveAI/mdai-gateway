@@ -1,27 +1,24 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: event-handler-webservice
-  namespace: mdai
+  name: {{ .Values.deployment.name }}
+  namespace: {{ .Values.deployment.namespace }}
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: event-handler-webservice
+      app: {{ .Values.deployment.name }}
   template:
     metadata:
       labels:
-        app: event-handler-webservice
+        app: {{ .Values.deployment.name }}
     spec:
-      serviceAccountName: mdai-operator-controller-manager
+      serviceAccountName: {{ .Values.serviceAccount.name }}
       containers:
-      - name: event-handler-webservice
-        image: event-handler-webservice:0.0.1
-        env:
-          - name: VALKEY_ENDPOINT
-            value: mdai-valkey-primary.mdai.svc.cluster.local:6379
+      - name: {{ .Values.deployment.name }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
         ports:
-        - containerPort: 8081
+        - containerPort: {{ .Values.deployment.containerPort }}
         env:
         - name: VALKEY_PASSWORD
           valueFrom:
