@@ -16,7 +16,6 @@ import (
 	"go.uber.org/mock/gomock"
 	corev1 "k8s.io/api/core/v1"
 	yamlutil "k8s.io/apimachinery/pkg/util/yaml"
-	"k8s.io/client-go/kubernetes/fake"
 )
 
 func TestMain(m *testing.M) {
@@ -34,7 +33,7 @@ func TestUpdateValkeyHandler(t *testing.T) {
 		successResponse = `{"success": "variable(s) updated"}`
 	)
 
-	clientset := fake.NewClientset(getConfigMapFromFile(t))
+	//clientset := fake.NewClientset(getConfigMapFromFile(t))
 	ctx := context.TODO()
 
 	ctrl := gomock.NewController(t)
@@ -46,9 +45,9 @@ func TestUpdateValkeyHandler(t *testing.T) {
 	require.NoError(t, err)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/alerts", handleAlertsPost(ctx, clientset, valkeyClient))
-	valkeyClient.EXPECT().Do(ctx, mock.Match("SADD", "service_list", "service-b")).Return(mock.Result(mock.ValkeyInt64(1))).Times(1)
-	valkeyClient.EXPECT().Do(ctx, mock.Match("SREM", "service_list", "service-a")).Return(mock.Result(mock.ValkeyInt64(1))).Times(1)
+	mux.HandleFunc("/alerts", handleAlertsPost(ctx, valkeyClient))
+	valkeyClient.EXPECT().Do(ctx, mock.Match("SADD", "service_list", "service-a")).Return(mock.Result(mock.ValkeyInt64(1))).Times(1)
+	valkeyClient.EXPECT().Do(ctx, mock.Match("SREM", "service_list", "service-b")).Return(mock.Result(mock.ValkeyInt64(1))).Times(1)
 	valkeyClient.EXPECT().Do(ctx, mock.Match("SET", "service_list", "service-c")).Return(mock.Result(mock.ValkeyString("OK"))).Times(0)
 
 	req := httptest.NewRequest(http.MethodPost, "/alerts", bytes.NewBuffer(alertPostBody1))
@@ -58,30 +57,6 @@ func TestUpdateValkeyHandler(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, successResponse, rec.Body.String())
-}
-
-func TestGetConfig(t *testing.T) {
-	{
-		ctx := context.Background()
-		config, err := getConfig(ctx, fake.NewClientset())
-		require.EqualError(t, err, "failed to get ConfigMap")
-		require.Nil(t, config)
-	}
-	{
-		ctx := context.Background()
-		configMap := getConfigMapFromFile(t)
-		configMap.Data = map[string]string{}
-		config, err := getConfig(ctx, fake.NewClientset(configMap))
-		require.EqualError(t, err, "no config found")
-		require.Nil(t, config)
-	}
-	{
-		ctx := context.Background()
-		configMap := getConfigMapFromFile(t)
-		config, err := getConfig(ctx, fake.NewClientset(configMap))
-		require.NoError(t, err)
-		require.NotNil(t, config)
-	}
 }
 
 func getConfigMapFromFile(t *testing.T) *corev1.ConfigMap {

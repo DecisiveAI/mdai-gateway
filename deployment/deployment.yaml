@@ -17,5 +17,8 @@ spec:
       containers:
       - name: event-handler-webservice
         image: event-handler-webservice:0.0.1
+        env:
+          - name: VALKEY_ENDPOINT
+            value: mdai-valkey-primary.mdai.svc.cluster.local:6379
         ports:
         - containerPort: 8081
