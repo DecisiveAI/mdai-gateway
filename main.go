@@ -48,7 +48,7 @@ func main() {
 		log.Fatalf("failed to get kubernetes clientset: %v", err)
 	}
 
-	valkeyPassword := GetEnvVariableWithDefault("VALKEY_PASSWORD", "")
+	valkeyPassword := getEnvVariableWithDefault("VALKEY_PASSWORD", "")
 	if valkeyPassword == "" {
 		secrets, err := clientset.CoreV1().Secrets(namespace).Get(ctx, valkeySecretName, metav1.GetOptions{})
 		if err != nil {
@@ -71,7 +71,7 @@ func main() {
 	log.Fatal(http.ListenAndServe(":8081", nil))
 }
 
-func GetEnvVariableWithDefault(key, defaultValue string) string {
+func getEnvVariableWithDefault(key, defaultValue string) string {
 	if value, exists := os.LookupEnv(key); exists {
 		return value
 	}
@@ -113,7 +113,7 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 				continue
 			}
 
-			var actionContext *types.PrometheusAlertEvaluationStatus = nil
+			var actionContext *types.PrometheusAlertEvaluationStatus
 			if err := json.Unmarshal([]byte(actionContextJson), &actionContext); err != nil {
 				log.Printf("Skipping alert because could not unmarshal action_context for alert, payload: %v", alert)
 				continue
