@@ -8,14 +8,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"github.com/valkey-io/valkey-go/mock"
 	"go.uber.org/mock/gomock"
-	corev1 "k8s.io/api/core/v1"
-	yamlutil "k8s.io/apimachinery/pkg/util/yaml"
 )
 
 func TestMain(m *testing.M) {
@@ -29,11 +26,9 @@ func TestMain(m *testing.M) {
 
 func TestUpdateValkeyHandler(t *testing.T) {
 	const (
-		configmapName   = "mdai-event-handler-config"
 		successResponse = `{"success": "variable(s) updated"}`
 	)
 
-	//clientset := fake.NewClientset(getConfigMapFromFile(t))
 	ctx := context.TODO()
 
 	ctrl := gomock.NewController(t)
@@ -57,14 +52,4 @@ func TestUpdateValkeyHandler(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, successResponse, rec.Body.String())
-}
-
-func getConfigMapFromFile(t *testing.T) *corev1.ConfigMap {
-	t.Helper()
-	var configMap corev1.ConfigMap
-	configMapBody, err := os.ReadFile(filepath.Join("testdata", configmapName+"-configmap.yaml"))
-	require.NoError(t, err)
-	err = yamlutil.NewYAMLOrJSONDecoder(bytes.NewReader(configMapBody), 100).Decode(&configMap)
-	require.NoError(t, err)
-	return &configMap
 }

@@ -22,3 +22,14 @@ spec:
             value: mdai-valkey-primary.mdai.svc.cluster.local:6379
         ports:
         - containerPort: 8081
+        env:
+        - name: VALKEY_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: valkey-secret
+              key: VALKEY_PASSWORD
+        - name: VALKEY_ENDPOINT
+          valueFrom:
+            secretKeyRef:
+              name: valkey-secret
+              key: VALKEY_ENDPOINT
