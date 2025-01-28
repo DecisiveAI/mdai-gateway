@@ -158,6 +158,8 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 					log.Printf("valkey error: %v", result.Error())
 					http.Error(w, "valkey error: "+result.Error().Error(), http.StatusInternalServerError)
 				}
+			default:
+				log.Printf("Unknown variable update operation type '%s' found on payload, skipping action for alert: %v", variableUpdate.Operation, alert)
 			}
 		}
 		w.WriteHeader(http.StatusOK)
