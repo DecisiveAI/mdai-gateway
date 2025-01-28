@@ -65,7 +65,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to get valkey client: %v", err)
 	}
-	http.HandleFunc("/alerts", handleAlertsPost(ctx, clientset, valkeyClient))
+	http.HandleFunc("/alerts", handleAlertsPost(ctx, valkeyClient))
 
 	log.Println("Starting server on :8081")
 	log.Fatal(http.ListenAndServe(":8081", nil))
@@ -78,17 +78,12 @@ func GetEnvVariableWithDefault(key, defaultValue string) string {
 	return defaultValue
 }
 
-func handleAlertsPost(ctx context.Context, clientset kubernetes.Interface, valkeyClient valkey.Client) http.HandlerFunc {
+func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "Only POST method is supported", http.StatusMethodNotAllowed)
 			return
 		}
-
-		//config, err := getConfig(ctx, clientset)
-		//if err != nil {
-		//	http.Error(w, err.Error(), http.StatusInternalServerError)
-		//}
 
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -106,22 +101,7 @@ func handleAlertsPost(ctx context.Context, clientset kubernetes.Interface, valke
 			return
 		}
 
-		//evaluationsMap := make(map[string]types.Evaluation, len(config.Evaluations))
-		//for _, evaluation := range config.Evaluations {
-		//	evaluationsMap[string(evaluation.Name)] = evaluation
-		//}
-		//evaluations := slices.Collect(maps.Keys(evaluationsMap))
-		//
-		//variablesMap := make(map[string]types.Variable, len(config.Variables))
-		//for _, variable := range config.Variables {
-		//	variablesMap[variable.StorageKey] = variable
-		//}
-
 		for _, alert := range payload.Alerts {
-			//if !slices.Contains(evaluations, alert.Labels["alertname"]) {
-			//	log.Printf("alert %s not found in evaluations", alert.Labels["alertname"])
-			//	continue
-			//}
 			actionContextJson := alert.Annotations["action_context"]
 			if actionContextJson == "" {
 				log.Printf("Skipping alert because no action_context found in alert annotations, payload: %v", alert)
