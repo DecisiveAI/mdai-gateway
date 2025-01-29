@@ -1,7 +1,9 @@
-FROM golang:1.23-bookworm AS builder
+FROM --platform=$BUILDPLATFORM golang:1.23-bookworm AS builder
+ARG TARGETOS
+ARG TARGETARCH
 WORKDIR /opt/event-handler-webservice
 COPY . .
-RUN CGO_ENABLED=0 go build -ldflags="-w -s" -o /event-handler-webservice main.go
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -ldflags="-w -s" -o /event-handler-webservice main.go
 
 FROM gcr.io/distroless/static-debian12
 WORKDIR /
