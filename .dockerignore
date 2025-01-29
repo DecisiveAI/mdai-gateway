@@ -1,7 +1,12 @@
 .git
 .github
+.idea
 deployment
 vendor
 Dockerfile
 README.md
 LICENSE
+.gitignore
+.dockerignore
+main_test.go
+testdata
