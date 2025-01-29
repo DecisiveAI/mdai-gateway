@@ -104,7 +104,7 @@
       },
       "annotations": {
         "description": "some description",
-        "action_context": "{\"firing\":{\"variableUpdate\":{\"variableRef\":\"service_list\",\"operation\":\"mdai/replace_element\"}}}}",
+        "action_context": "{\"firing\":{\"variableUpdate\":{\"variableRef\":\"service_list\",\"operation\":\"mdai/replace_element\"}}}",
         "alert_name": "logBytesOutTooHighBySvc",
         "engine_name": "mdaihub-sample",
         "relevant_labels": "[\"service_name\"]"
