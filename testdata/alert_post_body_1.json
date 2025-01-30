@@ -11,6 +11,7 @@
         "job": "prometheus24"
       },
       "annotations": {
+        "hub_name": "mdai_hub-sample",
         "description": "some description",
         "service_name": "service-a"
       },
@@ -32,7 +33,7 @@
         "description": "some description",
         "action_context": "{\"firing\":{\"variableUpdate\":{\"variableRef\":\"service_list\",\"operation\":\"mdai/add_element\"}},\"resolved\":{\"variableUpdate\":{\"variableRef\":\"service_list\",\"operation\":\"mdai/remove_element\"}}}",
         "alert_name": "logBytesOutTooHighBySvc",
-        "engine_name": "mdaihub-sample",
+        "hub_name": "mdaihub-sample",
         "relevant_labels": "[\"service_name\"]"
       },
       "startsAt": "2018-08-03T09:52:26.739266876+02:00",
@@ -69,7 +70,7 @@
         "description": "some description",
         "action_context": "{\"firing\":{\"variableUpdate\":{\"variableRef\":\"service_list\",\"operation\":\"mdai/add_element\"}},\"resolved\":{\"variableUpdate\":{\"variableRef\":\"service_list\",\"operation\":\"mdai/remove_element\"}}}",
         "alert_name": "logBytesOutTooHighBySvc",
-        "engine_name": "mdaihub-sample",
+        "hub_name": "mdaihub-sample",
         "relevant_labels": "[\"service_name\"]"
       },
       "startsAt": "2018-08-03T09:52:26.739266876+02:00",
@@ -106,7 +107,7 @@
         "description": "some description",
         "action_context": "{\"firing\":{\"variableUpdate\":{\"variableRef\":\"service_list\",\"operation\":\"mdai/replace_element\"}}}",
         "alert_name": "logBytesOutTooHighBySvc",
-        "engine_name": "mdaihub-sample",
+        "hub_name": "mdaihub-sample",
         "relevant_labels": "[\"service_name\"]"
       },
       "startsAt": "2018-08-03T09:52:26.739266876+02:00",
@@ -128,7 +129,7 @@
   "commonAnnotations": {
     "description": "some description",
     "filter_name": "mute-noisy-services",
-    "engine_name": "mydecisiveengine-sample",
+    "hub_name": "mydecisiveengine-sample",
     "action_context": "{\"firing\":{\"variableUpdate\":{\"variableRef\":\"service_list\",\"operation\":\"mdai/add_element\"}},\"resolved\":{\"variableUpdate\":{\"variableRef\":\"service_list\",\"operation\":\"mdai/remove_element\"}}}",
     "alert_name": "logBytesOutTooHighBySvc",
     "relevant_labels": "[\"service_name\"]"
