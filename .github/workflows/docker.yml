@@ -21,8 +21,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Configure git for private modules
+      - name: Configure git for private modules globally
         run: git config --global url."https://user:${TOKEN}@github.com".insteadOf "https://github.com"
+
+      - name: Configure git for private modules locally
+        run: git config url."https://user:${TOKEN}@github.com".insteadOf "https://github.com"
 
       - name: Set up Go
         uses: actions/setup-go@v5
