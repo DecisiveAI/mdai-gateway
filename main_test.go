@@ -41,9 +41,9 @@ func TestUpdateValkeyHandler(t *testing.T) {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/alerts", handleAlertsPost(ctx, valkeyClient))
-	valkeyClient.EXPECT().Do(ctx, mock.Match("SADD", "service_list", "service-a")).Return(mock.Result(mock.ValkeyInt64(1))).Times(1)
-	valkeyClient.EXPECT().Do(ctx, mock.Match("SREM", "service_list", "service-b")).Return(mock.Result(mock.ValkeyInt64(1))).Times(1)
-	valkeyClient.EXPECT().Do(ctx, mock.Match("SET", "service_list", "service-c")).Return(mock.Result(mock.ValkeyString("OK"))).Times(0)
+	valkeyClient.EXPECT().Do(ctx, mock.Match("SADD", "variable/mdaihub-sample/service_list", "service-a")).Return(mock.Result(mock.ValkeyInt64(1))).Times(1)
+	valkeyClient.EXPECT().Do(ctx, mock.Match("SREM", "variable/mdaihub-sample/service_list", "service-b")).Return(mock.Result(mock.ValkeyInt64(1))).Times(1)
+	valkeyClient.EXPECT().Do(ctx, mock.Match("SET", "variable/mdaihub-sample/service_list", "service-c")).Return(mock.Result(mock.ValkeyString("OK"))).Times(0)
 
 	req := httptest.NewRequest(http.MethodPost, "/alerts", bytes.NewBuffer(alertPostBody1))
 	req.Header.Set("Content-Type", "application/json")

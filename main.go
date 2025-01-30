@@ -22,10 +22,13 @@ const (
 
 	actionContextAnnotationsKey  = "action_context"
 	relevantLabelsAnnotationsKey = "relevant_labels"
+	HubName                     = "hub_name"
 
 	AddElement    = "mdai/add_element"
 	RemoveElement = "mdai/remove_element"
 	ReplaceValue  = "mdai/replace_value"
+
+	VariableKeyPrefix = "variable/"
 )
 
 func main() {
@@ -76,6 +79,12 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 		}
 
 		for _, alert := range payload.Alerts {
+			hubName := alert.Annotations[HubName]
+			if hubName == "" {
+				log.Printf("Skipping alert because no hub_name found in alert annotations, payload: %v", alert)
+				continue
+			}
+
 			actionContextJSON := alert.Annotations[actionContextAnnotationsKey]
 			if actionContextJSON == "" {
 				log.Printf("Skipping alert because no action_context found in alert annotations, payload: %v", alert)
@@ -106,19 +115,20 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 				variableUpdate = actionContext.Resolved.VariableUpdate
 			}
 
+			valkeyKey := VariableKeyPrefix + hubName + "/" + variableUpdate.VariableRef
 			switch variableUpdate.Operation {
 			case AddElement:
 				for _, element := range relevantLabels {
-					log.Printf("adding element for %s", variableUpdate.VariableRef)
-					if result := valkeyClient.Do(ctx, valkeyClient.B().Sadd().Key(variableUpdate.VariableRef).Member(alert.Labels[element]).Build()); result.Error() != nil {
+					log.Printf("adding element for %s", valkeyKey)
+					if result := valkeyClient.Do(ctx, valkeyClient.B().Sadd().Key(valkeyKey).Member(alert.Labels[element]).Build()); result.Error() != nil {
 						log.Printf("valkey error: %v", result.Error())
 						http.Error(w, "valkey error: "+result.Error().Error(), http.StatusInternalServerError)
 					}
 				}
 			case RemoveElement:
 				for _, element := range relevantLabels {
-					log.Printf("removing element for %s", variableUpdate.VariableRef)
-					if result := valkeyClient.Do(ctx, valkeyClient.B().Srem().Key(variableUpdate.VariableRef).Member(alert.Labels[element]).Build()); result.Error() != nil {
+					log.Printf("removing element for %s", valkeyKey)
+					if result := valkeyClient.Do(ctx, valkeyClient.B().Srem().Key(valkeyKey).Member(alert.Labels[element]).Build()); result.Error() != nil {
 						log.Printf("valkey error: %v", result.Error())
 						http.Error(w, "valkey error: "+result.Error().Error(), http.StatusInternalServerError)
 					}
@@ -127,8 +137,8 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 				if len(relevantLabels) > 1 {
 					log.Printf("Multiple relevantLabels found for replace action, taking first label: '%s', all labels: %v", relevantLabels[0], relevantLabels)
 				}
-				log.Printf("replacing value for %s", variableUpdate.VariableRef)
-				if result := valkeyClient.Do(ctx, valkeyClient.B().Set().Key(variableUpdate.VariableRef).Value(alert.Labels[relevantLabels[0]]).Build()); result.Error() != nil {
+				log.Printf("replacing value for %s", valkeyKey)
+				if result := valkeyClient.Do(ctx, valkeyClient.B().Set().Key(valkeyKey).Value(alert.Labels[relevantLabels[0]]).Build()); result.Error() != nil {
 					log.Printf("valkey error: %v", result.Error())
 					http.Error(w, "valkey error: "+result.Error().Error(), http.StatusInternalServerError)
 				}
