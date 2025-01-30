@@ -79,7 +79,7 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 		}
 
 		for _, alert := range payload.Alerts {
-			hubName := alert.Annotations[hub_name]
+			hubName := alert.Annotations[HubName]
 			if hubName == "" {
 				log.Printf("Skipping alert because no hub_name found in alert annotations, payload: %v", alert)
 				continue
