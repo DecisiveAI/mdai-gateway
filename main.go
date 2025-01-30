@@ -8,6 +8,11 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
+
+	"github.com/cenkalti/backoff/v4"
+
+	mdaiv1 "github.com/DecisiveAI/mdai-operator/api/v1"
 
 	"github.com/decisiveai/event-handler-webservice/types"
 	"github.com/valkey-io/valkey-go"
@@ -22,7 +27,7 @@ const (
 
 	actionContextAnnotationsKey  = "action_context"
 	relevantLabelsAnnotationsKey = "relevant_labels"
-	HubName                     = "hub_name"
+	HubName                      = "hub_name"
 
 	AddElement    = "mdai/add_element"
 	RemoveElement = "mdai/remove_element"
@@ -32,16 +37,30 @@ const (
 )
 
 func main() {
+	var valkeyClient valkey.Client
 	ctx := context.Background()
 
-	valkeyClient, err := valkey.NewClient(valkey.ClientOption{
-		InitAddress: []string{getEnvVariableWithDefault(valkeyEndpointEnvVarKey, "mdai-valkey-primary.mdai.svc.cluster.local:6379")},
-		Password:    getEnvVariableWithDefault(valkeyPasswordEnvVarKey, ""),
-	})
+	operation := func() error {
+		var err error
+		valkeyClient, err = valkey.NewClient(valkey.ClientOption{
+			InitAddress: []string{getEnvVariableWithDefault(valkeyEndpointEnvVarKey, "mdai-valkey-primary.mdai.svc.cluster.local:6379")},
+			Password:    getEnvVariableWithDefault(valkeyPasswordEnvVarKey, ""),
+		})
+		if err != nil {
+			log.Println("failed to initialize valkey client. retrying...")
+			return err
+		}
+		return nil
+	}
 
-	if err != nil {
+	backoffConfig := backoff.NewExponentialBackOff()
+	backoffConfig.InitialInterval = 5 * time.Second
+	backoffConfig.MaxElapsedTime = 3 * time.Minute
+
+	if err := backoff.Retry(operation, backoffConfig); err != nil {
 		log.Fatalf("failed to get valkey client: %v", err)
 	}
+
 	http.HandleFunc("/alerts", handleAlertsPost(ctx, valkeyClient))
 
 	log.Println("Starting server on :8081")
@@ -96,7 +115,7 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 				continue
 			}
 
-			var actionContext *types.PrometheusAlertEvaluationStatus
+			var actionContext mdaiv1.PrometheusAlertEvaluationStatus
 			if err := json.Unmarshal([]byte(actionContextJSON), &actionContext); err != nil {
 				log.Printf("Skipping alert because could not unmarshal action_context for alert, payload: %v", alert)
 				continue
@@ -107,7 +126,7 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 				continue
 			}
 
-			var variableUpdate *types.VariableUpdate
+			var variableUpdate *mdaiv1.VariableUpdate
 			switch alert.Status {
 			case firingStatus:
 				variableUpdate = actionContext.Firing.VariableUpdate
