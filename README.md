@@ -3,15 +3,11 @@
 
 # INSTALL
 ```sh
-docker build -t event-handler-webservice:0.0.1 . 
-kind load docker-image event-handler-webservice:0.0.1 --name mdai
-kubectl apply -f testdata/mdai-event-handler-config-configmap.yaml
-kubectl patch secret valkey-secret -n mdai --type=json -p='[{"op": "add", "path": "/data/VALKEY_ENDPOINT", "value": "bWRhaS12YWxrZXktcHJpbWFyeS5tZGFpLnN2Yy5jbHVzdGVyLmxvY2FsOjYzNzkK"}]'
-kubectl apply -f deployment/deployment.yaml -f deployment/service.yaml
+helm upgrade --install --create-namespace --namespace mdai event-handler-webservice ./deployment
 ```
 
 `testdata` contains
-* a JSON POST bodies (to simulate data from Alert Manager)
+* JSON POST bodies (to simulate data from Alert Manager)
 
 # to simulate an alert via curl
 ```sh
