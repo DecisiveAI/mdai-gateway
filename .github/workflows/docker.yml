@@ -1,0 +1,105 @@
+name: Docker push for main branch
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "main" ]
+    tags:
+      - 'v*'
+
+env:
+  IMAGE_NAME: event-handler-webservice
+  TOKEN: ${{ secrets.TOKEN_OPERATOR }}
+
+jobs:
+  build-and-publish:
+    permissions:
+      contents: read
+      id-token: write
+
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure git for private modules
+        run: git config --global url."https://user:${TOKEN}@github.com".insteadOf "https://github.com"
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '~1.23'
+
+      - name: Install OTEL Collector Builder
+        run: CGO_ENABLED=0 go install go.opentelemetry.io/collector/cmd/builder@v0.117.0
+
+      - name: Build
+        run: make build
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: us-east-1
+
+      - name: Login to Amazon ECR
+        id: login-ecr-public
+        uses: aws-actions/amazon-ecr-login@v2
+        with:
+          registry-type: public
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          # replace hardcoded registry with  once we use
+          # the decisiveai registry alias
+          images: ${{ steps.login-ecr-public.outputs.registry }}/decisiveai/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,enable=true,priority=100,prefix=sha-,suffix=,format=short
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ !startsWith(github.ref, 'refs/tags/v0.0') }}
+            type=semver,pattern={{major}},enable=${{ !startsWith(github.ref, 'refs/tags/v0.') }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # doesn't seem to work. errors in the buildkit-cache-dance teardown
+      # - name: Go Build Cache for Docker
+      #   id: cache
+      #   uses: actions/cache@v4
+      #   with:
+      #     path: |
+      #       cache-go-mod
+      #       cache-go-build
+      #     key: ${{ runner.os }}-go-build-cache-${{ hashFiles('**/go.sum') }}
+      # - name: inject go-build-cache into docker
+      #   uses: reproducible-containers/buildkit-cache-dance@v3.1.1
+      #   with:
+      #     cache-map: |
+      #       {
+      #         "cache-go-mod": "/root/.cache/go-mod",
+      #         "cache-go-build": "/root/.cache/go-build"
+      #       }
+      #     skip-extraction: ${{ steps.cache.outputs.cache-hit }}
+
+      - name: Build and push
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          file: Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          platforms: linux/amd64,linux/arm64
+
+      # doesn't seem to be supported by ECR
+      # - name: Generate artifact attestation
+      #   uses: actions/attest-build-provenance@v1
+      #   with:
+      #     subject-name: public.ecr.aws/p3k6k6h3/${{ env.IMAGE_NAME }}
+      #     subject-digest: ${{ steps.push.outputs.digest }}
+      #     push-to-registry: true
+      
