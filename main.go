@@ -22,7 +22,7 @@ const (
 
 	actionContextAnnotationsKey  = "action_context"
 	relevantLabelsAnnotationsKey = "relevant_labels"
-	hub_name                     = "hub_name"
+	HubName                     = "hub_name"
 
 	AddElement    = "mdai/add_element"
 	RemoveElement = "mdai/remove_element"
