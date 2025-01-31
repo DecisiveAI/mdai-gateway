@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"io"
 	"log"
 	"net/http"
@@ -22,7 +24,7 @@ const (
 
 	actionContextAnnotationsKey  = "action_context"
 	relevantLabelsAnnotationsKey = "relevant_labels"
-	HubName                     = "hub_name"
+	HubName                      = "hub_name"
 
 	AddElement    = "mdai/add_element"
 	RemoveElement = "mdai/remove_element"
@@ -30,6 +32,28 @@ const (
 
 	VariableKeyPrefix = "variable/"
 )
+
+var logger *zap.Logger
+
+func init() {
+	var err error
+	// Define custom encoder configuration
+	encoderConfig := zap.NewProductionEncoderConfig()
+	encoderConfig.TimeKey = "timestamp"                   // Rename the time field
+	encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder // Use human-readable timestamps
+	encoderConfig.CallerKey = "caller"                    // Show caller file and line number
+	// Create a core logger with the custom configuration
+	core := zapcore.NewCore(
+		zapcore.NewJSONEncoder(encoderConfig), // JSON logging with readable timestamps
+		zapcore.Lock(os.Stdout),               // Output to stdout
+		zap.InfoLevel,                         // Set log level to INFO
+	)
+	logger = zap.New(core, zap.AddCaller())
+	if err != nil {
+		log.Fatalf("failed to initialize logger: %v", err)
+	}
+	defer logger.Sync() // Flush logs before exiting
+}
 
 func main() {
 	ctx := context.Background()
@@ -40,12 +64,12 @@ func main() {
 	})
 
 	if err != nil {
-		log.Fatalf("failed to get valkey client: %v", err)
+		logger.Fatal("failed to get valkey client", zap.Error(err))
 	}
 	http.HandleFunc("/alerts", handleAlertsPost(ctx, valkeyClient))
 
-	log.Println("Starting server on :8081")
-	log.Fatal(http.ListenAndServe(":8081", nil))
+	logger.Info("Starting server", zap.String("address", ":8081"))
+	logger.Fatal("failed to start server", zap.Error(http.ListenAndServe(":8081", nil)))
 }
 
 func getEnvVariableWithDefault(key, defaultValue string) string {
@@ -64,16 +88,16 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
-			log.Printf("failed to read body: %v", err)
+			logger.Info("failed to read body", zap.Error(err))
 			http.Error(w, "Failed to read request body", http.StatusBadRequest)
 			return
 		}
 
-		log.Printf("payload: %v", string(body))
+		logger.Info("Received payload", zap.ByteString("payload", body))
 
 		var payload types.AlertManagerPayload
 		if err := json.Unmarshal(body, &payload); err != nil {
-			log.Printf("invalid json: %v", body)
+			logger.Info("Invalid JSON", zap.ByteString("body", body), zap.Error(err))
 			http.Error(w, "Invalid JSON", http.StatusBadRequest)
 			return
 		}
@@ -81,29 +105,29 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 		for _, alert := range payload.Alerts {
 			hubName := alert.Annotations[HubName]
 			if hubName == "" {
-				log.Printf("Skipping alert because no hub_name found in alert annotations, payload: %v", alert)
+				logger.Info("Skipping alert because no hub_name found in alert annotations, payload: %v", zap.Any("alert", alert))
 				continue
 			}
 
 			actionContextJSON := alert.Annotations[actionContextAnnotationsKey]
 			if actionContextJSON == "" {
-				log.Printf("Skipping alert because no action_context found in alert annotations, payload: %v", alert)
+				logger.Info("Skipping alert, missing action_context", zap.Any("alert", alert))
 				continue
 			}
 			relevantLabelsJSON := alert.Annotations[relevantLabelsAnnotationsKey]
 			if relevantLabelsJSON == "" {
-				log.Printf("Skipping alert because no relevant_labels found in alert annotations, payload:  %v", alert)
+				logger.Info("Skipping alert, missing relevant_labels", zap.Any("alert", alert))
 				continue
 			}
 
 			var actionContext *types.PrometheusAlertEvaluationStatus
 			if err := json.Unmarshal([]byte(actionContextJSON), &actionContext); err != nil {
-				log.Printf("Skipping alert because could not unmarshal action_context for alert, payload: %v", alert)
+				logger.Info("Could not unmarshal action_context", zap.Any("alert", alert), zap.Error(err))
 				continue
 			}
 			relevantLabels := make([]string, 0)
 			if err := json.Unmarshal([]byte(relevantLabelsJSON), &relevantLabels); err != nil {
-				log.Printf("Skipping alert because could not unmarshal relevant_labels for alert, payload: %v", alert)
+				logger.Info("Could not unmarshal relevant_labels", zap.Any("alert", alert), zap.Error(err))
 				continue
 			}
 
@@ -119,31 +143,52 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 			switch variableUpdate.Operation {
 			case AddElement:
 				for _, element := range relevantLabels {
-					log.Printf("adding element for %s", valkeyKey)
+					mdaiHubEvent := map[string]string{
+						"type":      "variable_updated",
+						"operation": variableUpdate.Operation,
+						"variable":  valkeyKey,
+						"value":     alert.Labels[element],
+					}
+					logger.Info("Adding element",
+						zap.String("variable", valkeyKey),
+						zap.Any("mdaiHubEvent", mdaiHubEvent),
+					)
 					if result := valkeyClient.Do(ctx, valkeyClient.B().Sadd().Key(valkeyKey).Member(alert.Labels[element]).Build()); result.Error() != nil {
-						log.Printf("valkey error: %v", result.Error())
+						logger.Error("Valkey error", zap.Error(result.Error()))
 						http.Error(w, "valkey error: "+result.Error().Error(), http.StatusInternalServerError)
 					}
 				}
 			case RemoveElement:
 				for _, element := range relevantLabels {
-					log.Printf("removing element for %s", valkeyKey)
+					mdaiHubEvent := map[string]string{
+						"type":      "variable_updated",
+						"operation": variableUpdate.Operation,
+						"variable":  valkeyKey,
+						"value":     alert.Labels[element],
+					}
+					logger.Info("Removing element",
+						zap.String("variable", valkeyKey),
+						zap.Any("mdaiHubEvent", mdaiHubEvent),
+					)
 					if result := valkeyClient.Do(ctx, valkeyClient.B().Srem().Key(valkeyKey).Member(alert.Labels[element]).Build()); result.Error() != nil {
-						log.Printf("valkey error: %v", result.Error())
+						logger.Error("Valkey error", zap.Error(result.Error()))
 						http.Error(w, "valkey error: "+result.Error().Error(), http.StatusInternalServerError)
 					}
 				}
 			case ReplaceValue:
 				if len(relevantLabels) > 1 {
-					log.Printf("Multiple relevantLabels found for replace action, taking first label: '%s', all labels: %v", relevantLabels[0], relevantLabels)
+					logger.Info("Multiple relevantLabels found for replace action",
+						zap.String("selected_label", relevantLabels[0]),
+						zap.Any("all_labels", relevantLabels),
+					)
 				}
-				log.Printf("replacing value for %s", valkeyKey)
+				logger.Info("Replacing value", zap.String("variable", valkeyKey))
 				if result := valkeyClient.Do(ctx, valkeyClient.B().Set().Key(valkeyKey).Value(alert.Labels[relevantLabels[0]]).Build()); result.Error() != nil {
-					log.Printf("valkey error: %v", result.Error())
+					logger.Error("Valkey error", zap.Error(result.Error()))
 					http.Error(w, "valkey error: "+result.Error().Error(), http.StatusInternalServerError)
 				}
 			default:
-				log.Printf("Unknown variable update operation type '%s' found on payload, skipping action for alert: %v", variableUpdate.Operation, alert)
+				logger.Warn("Unknown variable update operation", zap.String("operation", variableUpdate.Operation), zap.Any("alert", alert))
 			}
 		}
 		w.WriteHeader(http.StatusOK)

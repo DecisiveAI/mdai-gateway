@@ -8,6 +8,7 @@ require (
 	github.com/valkey-io/valkey-go v1.0.53
 	github.com/valkey-io/valkey-go/mock v1.0.53
 	go.uber.org/mock v0.5.0
+	go.uber.org/zap v1.27.0
 	k8s.io/apimachinery v0.32.1
 )
 
@@ -23,6 +24,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/rogpeppe/go-internal v1.13.1 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
+	go.uber.org/multierr v1.10.0 // indirect
 	golang.org/x/net v0.33.0 // indirect
 	golang.org/x/sys v0.28.0 // indirect
 	golang.org/x/text v0.21.0 // indirect
