@@ -10,6 +10,7 @@ on:
 env:
   IMAGE_NAME: event-handler-webservice
   TOKEN: ${{ secrets.TOKEN_OPERATOR }}
+  GOPRIVATE: github.com/decisiveai/mdai-operator
 
 jobs:
   build-and-publish:
@@ -29,8 +30,11 @@ jobs:
         with:
           go-version: '~1.23'
 
-      # - name: Build
-      #   run: make build
+      - name: Vendor
+        run: go mod vendor
+
+      - name: Build
+        run: make build
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4

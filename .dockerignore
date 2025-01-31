@@ -2,7 +2,6 @@
 .github
 .idea
 deployment
-vendor
 Dockerfile
 README.md
 LICENSE
@@ -10,3 +9,4 @@ LICENSE
 .dockerignore
 main_test.go
 testdata
+event-handler-webservice
