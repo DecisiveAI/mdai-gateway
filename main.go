@@ -155,16 +155,17 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 			}
 
 			valkeyKey := VariableKeyPrefix + hubName + "/" + variableUpdate.VariableRef
+
+			mdaiHubEvent := types.MdaiHubEvent{
+				Type:      "variable_updated",
+				Operation: variableUpdate.Operation,
+				Variable:  valkeyKey,
+			}
+
 			switch variableUpdate.Operation {
 			case AddElement:
 				for _, element := range relevantLabels {
-					// Audit logging event log
-					mdaiHubEvent := map[string]string{
-						"type":      "variable_updated",
-						"operation": variableUpdate.Operation,
-						"variable":  valkeyKey,
-						"value":     alert.Labels[element],
-					}
+					mdaiHubEvent.Value = alert.Labels[element]
 					logger.Info("Adding element",
 						zap.String("variable", valkeyKey),
 						zap.Any("mdaiHubEvent", mdaiHubEvent),
@@ -176,13 +177,7 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 				}
 			case RemoveElement:
 				for _, element := range relevantLabels {
-					// Audit logging event log
-					mdaiHubEvent := map[string]string{
-						"type":      "variable_updated",
-						"operation": variableUpdate.Operation,
-						"variable":  valkeyKey,
-						"value":     alert.Labels[element],
-					}
+					mdaiHubEvent.Value = alert.Labels[element]
 					logger.Info("Removing element",
 						zap.String("variable", valkeyKey),
 						zap.Any("mdaiHubEvent", mdaiHubEvent),
@@ -199,13 +194,7 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 						zap.Any("all_labels", relevantLabels),
 					)
 				}
-				// Audit logging event log
-				mdaiHubEvent := map[string]string{
-					"type":      "variable_updated",
-					"operation": variableUpdate.Operation,
-					"variable":  valkeyKey,
-					"value":     alert.Labels[relevantLabels[0]],
-				}
+				mdaiHubEvent.Value = alert.Labels[relevantLabels[0]]
 				logger.Info("Replacing value",
 					zap.String("variable", valkeyKey),
 					zap.Any("mdaiHubEvent", mdaiHubEvent),
