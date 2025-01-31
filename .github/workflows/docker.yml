@@ -3,7 +3,7 @@ name: Docker push for main branch
 on:
   workflow_dispatch:
   push:
-    branches: [ "main", "github-action-fix" ]
+    branches: [ "main" ]
     tags:
       - 'v*'
 
@@ -30,8 +30,11 @@ jobs:
         with:
           go-version: '~1.23'
 
-      # - name: Build
-      #   run: make build
+      - name: Vendor
+        run: go mod vendor
+
+      - name: Build
+        run: make build
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
