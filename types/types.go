@@ -1,5 +1,7 @@
 package types
 
+import mdaiv1 "github.com/DecisiveAI/mdai-operator/api/v1"
+
 type AlertManagerPayload struct {
 	Receiver          string            `json:"receiver"`
 	Status            string            `json:"status"`
@@ -24,6 +26,6 @@ type Alert struct {
 }
 
 type Config struct {
-	Evaluations []Evaluation `json:"evaluations" yaml:"evaluations"`
-	Variables   []Variable   `json:"variables" yaml:"variables"`
+	Evaluations []mdaiv1.Evaluation `json:"evaluations" yaml:"evaluations"`
+	Variables   []mdaiv1.Variable   `json:"variables" yaml:"variables"`
 }
