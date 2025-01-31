@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"time"
@@ -42,7 +41,6 @@ const (
 var logger *zap.Logger
 
 func init() {
-	var err error
 	// Define custom encoder configuration
 	encoderConfig := zap.NewProductionEncoderConfig()
 	encoderConfig.TimeKey = "timestamp"                   // Rename the time field
@@ -55,9 +53,6 @@ func init() {
 		zap.DebugLevel,                        // Log info and above
 	)
 	logger = zap.New(core, zap.AddCaller())
-	if err != nil {
-		log.Fatalf("failed to initialize logger: %v", err)
-	}
 	defer logger.Sync() // Flush logs before exiting
 }
 
