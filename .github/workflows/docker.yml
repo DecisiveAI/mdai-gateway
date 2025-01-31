@@ -3,13 +3,14 @@ name: Docker push for main branch
 on:
   workflow_dispatch:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "github-action-fix" ]
     tags:
       - 'v*'
 
 env:
   IMAGE_NAME: event-handler-webservice
   TOKEN: ${{ secrets.TOKEN_OPERATOR }}
+  GOPRIVATE: github.com/decisiveai/mdai-operator
 
 jobs:
   build-and-publish:
