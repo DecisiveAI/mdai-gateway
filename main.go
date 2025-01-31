@@ -51,7 +51,7 @@ func init() {
 	core := zapcore.NewCore(
 		zapcore.NewJSONEncoder(encoderConfig), // JSON logging with readable timestamps
 		zapcore.Lock(os.Stdout),               // Output to stdout
-		zap.InfoLevel,                         // Set log level to INFO
+		zap.DebugLevel,                        // Log info and above
 	)
 	logger = zap.New(core, zap.AddCaller())
 	if err != nil {
