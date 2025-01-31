@@ -162,6 +162,7 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 			switch variableUpdate.Operation {
 			case AddElement:
 				for _, element := range relevantLabels {
+					// Audit logging event log
 					mdaiHubEvent := map[string]string{
 						"type":      "variable_updated",
 						"operation": variableUpdate.Operation,
@@ -179,6 +180,7 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 				}
 			case RemoveElement:
 				for _, element := range relevantLabels {
+					// Audit logging event log
 					mdaiHubEvent := map[string]string{
 						"type":      "variable_updated",
 						"operation": variableUpdate.Operation,
@@ -201,13 +203,24 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 						zap.Any("all_labels", relevantLabels),
 					)
 				}
-				logger.Info("Replacing value", zap.String("variable", valkeyKey))
+				// Audit logging event log
+				mdaiHubEvent := map[string]string{
+					"type":      "variable_updated",
+					"operation": variableUpdate.Operation,
+					"variable":  valkeyKey,
+					"value":     alert.Labels[relevantLabels[0]],
+				}
+				logger.Info("Replacing value",
+					zap.String("variable", valkeyKey),
+					zap.Any("mdaiHubEvent", mdaiHubEvent),
+				)
+
 				if result := valkeyClient.Do(ctx, valkeyClient.B().Set().Key(valkeyKey).Value(alert.Labels[relevantLabels[0]]).Build()); result.Error() != nil {
 					logger.Error("Valkey error", zap.Error(result.Error()))
 					http.Error(w, "valkey error: "+result.Error().Error(), http.StatusInternalServerError)
 				}
 			default:
-				logger.Warn("Unknown variable update operation", zap.String("operation", variableUpdate.Operation), zap.Any("alert", alert))
+				logger.Error("Unknown variable update operation", zap.String("operation", variableUpdate.Operation), zap.Any("alert", alert))
 			}
 		}
 		w.WriteHeader(http.StatusOK)
