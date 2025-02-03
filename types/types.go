@@ -29,3 +29,10 @@ type Config struct {
 	Evaluations []mdaiv1.Evaluation `json:"evaluations" yaml:"evaluations"`
 	Variables   []mdaiv1.Variable   `json:"variables" yaml:"variables"`
 }
+
+type MdaiHubEvent struct {
+	Type      string `json:"type"`
+	Operation string `json:"operation"`
+	Variable  string `json:"variable"`
+	Value     string `json:"value"`
+}
