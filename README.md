@@ -1,3 +1,4 @@
+[![Tests](https://github.com/DecisiveAI/event-handler-webservice/actions/workflows/test.yml/badge.svg)](https://github.com/DecisiveAI/event-handler-webservice/actions/workflows/test.yml)
 # Event Handler Webservice
 ### NOTE: this requires the 0.6.x helm installation
 
