@@ -158,7 +158,7 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 				continue
 			}
 
-			log.Printf("Processing alert: %s at %s, fingerprint: %s, status: %s", alert.Labels["alertname"], alert.StartsAt, alert.Fingerprint, alert.Status)
+			logger.Info("Processing alert", zap.Any("alert", alert))
 
 			var variableUpdate *mdaiv1.VariableUpdate
 			switch alert.Status {
@@ -166,18 +166,18 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 				if actionContext.Firing != nil && actionContext.Firing.VariableUpdate != nil {
 					variableUpdate = actionContext.Firing.VariableUpdate
 				} else {
-					log.Printf("No firing context found for alert, payload: %v", alert)
+					logger.Error("No firing context found for alert", zap.Any("alert", alert))
 					continue
 				}
 			case resolvedStatus:
 				if actionContext.Resolved != nil && actionContext.Resolved.VariableUpdate != nil {
 					variableUpdate = actionContext.Resolved.VariableUpdate
 				} else {
-					log.Printf("No resolved context found for alert, payload: %v", alert)
+					logger.Error("No resolved context found for alert, payload: %v", zap.Any("alert", alert))
 					continue
 				}
 			default:
-				log.Printf("Invalid alert status: %s, payload: %v", alert.Status, alert)
+				logger.Error("Invalid alert status: %s, payload: %v", zap.Any("alert", alert))
 				continue
 			}
 
