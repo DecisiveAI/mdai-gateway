@@ -38,16 +38,49 @@ func TestUpdateValkeyHandler(t *testing.T) {
 
 	alertPostBody1, err := os.ReadFile("testdata/alert_post_body_1.json")
 	require.NoError(t, err)
+	alertPostBody2, err := os.ReadFile("testdata/alert_post_body_2.json")
+	require.NoError(t, err)
+	alertPostBody3, err := os.ReadFile("testdata/alert_post_body_3.json")
+	require.NoError(t, err)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/alerts", handleAlertsPost(ctx, valkeyClient))
 	valkeyClient.EXPECT().Do(ctx, mock.Match("SADD", "variable/mdaihub-sample/service_list", "service-a")).Return(mock.Result(mock.ValkeyInt64(1))).Times(1)
 	valkeyClient.EXPECT().Do(ctx, mock.Match("SREM", "variable/mdaihub-sample/service_list", "service-b")).Return(mock.Result(mock.ValkeyInt64(1))).Times(1)
-	valkeyClient.EXPECT().Do(ctx, mock.Match("SET", "variable/mdaihub-sample/service_list", "service-c")).Return(mock.Result(mock.ValkeyString("OK"))).Times(0)
+	valkeyClient.EXPECT().Do(ctx, mock.Match("SET", "variable/mdaihub-sample/service_list", "service-c")).Return(mock.Result(mock.ValkeyString("OK"))).Times(1)
 
 	req := httptest.NewRequest(http.MethodPost, "/alerts", bytes.NewBuffer(alertPostBody1))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, successResponse, rec.Body.String())
+
+	// one more time with different payload
+	mux = http.NewServeMux()
+	mux.HandleFunc("/alerts", handleAlertsPost(ctx, valkeyClient))
+	valkeyClient.EXPECT().Do(ctx, mock.Match("SREM", "variable/mdaihub-sample/service_list", "service-a")).Return(mock.Result(mock.ValkeyInt64(1))).Times(1)
+	valkeyClient.EXPECT().Do(ctx, mock.Match("SREM", "variable/mdaihub-sample/service_list", "service-b")).Return(mock.Result(mock.ValkeyInt64(1))).Times(1)
+	valkeyClient.EXPECT().Do(ctx, mock.Match("SREM", "variable/mdaihub-sample/service_list", "service-c")).Return(mock.Result(mock.ValkeyString("OK"))).Times(1)
+
+	req = httptest.NewRequest(http.MethodPost, "/alerts", bytes.NewBuffer(alertPostBody2))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, successResponse, rec.Body.String())
+
+	// one more time to emulate a scenarion when alert was re-created or renamed
+	mux = http.NewServeMux()
+	mux.HandleFunc("/alerts", handleAlertsPost(ctx, valkeyClient))
+	valkeyClient.EXPECT().Do(ctx, mock.Match("SADD", "variable/mdaihub-sample/service_list", "service-a")).Return(mock.Result(mock.ValkeyInt64(1))).Times(1)
+	valkeyClient.EXPECT().Do(ctx, mock.Match("SREM", "variable/mdaihub-sample/service_list", "service-a")).Return(mock.Result(mock.ValkeyInt64(1))).Times(1)
+
+	req = httptest.NewRequest(http.MethodPost, "/alerts", bytes.NewBuffer(alertPostBody3))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusOK, rec.Code)

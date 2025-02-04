@@ -1,6 +1,9 @@
 package types
 
-import mdaiv1 "github.com/DecisiveAI/mdai-operator/api/v1"
+import (
+	mdaiv1 "github.com/DecisiveAI/mdai-operator/api/v1"
+	"time"
+)
 
 type AlertManagerPayload struct {
 	Receiver          string            `json:"receiver"`
@@ -20,9 +23,10 @@ type Alert struct {
 	Status       string            `json:"status"`
 	Labels       map[string]string `json:"labels"`
 	Annotations  map[string]string `json:"annotations"`
-	StartsAt     string            `json:"startsAt"`
-	EndsAt       string            `json:"endsAt"`
+	StartsAt     time.Time         `json:"startsAt"`
+	EndsAt       time.Time         `json:"endsAt"`
 	GeneratorURL string            `json:"generatorURL"`
+	Fingerprint  string            `json:"fingerprint"`
 }
 
 type Config struct {
