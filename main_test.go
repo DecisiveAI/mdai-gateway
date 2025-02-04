@@ -72,7 +72,7 @@ func TestUpdateValkeyHandler(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, successResponse, rec.Body.String())
 
-	// one more time to emulate a scenarion when alert was re-created or renamed
+	// one more time to emulate a scenario when alert was re-created or renamed
 	mux = http.NewServeMux()
 	mux.HandleFunc("/alerts", handleAlertsPost(ctx, valkeyClient))
 	valkeyClient.EXPECT().Do(ctx, mock.Match("SADD", "variable/mdaihub-sample/service_list", "service-a")).Return(mock.Result(mock.ValkeyInt64(1))).Times(1)
