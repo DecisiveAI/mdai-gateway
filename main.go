@@ -169,12 +169,11 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 				}
 				variableUpdate = actionContext.Firing.VariableUpdate
 			case resolvedStatus:
-				if actionContext.Resolved != nil && actionContext.Resolved.VariableUpdate != nil {
-					variableUpdate = actionContext.Resolved.VariableUpdate
-				} else {
-					logger.Error("No resolved context found for alert, payload: %v", zap.Any("alert", alert))
+				if actionContext.Resolved == nil || actionContext.Resolved.VariableUpdate == nil {
+					logger.Error("No resolved context found for alert", zap.Any("alert", alert))
 					continue
 				}
+				variableUpdate = actionContext.Resolved.VariableUpdate
 			default:
 				logger.Error("Invalid alert status: %s, payload: %v", zap.Any("alert", alert))
 				continue
