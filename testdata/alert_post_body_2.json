@@ -8,23 +8,6 @@
         "alertname": "logBytesOutTooHighBySvc",
         "dc": "eu-west-1",
         "instance": "localhost:9090",
-        "job": "prometheus24"
-      },
-      "annotations": {
-        "hub_name": "mdai_hub-sample",
-        "description": "some description",
-        "service_name": "service-a"
-      },
-      "startsAt": "2018-08-03T09:52:26.739266876+02:00",
-      "endsAt": "2018-08-03T09:54:26.739266876+02:00",
-      "generatorURL": "http://example.com:9090/graph?g0.expr=go_memstats_alloc_bytes+%3E+0\u0026g0.tab=1"
-    },
-    {
-      "status": "firing",
-      "labels": {
-        "alertname": "logBytesOutTooHighBySvc",
-        "dc": "eu-west-1",
-        "instance": "localhost:9090",
         "job": "prometheus24",
         "current_value": "16784867.25",
         "service_name": "service-a"
@@ -37,24 +20,8 @@
         "relevant_labels": "[\"service_name\"]"
       },
       "startsAt": "2018-08-03T09:52:26.739266876+02:00",
-      "endsAt": "0001-01-01T00:00:00Z",
+      "endsAt": "2018-08-03T09:58:26.739266876+02:00",
       "generatorURL": "http://example.com:9090/graph?g0.expr=go_memstats_alloc_bytes+%3E+0\u0026g0.tab=1"                                                                                  
-    },
-    {
-      "status": "resolved",
-      "labels": {
-        "alertname": "logBytesOutTooHighBySvc",
-        "dc": "eu-west-1",
-        "instance": "localhost:9090",
-        "job": "prometheus24"
-      },
-      "annotations": {
-        "description": "some description",
-        "service_name": "service-a"
-      },
-      "startsAt": "2018-08-03T09:52:26.739266876+02:00",
-      "endsAt": "2018-08-03T09:56:26.739266876+02:00",
-      "generatorURL": "http://example.com:9090/graph?g0.expr=go_memstats_alloc_bytes+%3E+0\u0026g0.tab=1"
     },
     {
       "status": "resolved",
@@ -83,29 +50,13 @@
         "alertname": "logBytesOutTooHighBySvc",
         "dc": "eu-west-1",
         "instance": "localhost:9090",
-        "job": "prometheus24"
-      },
-      "annotations": {
-        "description": "some description",
-        "service_name": "service-foobaz"
-      },
-      "startsAt": "2018-08-03T09:52:26.739266876+02:00",
-      "endsAt": "0001-01-01T00:00:00Z",
-      "generatorURL": "http://example.com:9090/graph?g0.expr=go_memstats_alloc_bytes+%3E+0\u0026g0.tab=1"
-    },
-    {
-      "status": "firing",
-      "labels": {
-        "alertname": "logBytesOutTooHighBySvc",
-        "dc": "eu-west-1",
-        "instance": "localhost:9090",
         "job": "prometheus24",
         "current_value": "16784867.25",
         "service_name": "service-c"
       },
       "annotations": {
         "description": "some description",
-        "action_context": "{\"firing\":{\"variableUpdate\":{\"variableRef\":\"service_list\",\"operation\":\"mdai/replace_element\"}}}",
+        "action_context": "{\"firing\":{\"variableUpdate\":{\"variableRef\":\"service_list\",\"operation\":\"mdai/replace_element\"}},\"resolved\":{\"variableUpdate\":{\"variableRef\":\"service_list\",\"operation\":\"mdai/remove_element\"}}}",
         "alert_name": "logBytesOutTooHighBySvc",
         "hub_name": "mdaihub-sample",
         "relevant_labels": "[\"service_name\"]"

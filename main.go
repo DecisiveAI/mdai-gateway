@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"sort"
+	"sync"
 	"time"
 
 	"go.uber.org/zap"
@@ -33,10 +35,12 @@ const (
 
 	AddElement    = "mdai/add_element"
 	RemoveElement = "mdai/remove_element"
-	ReplaceValue  = "mdai/replace_value"
+	ReplaceValue  = "mdai/replace_element"
 
 	VariableKeyPrefix = "variable/"
 )
+
+var processMutex sync.Mutex
 
 var logger *zap.Logger
 
@@ -96,6 +100,9 @@ func getEnvVariableWithDefault(key, defaultValue string) string {
 
 func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		processMutex.Lock()
+		defer processMutex.Unlock()
+
 		if r.Method != http.MethodPost {
 			http.Error(w, "Only POST method is supported", http.StatusMethodNotAllowed)
 			return
@@ -116,6 +123,11 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 			http.Error(w, "Invalid JSON", http.StatusBadRequest)
 			return
 		}
+
+		// processing the alerts in chronological order
+		sort.Slice(payload.Alerts, func(i, j int) bool {
+			return payload.Alerts[i].StartsAt.Before(payload.Alerts[j].StartsAt)
+		})
 
 		for _, alert := range payload.Alerts {
 			hubName := alert.Annotations[HubName]
@@ -146,12 +158,25 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 				continue
 			}
 
+			logger.Info("Processing alert", zap.Any("alert", alert))
+
 			var variableUpdate *mdaiv1.VariableUpdate
 			switch alert.Status {
 			case firingStatus:
+				if actionContext.Firing == nil || actionContext.Firing.VariableUpdate == nil {
+					logger.Error("No firing context found for alert", zap.Any("alert", alert))
+					continue
+				}
 				variableUpdate = actionContext.Firing.VariableUpdate
 			case resolvedStatus:
+				if actionContext.Resolved == nil || actionContext.Resolved.VariableUpdate == nil {
+					logger.Error("No resolved context found for alert", zap.Any("alert", alert))
+					continue
+				}
 				variableUpdate = actionContext.Resolved.VariableUpdate
+			default:
+				logger.Error("Invalid alert status: %s, payload: %v", zap.Any("alert", alert))
+				continue
 			}
 
 			valkeyKey := VariableKeyPrefix + hubName + "/" + variableUpdate.VariableRef
