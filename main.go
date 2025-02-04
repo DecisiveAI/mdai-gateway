@@ -163,12 +163,11 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 			var variableUpdate *mdaiv1.VariableUpdate
 			switch alert.Status {
 			case firingStatus:
-				if actionContext.Firing != nil && actionContext.Firing.VariableUpdate != nil {
-					variableUpdate = actionContext.Firing.VariableUpdate
-				} else {
+				if actionContext.Firing == nil || actionContext.Firing.VariableUpdate == nil {
 					logger.Error("No firing context found for alert", zap.Any("alert", alert))
 					continue
 				}
+				variableUpdate = actionContext.Firing.VariableUpdate
 			case resolvedStatus:
 				if actionContext.Resolved != nil && actionContext.Resolved.VariableUpdate != nil {
 					variableUpdate = actionContext.Resolved.VariableUpdate
