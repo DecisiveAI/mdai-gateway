@@ -90,8 +90,8 @@ func main() {
 	http.HandleFunc("/alerts", handleAlertsPost(ctx, valkeyClient))
 	http.HandleFunc("/events", handleEventsGet(ctx, valkeyClient))
 
-	logger.Info("Starting server", zap.String("address", ":8082"))
-	logger.Fatal("failed to start server", zap.Error(http.ListenAndServe(":8082", nil)))
+	logger.Info("Starting server", zap.String("address", ":8081"))
+	logger.Fatal("failed to start server", zap.Error(http.ListenAndServe(":8081", nil)))
 }
 
 func getEnvVariableWithDefault(key, defaultValue string) string {
