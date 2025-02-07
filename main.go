@@ -38,6 +38,8 @@ const (
 	ReplaceValue  = "mdai/replace_element"
 
 	VariableKeyPrefix = "variable/"
+
+	mdaiHubEventHistoryStreamName = "mdai_hub_event_history"
 )
 
 var processMutex sync.Mutex
@@ -86,9 +88,10 @@ func main() {
 	}
 
 	http.HandleFunc("/alerts", handleAlertsPost(ctx, valkeyClient))
+	http.HandleFunc("/events", handleEventsGet(ctx, valkeyClient))
 
-	logger.Info("Starting server", zap.String("address", ":8081"))
-	logger.Fatal("failed to start server", zap.Error(http.ListenAndServe(":8081", nil)))
+	logger.Info("Starting server", zap.String("address", ":8082"))
+	logger.Fatal("failed to start server", zap.Error(http.ListenAndServe(":8082", nil)))
 }
 
 func getEnvVariableWithDefault(key, defaultValue string) string {
@@ -96,6 +99,44 @@ func getEnvVariableWithDefault(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+func handleEventsGet(ctx context.Context, valkeyClient valkey.Client) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		result := valkeyClient.Do(ctx, valkeyClient.B().Xrange().Key(mdaiHubEventHistoryStreamName).Start("-").End("+").Build())
+		err := result.Error()
+		if err != nil {
+			logger.Error("valkey error", zap.Error(err))
+			http.Error(w, "Unable to fetch history from Valkey", http.StatusInternalServerError)
+			return
+		}
+		resultList, err := result.ToArray()
+		if err != nil {
+			logger.Error("failed to get valkey value as map", zap.Error(err))
+			http.Error(w, "Unable to fetch history from Valkey", http.StatusInternalServerError)
+			return
+		}
+		entries := make([]map[string]string, 0)
+		for _, entry := range resultList {
+			entryMap, err := entry.AsXRangeEntry()
+			if err != nil {
+				logger.Error("failed to convert entry to map", zap.Error(err))
+			} else {
+				entries = append(entries, entryMap.FieldValues)
+			}
+		}
+		resultMapJson, err := json.Marshal(entries)
+		if err != nil {
+			logger.Error("failed to marshal events map to json", zap.Error(err))
+			http.Error(w, "Unable to fetch history from Valkey", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		if _, err := w.Write(resultMapJson); err != nil {
+			logger.Error("Failed to write response body (y tho)", zap.Error(err))
+		}
+	}
 }
 
 func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.HandlerFunc {
@@ -231,6 +272,10 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 				}
 			default:
 				logger.Error("Unknown variable update operation", zap.String("operation", variableUpdate.Operation), zap.Any("alert", alert))
+			}
+
+			if result := valkeyClient.Do(ctx, valkeyClient.B().Xadd().Key(mdaiHubEventHistoryStreamName).Id("*").FieldValue().FieldValueIter(mdaiHubEvent.ToSequence()).Build()); result.Error() != nil {
+				logger.Error("Valkey error writing audit entry!", zap.Error(result.Error()))
 			}
 		}
 		w.WriteHeader(http.StatusOK)

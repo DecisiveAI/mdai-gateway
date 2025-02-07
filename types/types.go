@@ -2,6 +2,7 @@ package types
 
 import (
 	mdaiv1 "github.com/DecisiveAI/mdai-operator/api/v1"
+	"iter"
 	"time"
 )
 
@@ -39,4 +40,25 @@ type MdaiHubEvent struct {
 	Operation string `json:"operation"`
 	Variable  string `json:"variable"`
 	Value     string `json:"value"`
+}
+
+// TODO: More elegant way to iterate over fields
+func (hubEvent MdaiHubEvent) ToSequence() iter.Seq2[string, string] {
+	return func(yield func(K string, V string) bool) {
+		if !yield("timestamp", time.Now().UTC().Format(time.RFC3339)) {
+			return
+		}
+		if !yield("type", hubEvent.Type) {
+			return
+		}
+		if !yield("operation", hubEvent.Operation) {
+			return
+		}
+		if !yield("variable", hubEvent.Variable) {
+			return
+		}
+		if !yield("value", hubEvent.Value) {
+			return
+		}
+	}
 }
