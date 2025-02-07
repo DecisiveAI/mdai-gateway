@@ -11,10 +11,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-
-	"github.com/cenkalti/backoff/v4"
 
 	mdaiv1 "github.com/DecisiveAI/mdai-operator/api/v1"
 
@@ -38,32 +37,23 @@ const (
 	ReplaceValue  = "mdai/replace_element"
 
 	VariableKeyPrefix = "variable/"
+
+	StreamName    = "events"
+	ConsumerGroup = "consumer-group-1"
+	ConsumerName  = "consumer-1"
+
+	SuccessResponse = `{"success": "variable(s) updated"}`
 )
 
-var processMutex sync.Mutex
-
-var logger *zap.Logger
-
-func init() {
-	// Define custom encoder configuration
-	encoderConfig := zap.NewProductionEncoderConfig()
-	encoderConfig.TimeKey = "timestamp"                   // Rename the time field
-	encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder // Use human-readable timestamps
-	encoderConfig.CallerKey = "caller"                    // Show caller file and line number
-	// Create a core logger with the custom configuration
-	core := zapcore.NewCore(
-		zapcore.NewJSONEncoder(encoderConfig), // JSON logging with readable timestamps
-		zapcore.Lock(os.Stdout),               // Output to stdout
-		zap.DebugLevel,                        // Log info and above
-	)
-	logger = zap.New(core, zap.AddCaller())
-	defer logger.Sync() // Flush logs before exiting
-}
+var (
+	processMutex sync.Mutex
+	logger       *zap.Logger
+)
 
 func main() {
 	var valkeyClient valkey.Client
 	ctx := context.Background()
-
+	setupLogger(zap.DebugLevel)
 	operation := func() error {
 		var err error
 		valkeyClient, err = valkey.NewClient(valkey.ClientOption{
@@ -85,10 +75,28 @@ func main() {
 		logger.Fatal("failed to get valkey client", zap.Error(err))
 	}
 
-	http.HandleFunc("/alerts", handleAlertsPost(ctx, valkeyClient))
+	_ = valkeyClient.Do(ctx,
+		valkeyClient.B().XgroupCreate().
+			Key(StreamName).
+			Group(ConsumerGroup).
+			Id("0").
+			Mkstream().
+			Build(),
+	)
 
-	logger.Info("Starting server", zap.String("address", ":8081"))
-	logger.Fatal("failed to start server", zap.Error(http.ListenAndServe(":8081", nil)))
+	go processAlertsQueue(ctx, valkeyClient)
+
+	http.HandleFunc("/alerts", handleAlertsPost(ctx, valkeyClient))
+	server := &http.Server{Addr: ":8081"}
+	go func() {
+		logger.Info("Starting server", zap.String("address", ":8081"))
+		logger.Fatal("failed to start server", zap.Error(server.ListenAndServe()))
+	}()
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		logger.Fatal("failed to shutdown server", zap.Error(err))
+	}
 }
 
 func getEnvVariableWithDefault(key, defaultValue string) string {
@@ -129,10 +137,11 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 			return payload.Alerts[i].StartsAt.Before(payload.Alerts[j].StartsAt)
 		})
 
+		var cmds valkey.Commands
 		for _, alert := range payload.Alerts {
 			hubName := alert.Annotations[HubName]
 			if hubName == "" {
-				logger.Info("Skipping alert because no hub_name found in alert annotations, payload: %v", zap.Any("alert", alert))
+				logger.Info("Skipping alert because no hub_name found in alert annotations", zap.Any("payload", payload), zap.Any("alert", alert))
 				continue
 			}
 
@@ -182,35 +191,21 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 			valkeyKey := VariableKeyPrefix + hubName + "/" + variableUpdate.VariableRef
 
 			mdaiHubEvent := types.MdaiHubEvent{
-				Type:      "variable_updated",
+				Type:      "variable_update_queued",
 				Operation: variableUpdate.Operation,
 				Variable:  valkeyKey,
 			}
 
 			switch variableUpdate.Operation {
-			case AddElement:
+			case AddElement, RemoveElement:
 				for _, element := range relevantLabels {
+					cmds = append(cmds, valkeyClient.B().Xadd().Key(StreamName).Id("*").FieldValue().FieldValue("action", variableUpdate.Operation).FieldValue("key", valkeyKey).FieldValue("value", alert.Labels[element]).Build())
+
 					mdaiHubEvent.Value = alert.Labels[element]
-					logger.Info("Adding element",
+					logger.Info("Queueing "+variableUpdate.Operation,
 						zap.String("variable", valkeyKey),
 						zap.Any("mdaiHubEvent", mdaiHubEvent),
 					)
-					if result := valkeyClient.Do(ctx, valkeyClient.B().Sadd().Key(valkeyKey).Member(alert.Labels[element]).Build()); result.Error() != nil {
-						logger.Error("Valkey error", zap.Error(result.Error()))
-						http.Error(w, "valkey error: "+result.Error().Error(), http.StatusInternalServerError)
-					}
-				}
-			case RemoveElement:
-				for _, element := range relevantLabels {
-					mdaiHubEvent.Value = alert.Labels[element]
-					logger.Info("Removing element",
-						zap.String("variable", valkeyKey),
-						zap.Any("mdaiHubEvent", mdaiHubEvent),
-					)
-					if result := valkeyClient.Do(ctx, valkeyClient.B().Srem().Key(valkeyKey).Member(alert.Labels[element]).Build()); result.Error() != nil {
-						logger.Error("Valkey error", zap.Error(result.Error()))
-						http.Error(w, "valkey error: "+result.Error().Error(), http.StatusInternalServerError)
-					}
 				}
 			case ReplaceValue:
 				if len(relevantLabels) > 1 {
@@ -220,20 +215,96 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 					)
 				}
 				mdaiHubEvent.Value = alert.Labels[relevantLabels[0]]
-				logger.Info("Replacing value",
+				logger.Info("Queueing "+variableUpdate.Operation,
 					zap.String("variable", valkeyKey),
 					zap.Any("mdaiHubEvent", mdaiHubEvent),
 				)
 
-				if result := valkeyClient.Do(ctx, valkeyClient.B().Set().Key(valkeyKey).Value(alert.Labels[relevantLabels[0]]).Build()); result.Error() != nil {
-					logger.Error("Valkey error", zap.Error(result.Error()))
-					http.Error(w, "valkey error: "+result.Error().Error(), http.StatusInternalServerError)
-				}
+				cmds = append(cmds, valkeyClient.B().Xadd().Key(StreamName).Id("*").FieldValue().FieldValue("action", variableUpdate.Operation).FieldValue("key", valkeyKey).FieldValue("value", alert.Labels[relevantLabels[0]]).Build())
 			default:
 				logger.Error("Unknown variable update operation", zap.String("operation", variableUpdate.Operation), zap.Any("alert", alert))
 			}
 		}
+		results := valkeyClient.DoMulti(ctx, cmds...)
+		for _, result := range results {
+			if result.Error() != nil {
+				switch {
+				case valkey.IsValkeyNil(result.Error()):
+					logger.Error("Valkey Nil Error", zap.Any("result", result.String()))
+				default:
+					logger.Error(err.Error(), zap.Any("result", result.String()))
+				}
+			}
+		}
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, `{"success": "variable(s) updated"}`)
+		fmt.Fprint(w, SuccessResponse)
+	}
+}
+
+func setupLogger(level zapcore.Level) {
+	// Define custom encoder configuration
+	encoderConfig := zap.NewProductionEncoderConfig()
+	encoderConfig.TimeKey = "timestamp"                   // Rename the time field
+	encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder // Use human-readable timestamps
+	encoderConfig.CallerKey = "caller"                    // Show caller file and line number
+	// Create a core logger with the custom configuration
+	core := zapcore.NewCore(
+		zapcore.NewJSONEncoder(encoderConfig), // JSON logging with readable timestamps
+		zapcore.Lock(os.Stdout),               // Output to stdout
+		level,                                 // Log info and above
+	)
+	logger = zap.New(core, zap.AddCaller())
+	defer func() {
+		if err := logger.Sync(); err != nil {
+			logger.Error("failed to sync zap logger", zap.Error(err))
+		}
+	}() // Flush logs before exiting
+}
+
+func processAlertsQueue(ctx context.Context, valkeyClient valkey.Client) {
+	for {
+		response, _ := valkeyClient.Do(ctx,
+			valkeyClient.B().Xreadgroup().
+				Group(ConsumerGroup, ConsumerName).
+				Block(0).
+				Streams().Key(StreamName).Id(">").
+				Build(),
+		).AsXRead()
+		for _, v := range response {
+			for _, vv := range v {
+				var cmd valkey.Completed
+				ack := valkeyClient.
+					B().
+					Xack().
+					Key(StreamName).
+					Group(ConsumerGroup).
+					Id(vv.ID).
+					Build()
+				switch vv.FieldValues["action"] {
+				case AddElement:
+					cmd = valkeyClient.
+						B().
+						Sadd().
+						Key(vv.FieldValues["key"]).
+						Member(vv.FieldValues["value"]).
+						Build()
+				case RemoveElement:
+					cmd = valkeyClient.
+						B().
+						Srem().
+						Key(vv.FieldValues["key"]).
+						Member(vv.FieldValues["value"]).
+						Build()
+				case ReplaceValue:
+					cmd = valkeyClient.
+						B().
+						Set().
+						Key(vv.FieldValues["key"]).
+						Value(vv.FieldValues["value"]).
+						Build()
+				}
+				valkeyClient.DoMulti(ctx, cmd, ack)
+			}
+		}
 	}
 }
