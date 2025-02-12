@@ -14,7 +14,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
-	"github.com/cenkalti/backoff/v4"
+	"github.com/cenkalti/backoff/v5"
 
 	mdaiv1 "github.com/DecisiveAI/mdai-operator/api/v1"
 
@@ -61,27 +61,35 @@ func init() {
 }
 
 func main() {
-	var valkeyClient valkey.Client
+	var (
+		valkeyClient valkey.Client
+		retryCount   int
+	)
 	ctx := context.Background()
 
-	operation := func() error {
+	operation := func() (string, error) {
 		var err error
 		valkeyClient, err = valkey.NewClient(valkey.ClientOption{
 			InitAddress: []string{getEnvVariableWithDefault(valkeyEndpointEnvVarKey, "mdai-valkey-primary.mdai.svc.cluster.local:6379")},
 			Password:    getEnvVariableWithDefault(valkeyPasswordEnvVarKey, ""),
 		})
 		if err != nil {
-			logger.Info("failed to initialize valkey client. retrying...")
-			return err
+			retryCount++
+			return "", err
 		}
-		return nil
+		return "", nil
+	}
+	exponentialBackoff := backoff.NewExponentialBackOff()
+	exponentialBackoff.InitialInterval = 5 * time.Second
+
+	notifyFunc := func(err error, duration time.Duration) {
+		logger.Warn("failed to initialize valkey client. retrying...", zap.Int("retry_count", retryCount), zap.Duration("duration", duration))
 	}
 
-	backoffConfig := backoff.NewExponentialBackOff()
-	backoffConfig.InitialInterval = 5 * time.Second
-	backoffConfig.MaxElapsedTime = 3 * time.Minute
-
-	if err := backoff.Retry(operation, backoffConfig); err != nil {
+	if _, err := backoff.Retry(ctx, operation,
+		backoff.WithBackOff(backoff.NewExponentialBackOff()),
+		backoff.WithMaxElapsedTime(3*time.Minute),
+		backoff.WithNotify(notifyFunc)); err != nil {
 		logger.Fatal("failed to get valkey client", zap.Error(err))
 	}
 
