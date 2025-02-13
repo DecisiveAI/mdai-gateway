@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 
@@ -89,6 +90,8 @@ func main() {
 
 	http.HandleFunc("/alerts", handleAlertsPost(ctx, valkeyClient))
 	http.HandleFunc("/events", handleEventsGet(ctx, valkeyClient))
+	thirtyDaysAgo := time.Now().Add(-30 * 24 * time.Hour).UnixMilli()
+	fmt.Println(thirtyDaysAgo)
 
 	logger.Info("Starting server", zap.String("address", ":8081"))
 	logger.Fatal("failed to start server", zap.Error(http.ListenAndServe(":8081", nil)))
@@ -273,11 +276,12 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 			default:
 				logger.Error("Unknown variable update operation", zap.String("operation", variableUpdate.Operation), zap.Any("alert", alert))
 			}
-
-			if result := valkeyClient.Do(ctx, valkeyClient.B().Xadd().Key(mdaiHubEventHistoryStreamName).Id("*").FieldValue().FieldValueIter(mdaiHubEvent.ToSequence()).Build()); result.Error() != nil {
+			thirtyDaysThreshold := strconv.FormatInt(time.Now().Add(-30*24*time.Hour).UnixMilli(), 10)
+			if result := valkeyClient.Do(ctx, valkeyClient.B().Xadd().Key(mdaiHubEventHistoryStreamName).Minid().Threshold(thirtyDaysThreshold).Id("*").FieldValue().FieldValueIter(mdaiHubEvent.ToSequence()).Build()); result.Error() != nil {
 				logger.Error("Valkey error writing audit entry!", zap.Error(result.Error()))
 			}
 		}
+
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintf(w, `{"success": "variable(s) updated"}`)
 	}
