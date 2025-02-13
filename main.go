@@ -124,9 +124,9 @@ func handleEventsGet(ctx context.Context, valkeyClient valkey.Client) http.Handl
 			entryMap, err := entry.AsXRangeEntry()
 			if err != nil {
 				logger.Error("failed to convert entry to map", zap.Error(err))
-			} else {
-				entries = append(entries, entryMap.FieldValues)
-			}
+				continue
+			} 
+			entries = append(entries, entryMap.FieldValues)
 		}
 		resultMapJson, err := json.Marshal(entries)
 		if err != nil {
