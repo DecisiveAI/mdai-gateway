@@ -287,4 +287,3 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 		fmt.Fprintf(w, `{"success": "variable(s) updated"}`)
 	}
 }
-"timestamp": "2025-02-14T00:28:52Z",
