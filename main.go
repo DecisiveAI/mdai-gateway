@@ -228,9 +228,9 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 
 			switch variableUpdate.Operation {
 			case AddElement:
-				addElementToValkeySet(relevantLabels, variableUpdate, valkeyKey, alert, valkeyClient, ctx, valkeyErrors)
+				valkeySetEvent(relevantLabels, AddElement, variableUpdate, valkeyKey, alert, valkeyClient, ctx, valkeyErrors)
 			case RemoveElement:
-				removeElementFromValkeySet(relevantLabels, variableUpdate, valkeyKey, alert, valkeyClient, ctx, valkeyErrors)
+				valkeySetEvent(relevantLabels, RemoveElement, variableUpdate, valkeyKey, alert, valkeyClient, ctx, valkeyErrors)
 			case ReplaceValue:
 				replaceValkeyValue(relevantLabels, variableUpdate, valkeyKey, alert, valkeyClient, ctx, valkeyErrors)
 			default:
@@ -277,7 +277,7 @@ func replaceValkeyValue(relevantLabels []string, variableUpdate *mdaiv1.Variable
 	}
 }
 
-func removeElementFromValkeySet(relevantLabels []string, variableUpdate *mdaiv1.VariableUpdate, valkeyKey string, alert types.Alert, valkeyClient valkey.Client, ctx context.Context, valkeyErrors error) {
+func valkeySetEvent(relevantLabels []string, event string, variableUpdate *mdaiv1.VariableUpdate, valkeyKey string, alert types.Alert, valkeyClient valkey.Client, ctx context.Context, valkeyErrors error) {
 	for _, element := range relevantLabels {
 		mdaiHubEvent := types.MdaiHubEvent{
 			Type:      "variable_updated",
@@ -285,41 +285,30 @@ func removeElementFromValkeySet(relevantLabels []string, variableUpdate *mdaiv1.
 			Variable:  valkeyKey,
 			Value:     alert.Labels[element],
 		}
-		logger.Info("Removing element",
+
+		thirtyDaysThreshold := strconv.FormatInt(time.Now().Add(-30*24*time.Hour).UnixMilli(), 10)
+		var operation valkey.Completed
+		var action string
+
+		switch event {
+		case AddElement:
+			action = "Adding"
+			operation = valkeyClient.B().Sadd().Key(valkeyKey).Member(alert.Labels[element]).Build()
+		case RemoveElement:
+			action = "Removing"
+			operation = valkeyClient.B().Srem().Key(valkeyKey).Member(alert.Labels[element]).Build()
+		default:
+			logger.Warn("Unknown event type", zap.String("event", event))
+			continue
+		}
+
+		logger.Info(fmt.Sprintf("%s element", action),
 			zap.String("variable", valkeyKey),
 			zap.Any("mdaiHubEvent", mdaiHubEvent),
 		)
 
-		thirtyDaysThreshold := strconv.FormatInt(time.Now().Add(-30*24*time.Hour).UnixMilli(), 10)
 		results := valkeyClient.DoMulti(ctx,
-			valkeyClient.B().Srem().Key(valkeyKey).Member(alert.Labels[element]).Build(),
-			valkeyClient.B().Xadd().Key(mdaiHubEventHistoryStreamName).Minid().Threshold(thirtyDaysThreshold).Id("*").FieldValue().FieldValueIter(mdaiHubEvent.ToSequence()).Build(),
-		)
-		for _, result := range results {
-			if result.Error() != nil {
-				logger.Error("Valkey error", zap.Error(result.Error()))
-				multierr.Append(valkeyErrors, result.Error())
-			}
-		}
-	}
-}
-
-func addElementToValkeySet(relevantLabels []string, variableUpdate *mdaiv1.VariableUpdate, valkeyKey string, alert types.Alert, valkeyClient valkey.Client, ctx context.Context, valkeyErrors error) {
-	for _, element := range relevantLabels {
-		mdaiHubEvent := types.MdaiHubEvent{
-			Type:      "variable_updated",
-			Operation: variableUpdate.Operation,
-			Variable:  valkeyKey,
-			Value:     alert.Labels[element],
-		}
-		logger.Info("Adding element",
-			zap.String("variable", valkeyKey),
-			zap.Any("mdaiHubEvent", mdaiHubEvent),
-		)
-
-		thirtyDaysThreshold := strconv.FormatInt(time.Now().Add(-30*24*time.Hour).UnixMilli(), 10)
-		results := valkeyClient.DoMulti(ctx,
-			valkeyClient.B().Sadd().Key(valkeyKey).Member(alert.Labels[element]).Build(),
+			operation,
 			valkeyClient.B().Xadd().Key(mdaiHubEventHistoryStreamName).Minid().Threshold(thirtyDaysThreshold).Id("*").FieldValue().FieldValueIter(mdaiHubEvent.ToSequence()).Build(),
 		)
 		for _, result := range results {
