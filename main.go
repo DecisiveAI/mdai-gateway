@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"go.uber.org/multierr"
 	"io"
 	"net/http"
 	"os"
@@ -170,6 +172,7 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 			return payload.Alerts[i].StartsAt.Before(payload.Alerts[j].StartsAt)
 		})
 
+		var valkeyErrors error
 		for _, alert := range payload.Alerts {
 			hubName := alert.Annotations[HubName]
 			if hubName == "" {
@@ -222,63 +225,105 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 
 			valkeyKey := VariableKeyPrefix + hubName + "/" + variableUpdate.VariableRef
 
-			mdaiHubEvent := types.MdaiHubEvent{
-				Type:      "variable_updated",
-				Operation: variableUpdate.Operation,
-				Variable:  valkeyKey,
-			}
-
 			switch variableUpdate.Operation {
 			case AddElement:
-				for _, element := range relevantLabels {
-					mdaiHubEvent.Value = alert.Labels[element]
-					logger.Info("Adding element",
-						zap.String("variable", valkeyKey),
-						zap.Any("mdaiHubEvent", mdaiHubEvent),
-					)
-					if result := valkeyClient.Do(ctx, valkeyClient.B().Sadd().Key(valkeyKey).Member(alert.Labels[element]).Build()); result.Error() != nil {
-						logger.Error("Valkey error", zap.Error(result.Error()))
-						http.Error(w, "valkey error: "+result.Error().Error(), http.StatusInternalServerError)
-					}
-				}
+				addElementToValkeySet(relevantLabels, variableUpdate, valkeyKey, alert, valkeyClient, ctx, valkeyErrors)
 			case RemoveElement:
-				for _, element := range relevantLabels {
-					mdaiHubEvent.Value = alert.Labels[element]
-					logger.Info("Removing element",
-						zap.String("variable", valkeyKey),
-						zap.Any("mdaiHubEvent", mdaiHubEvent),
-					)
-					if result := valkeyClient.Do(ctx, valkeyClient.B().Srem().Key(valkeyKey).Member(alert.Labels[element]).Build()); result.Error() != nil {
-						logger.Error("Valkey error", zap.Error(result.Error()))
-						http.Error(w, "valkey error: "+result.Error().Error(), http.StatusInternalServerError)
-					}
-				}
+				removeElementFromValkeySet(relevantLabels, variableUpdate, valkeyKey, alert, valkeyClient, ctx, valkeyErrors)
 			case ReplaceValue:
-				if len(relevantLabels) > 1 {
-					logger.Info("Multiple relevantLabels found for replace action",
-						zap.String("selected_label", relevantLabels[0]),
-						zap.Any("all_labels", relevantLabels),
-					)
-				}
-				mdaiHubEvent.Value = alert.Labels[relevantLabels[0]]
-				logger.Info("Replacing value",
-					zap.String("variable", valkeyKey),
-					zap.Any("mdaiHubEvent", mdaiHubEvent),
-				)
-
-				if result := valkeyClient.Do(ctx, valkeyClient.B().Set().Key(valkeyKey).Value(alert.Labels[relevantLabels[0]]).Build()); result.Error() != nil {
-					logger.Error("Valkey error", zap.Error(result.Error()))
-					http.Error(w, "valkey error: "+result.Error().Error(), http.StatusInternalServerError)
-				}
+				replaceValkeyValue(relevantLabels, variableUpdate, valkeyKey, alert, valkeyClient, ctx, valkeyErrors)
 			default:
 				logger.Error("Unknown variable update operation", zap.String("operation", variableUpdate.Operation), zap.Any("alert", alert))
+				multierr.Append(valkeyErrors, errors.New(fmt.Sprintf("Unknown variable update operation: %s", variableUpdate.Operation)))
 			}
+		}
 
-			if result := valkeyClient.Do(ctx, valkeyClient.B().Xadd().Key(mdaiHubEventHistoryStreamName).Id("*").FieldValue().FieldValueIter(mdaiHubEvent.ToSequence()).Build()); result.Error() != nil {
-				logger.Error("Valkey error writing audit entry!", zap.Error(result.Error()))
-			}
+		if valkeyErrors != nil {
+			http.Error(w, "valkey errors: "+valkeyErrors.Error(), http.StatusInternalServerError)
 		}
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintf(w, `{"success": "variable(s) updated"}`)
+	}
+}
+
+func replaceValkeyValue(relevantLabels []string, variableUpdate *mdaiv1.VariableUpdate, valkeyKey string, alert types.Alert, valkeyClient valkey.Client, ctx context.Context, valkeyErrors error) {
+	if len(relevantLabels) > 1 {
+		logger.Info("Multiple relevantLabels found for replace action",
+			zap.String("selected_label", relevantLabels[0]),
+			zap.Any("all_labels", relevantLabels),
+		)
+	}
+	mdaiHubEvent := types.MdaiHubEvent{
+		Type:      "variable_updated",
+		Operation: variableUpdate.Operation,
+		Variable:  valkeyKey,
+		Value:     alert.Labels[relevantLabels[0]],
+	}
+	logger.Info("Replacing value",
+		zap.String("variable", valkeyKey),
+		zap.Any("mdaiHubEvent", mdaiHubEvent),
+	)
+
+	results := valkeyClient.DoMulti(ctx,
+		valkeyClient.B().Set().Key(valkeyKey).Value(alert.Labels[relevantLabels[0]]).Build(),
+		valkeyClient.B().Xadd().Key(mdaiHubEventHistoryStreamName).Id("*").FieldValue().FieldValueIter(mdaiHubEvent.ToSequence()).Build(),
+	)
+	for _, result := range results {
+		if result.Error() != nil {
+			logger.Error("Valkey error", zap.Error(result.Error()))
+			multierr.Append(valkeyErrors, result.Error())
+		}
+	}
+}
+
+func removeElementFromValkeySet(relevantLabels []string, variableUpdate *mdaiv1.VariableUpdate, valkeyKey string, alert types.Alert, valkeyClient valkey.Client, ctx context.Context, valkeyErrors error) {
+	for _, element := range relevantLabels {
+		mdaiHubEvent := types.MdaiHubEvent{
+			Type:      "variable_updated",
+			Operation: variableUpdate.Operation,
+			Variable:  valkeyKey,
+			Value:     alert.Labels[element],
+		}
+		logger.Info("Removing element",
+			zap.String("variable", valkeyKey),
+			zap.Any("mdaiHubEvent", mdaiHubEvent),
+		)
+
+		results := valkeyClient.DoMulti(ctx,
+			valkeyClient.B().Srem().Key(valkeyKey).Member(alert.Labels[element]).Build(),
+			valkeyClient.B().Xadd().Key(mdaiHubEventHistoryStreamName).Id("*").FieldValue().FieldValueIter(mdaiHubEvent.ToSequence()).Build(),
+		)
+		for _, result := range results {
+			if result.Error() != nil {
+				logger.Error("Valkey error", zap.Error(result.Error()))
+				multierr.Append(valkeyErrors, result.Error())
+			}
+		}
+	}
+}
+
+func addElementToValkeySet(relevantLabels []string, variableUpdate *mdaiv1.VariableUpdate, valkeyKey string, alert types.Alert, valkeyClient valkey.Client, ctx context.Context, valkeyErrors error) {
+	for _, element := range relevantLabels {
+		mdaiHubEvent := types.MdaiHubEvent{
+			Type:      "variable_updated",
+			Operation: variableUpdate.Operation,
+			Variable:  valkeyKey,
+			Value:     alert.Labels[element],
+		}
+		logger.Info("Adding element",
+			zap.String("variable", valkeyKey),
+			zap.Any("mdaiHubEvent", mdaiHubEvent),
+		)
+
+		results := valkeyClient.DoMulti(ctx,
+			valkeyClient.B().Sadd().Key(valkeyKey).Member(alert.Labels[element]).Build(),
+			valkeyClient.B().Xadd().Key(mdaiHubEventHistoryStreamName).Id("*").FieldValue().FieldValueIter(mdaiHubEvent.ToSequence()).Build(),
+		)
+		for _, result := range results {
+			if result.Error() != nil {
+				logger.Error("Valkey error", zap.Error(result.Error()))
+				multierr.Append(valkeyErrors, result.Error())
+			}
+		}
 	}
 }
