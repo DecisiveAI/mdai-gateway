@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"go.uber.org/multierr"
 	"io"
@@ -231,13 +230,15 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 				for _, element := range relevantLabels {
 					addOperationCommand := valkeyClient.B().Sadd().Key(valkeyKey).Member(alert.Labels[element]).Build()
 					mdaiHubEvent := createHubEvent(relevantLabels, variableUpdate, valkeyKey, alert)
-					doVariableUpdateAndLog(valkeyKey, mdaiHubEvent, valkeyClient, ctx, addOperationCommand, valkeyErrors)
+					err := doVariableUpdateAndLog(ctx, valkeyClient, valkeyKey, addOperationCommand, mdaiHubEvent)
+					valkeyErrors = multierr.Append(valkeyErrors, err)
 				}
 			case RemoveElement:
 				for _, element := range relevantLabels {
 					removeOperationCommand := valkeyClient.B().Srem().Key(valkeyKey).Member(alert.Labels[element]).Build()
 					mdaiHubEvent := createHubEvent(relevantLabels, variableUpdate, valkeyKey, alert)
-					doVariableUpdateAndLog(valkeyKey, mdaiHubEvent, valkeyClient, ctx, removeOperationCommand, valkeyErrors)
+					err := doVariableUpdateAndLog(ctx, valkeyClient, valkeyKey, removeOperationCommand, mdaiHubEvent)
+					valkeyErrors = multierr.Append(valkeyErrors, err)
 				}
 			case ReplaceValue:
 				if len(relevantLabels) > 1 {
@@ -248,36 +249,52 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 				}
 				replaceOperationCommand := valkeyClient.B().Set().Key(valkeyKey).Value(alert.Labels[relevantLabels[0]]).Build()
 				mdaiHubEvent := createHubEvent(relevantLabels, variableUpdate, valkeyKey, alert)
-				doVariableUpdateAndLog(valkeyKey, mdaiHubEvent, valkeyClient, ctx, replaceOperationCommand, valkeyErrors)
+				err := doVariableUpdateAndLog(ctx, valkeyClient, valkeyKey, replaceOperationCommand, mdaiHubEvent)
+				valkeyErrors = multierr.Append(valkeyErrors, err)
 			default:
 				logger.Error("Unknown variable update operation", zap.String("operation", variableUpdate.Operation), zap.Any("alert", alert))
-				multierr.Append(valkeyErrors, errors.New(fmt.Sprintf("Unknown variable update operation: %s", variableUpdate.Operation)))
 			}
 		}
 
 		if valkeyErrors != nil {
+			logger.Error("Errors occurred writing updates to valkey", zap.Error(valkeyErrors))
 			http.Error(w, "valkey errors: "+valkeyErrors.Error(), http.StatusInternalServerError)
+		} else {
+			logger.Info("Successfully wrote all variable updates")
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprintf(w, `{"success": "variable(s) updated"}`)
 		}
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, `{"success": "variable(s) updated"}`)
 	}
 }
 
-func doVariableUpdateAndLog(valkeyKey string, mdaiHubEvent types.MdaiHubEvent, valkeyClient valkey.Client, ctx context.Context, addOperationCommand valkey.Completed, valkeyErrors error) {
+func doVariableUpdateAndLog(ctx context.Context, valkeyClient valkey.Client, valkeyKey string, variableUpdateCommand valkey.Completed, mdaiHubEvent types.MdaiHubEvent) error {
 	logger.Info("Adding element",
 		zap.String("variable", valkeyKey),
 		zap.Any("mdaiHubEvent", mdaiHubEvent),
 	)
+	auditLogCommand := makeAuditLogCommand(valkeyClient, mdaiHubEvent)
 	results := valkeyClient.DoMulti(ctx,
-		addOperationCommand,
-		valkeyClient.B().Xadd().Key(mdaiHubEventHistoryStreamName).Minid().Threshold(getAuditLogTTLMinId()).Id("*").FieldValue().FieldValueIter(mdaiHubEvent.ToSequence()).Build(),
+		variableUpdateCommand,
+		auditLogCommand,
 	)
+	valkeyMultiErr := accumulateValkeyErrors(results)
+	return valkeyMultiErr
+}
+
+func accumulateValkeyErrors(results []valkey.ValkeyResult) error {
+	var valkeyMultiErr error
 	for _, result := range results {
-		if result.Error() != nil {
-			logger.Error("Valkey error", zap.Error(result.Error()))
-			multierr.Append(valkeyErrors, result.Error())
+		valkeyError := result.Error()
+		if valkeyError != nil {
+			valkeyMultiErr = multierr.Append(valkeyMultiErr, valkeyError)
+			logger.Error("Valkey error", zap.Error(valkeyError))
 		}
 	}
+	return valkeyMultiErr
+}
+
+func makeAuditLogCommand(valkeyClient valkey.Client, mdaiHubEvent types.MdaiHubEvent) valkey.Completed {
+	return valkeyClient.B().Xadd().Key(mdaiHubEventHistoryStreamName).Minid().Threshold(getAuditLogTTLMinId()).Id("*").FieldValue().FieldValueIter(mdaiHubEvent.ToSequence()).Build()
 }
 
 func createHubEvent(relevantLabels []string, variableUpdate *mdaiv1.VariableUpdate, valkeyKey string, alert types.Alert) types.MdaiHubEvent {
