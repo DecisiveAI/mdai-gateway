@@ -91,8 +91,6 @@ func main() {
 
 	http.HandleFunc("/alerts", handleAlertsPost(ctx, valkeyClient))
 	http.HandleFunc("/events", handleEventsGet(ctx, valkeyClient))
-	thirtyDaysAgo := time.Now().Add(-30 * 24 * time.Hour).UnixMilli()
-	fmt.Println(thirtyDaysAgo)
 
 	logger.Info("Starting server", zap.String("address", ":8081"))
 	logger.Fatal("failed to start server", zap.Error(http.ListenAndServe(":8081", nil)))
