@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"github.com/valkey-io/valkey-go"
 	"io"
 	"log"
 	"net/http"
@@ -23,6 +24,23 @@ func TestMain(m *testing.M) {
 		log.SetOutput(io.Discard)
 	}
 	m.Run()
+}
+
+type XaddMatcher struct {
+	operation string
+	value     string
+}
+
+func (xadd XaddMatcher) Matches(x any) bool {
+	if cmd, ok := x.(valkey.Completed); ok {
+		commands := cmd.Commands()
+		return slices.Contains(commands, "XADD") && slices.Contains(commands, "mdai_hub_event_history") && slices.Contains(commands, xadd.operation) && slices.Contains(commands, xadd.value)
+	}
+	return false
+}
+
+func (xadd XaddMatcher) String() string {
+	return "Wanted XADD to mdai_hub_event_history command with " + xadd.operation + " and " + xadd.value
 }
 
 func TestUpdateValkeyHandler(t *testing.T) {
@@ -48,22 +66,16 @@ func TestUpdateValkeyHandler(t *testing.T) {
 	mux.HandleFunc("/alerts", handleAlertsPost(ctx, valkeyClient))
 	valkeyClient.EXPECT().DoMulti(ctx,
 		mock.Match("SADD", "variable/mdaihub-sample/service_list", "service-a"),
-		mock.MatchFn(func(cmd []string) bool {
-			return cmd[0] == "XADD" && cmd[1] == "mdai_hub_event_history" && slices.Contains(cmd, "mdai/add_element") && slices.Contains(cmd, "service-a")
-		}),
-	).Times(1)
+		XaddMatcher{operation: "mdai/add_element", value: "service-a"},
+	).Return([]valkey.ValkeyResult{mock.Result(mock.ValkeyInt64(1)), mock.Result(mock.ValkeyString(""))}).Times(1)
 	valkeyClient.EXPECT().DoMulti(ctx,
 		mock.Match("SREM", "variable/mdaihub-sample/service_list", "service-b"),
-		mock.MatchFn(func(cmd []string) bool {
-			return cmd[0] == "XADD" && cmd[1] == "mdai_hub_event_history" && slices.Contains(cmd, "mdai/remove_element") && slices.Contains(cmd, "service-b")
-		}),
-	).Times(1)
+		XaddMatcher{operation: "mdai/remove_element", value: "service-b"},
+	).Return([]valkey.ValkeyResult{mock.Result(mock.ValkeyInt64(1)), mock.Result(mock.ValkeyString(""))}).Times(1)
 	valkeyClient.EXPECT().DoMulti(ctx,
 		mock.Match("SET", "variable/mdaihub-sample/service_list", "service-c"),
-		mock.MatchFn(func(cmd []string) bool {
-			return cmd[0] == "XADD" && cmd[1] == "mdai_hub_event_history" && slices.Contains(cmd, "mdai/replace_element") && slices.Contains(cmd, "service-a")
-		}),
-	).Times(1)
+		XaddMatcher{operation: "mdai/replace_element", value: "service-c"},
+	).Return([]valkey.ValkeyResult{mock.Result(mock.ValkeyInt64(1)), mock.Result(mock.ValkeyString(""))}).Times(1)
 
 	req := httptest.NewRequest(http.MethodPost, "/alerts", bytes.NewBuffer(alertPostBody1))
 	req.Header.Set("Content-Type", "application/json")
@@ -79,22 +91,16 @@ func TestUpdateValkeyHandler(t *testing.T) {
 
 	valkeyClient.EXPECT().DoMulti(ctx,
 		mock.Match("SREM", "variable/mdaihub-sample/service_list", "service-a"),
-		mock.MatchFn(func(cmd []string) bool {
-			return cmd[0] == "XADD" && cmd[1] == "mdai_hub_event_history" && slices.Contains(cmd, "mdai/remove_element") && slices.Contains(cmd, "service-a")
-		}),
-	).Times(1)
+		XaddMatcher{operation: "mdai/remove_element", value: "service-a"},
+	).Return([]valkey.ValkeyResult{mock.Result(mock.ValkeyInt64(1)), mock.Result(mock.ValkeyString(""))}).Times(1)
 	valkeyClient.EXPECT().DoMulti(ctx,
 		mock.Match("SREM", "variable/mdaihub-sample/service_list", "service-b"),
-		mock.MatchFn(func(cmd []string) bool {
-			return cmd[0] == "XADD" && cmd[1] == "mdai_hub_event_history" && slices.Contains(cmd, "mdai/remove_element") && slices.Contains(cmd, "service-b")
-		}),
-	).Times(1)
+		XaddMatcher{operation: "mdai/remove_element", value: "service-b"},
+	).Return([]valkey.ValkeyResult{mock.Result(mock.ValkeyInt64(1)), mock.Result(mock.ValkeyString(""))}).Times(1)
 	valkeyClient.EXPECT().DoMulti(ctx,
 		mock.Match("SREM", "variable/mdaihub-sample/service_list", "service-c"),
-		mock.MatchFn(func(cmd []string) bool {
-			return cmd[0] == "XADD" && cmd[1] == "mdai_hub_event_history" && slices.Contains(cmd, "mdai/remove_element") && slices.Contains(cmd, "service-c")
-		}),
-	).Times(1)
+		XaddMatcher{operation: "mdai/remove_element", value: "service-c"},
+	).Return([]valkey.ValkeyResult{mock.Result(mock.ValkeyInt64(1)), mock.Result(mock.ValkeyString(""))}).Times(1)
 
 	req = httptest.NewRequest(http.MethodPost, "/alerts", bytes.NewBuffer(alertPostBody2))
 	req.Header.Set("Content-Type", "application/json")
@@ -110,16 +116,12 @@ func TestUpdateValkeyHandler(t *testing.T) {
 
 	valkeyClient.EXPECT().DoMulti(ctx,
 		mock.Match("SADD", "variable/mdaihub-sample/service_list", "service-a"),
-		mock.MatchFn(func(cmd []string) bool {
-			return cmd[0] == "XADD" && cmd[1] == "mdai_hub_event_history" && slices.Contains(cmd, "mdai/remove_element") && slices.Contains(cmd, "service-a")
-		}),
-	).Times(1)
+		XaddMatcher{operation: "mdai/add_element", value: "service-a"},
+	).Return([]valkey.ValkeyResult{mock.Result(mock.ValkeyInt64(1)), mock.Result(mock.ValkeyString(""))}).Times(1)
 	valkeyClient.EXPECT().DoMulti(ctx,
 		mock.Match("SREM", "variable/mdaihub-sample/service_list", "service-a"),
-		mock.MatchFn(func(cmd []string) bool {
-			return cmd[0] == "XADD" && cmd[1] == "mdai_hub_event_history" && slices.Contains(cmd, "mdai/remove_element") && slices.Contains(cmd, "service-a")
-		}),
-	).Times(1)
+		XaddMatcher{operation: "mdai/remove_element", value: "service-a"},
+	).Return([]valkey.ValkeyResult{mock.Result(mock.ValkeyInt64(1)), mock.Result(mock.ValkeyString(""))}).Times(1)
 
 	req = httptest.NewRequest(http.MethodPost, "/alerts", bytes.NewBuffer(alertPostBody3))
 	req.Header.Set("Content-Type", "application/json")
