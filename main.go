@@ -230,14 +230,14 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 				for _, element := range relevantLabels {
 					addOperationCommand := valkeyClient.B().Sadd().Key(valkeyKey).Member(alert.Labels[element]).Build()
 					mdaiHubEvent := createHubEvent(relevantLabels, variableUpdate, valkeyKey, alert)
-					err := doVariableUpdateAndLog(ctx, valkeyClient, valkeyKey, addOperationCommand, mdaiHubEvent)
+					err := doVariableUpdateAndLog(ctx, valkeyClient, addOperationCommand, mdaiHubEvent, valkeyKey)
 					valkeyErrors = multierr.Append(valkeyErrors, err)
 				}
 			case RemoveElement:
 				for _, element := range relevantLabels {
 					removeOperationCommand := valkeyClient.B().Srem().Key(valkeyKey).Member(alert.Labels[element]).Build()
 					mdaiHubEvent := createHubEvent(relevantLabels, variableUpdate, valkeyKey, alert)
-					err := doVariableUpdateAndLog(ctx, valkeyClient, valkeyKey, removeOperationCommand, mdaiHubEvent)
+					err := doVariableUpdateAndLog(ctx, valkeyClient, removeOperationCommand, mdaiHubEvent, valkeyKey)
 					valkeyErrors = multierr.Append(valkeyErrors, err)
 				}
 			case ReplaceValue:
@@ -249,7 +249,7 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 				}
 				replaceOperationCommand := valkeyClient.B().Set().Key(valkeyKey).Value(alert.Labels[relevantLabels[0]]).Build()
 				mdaiHubEvent := createHubEvent(relevantLabels, variableUpdate, valkeyKey, alert)
-				err := doVariableUpdateAndLog(ctx, valkeyClient, valkeyKey, replaceOperationCommand, mdaiHubEvent)
+				err := doVariableUpdateAndLog(ctx, valkeyClient, replaceOperationCommand, mdaiHubEvent, valkeyKey)
 				valkeyErrors = multierr.Append(valkeyErrors, err)
 			default:
 				logger.Error("Unknown variable update operation", zap.String("operation", variableUpdate.Operation), zap.Any("alert", alert))
@@ -267,8 +267,8 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 	}
 }
 
-func doVariableUpdateAndLog(ctx context.Context, valkeyClient valkey.Client, valkeyKey string, variableUpdateCommand valkey.Completed, mdaiHubEvent types.MdaiHubEvent) error {
-	logger.Info("Adding element",
+func doVariableUpdateAndLog(ctx context.Context, valkeyClient valkey.Client, variableUpdateCommand valkey.Completed, mdaiHubEvent types.MdaiHubEvent, valkeyKey string) error {
+	logger.Info("Performing "+mdaiHubEvent.Operation+" operation",
 		zap.String("variable", valkeyKey),
 		zap.Any("mdaiHubEvent", mdaiHubEvent),
 	)
