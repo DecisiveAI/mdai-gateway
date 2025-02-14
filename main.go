@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/cenkalti/backoff/v5"
 	"io"
 	"net/http"
 	"os"
@@ -125,7 +126,7 @@ func handleEventsGet(ctx context.Context, valkeyClient valkey.Client) http.Handl
 			if err != nil {
 				logger.Error("failed to convert entry to map", zap.Error(err))
 				continue
-			} 
+			}
 			entries = append(entries, entryMap.FieldValues)
 		}
 		resultMapJson, err := json.Marshal(entries)
@@ -286,3 +287,4 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 		fmt.Fprintf(w, `{"success": "variable(s) updated"}`)
 	}
 }
+"timestamp": "2025-02-14T00:28:52Z",
