@@ -224,15 +224,31 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 				continue
 			}
 
+			// next time, valkeyKeyKey!
 			valkeyKey := VariableKeyPrefix + hubName + "/" + variableUpdate.VariableRef
-
 			switch variableUpdate.Operation {
 			case AddElement:
-				addElementToValkeySet(relevantLabels, variableUpdate, valkeyKey, alert, valkeyClient, ctx, valkeyErrors)
+				for _, element := range relevantLabels {
+					addOperationCommand := valkeyClient.B().Sadd().Key(valkeyKey).Member(alert.Labels[element]).Build()
+					mdaiHubEvent := createHubEvent(relevantLabels, variableUpdate, valkeyKey, alert)
+					doVariableUpdateAndLog(valkeyKey, mdaiHubEvent, valkeyClient, ctx, addOperationCommand, valkeyErrors)
+				}
 			case RemoveElement:
-				removeElementFromValkeySet(relevantLabels, variableUpdate, valkeyKey, alert, valkeyClient, ctx, valkeyErrors)
+				for _, element := range relevantLabels {
+					removeOperationCommand := valkeyClient.B().Srem().Key(valkeyKey).Member(alert.Labels[element]).Build()
+					mdaiHubEvent := createHubEvent(relevantLabels, variableUpdate, valkeyKey, alert)
+					doVariableUpdateAndLog(valkeyKey, mdaiHubEvent, valkeyClient, ctx, removeOperationCommand, valkeyErrors)
+				}
 			case ReplaceValue:
-				replaceValkeyValue(relevantLabels, variableUpdate, valkeyKey, alert, valkeyClient, ctx, valkeyErrors)
+				if len(relevantLabels) > 1 {
+					logger.Info("Multiple relevantLabels found for replace action",
+						zap.String("selected_label", relevantLabels[0]),
+						zap.Any("all_labels", relevantLabels),
+					)
+				}
+				replaceOperationCommand := valkeyClient.B().Set().Key(valkeyKey).Value(alert.Labels[relevantLabels[0]]).Build()
+				mdaiHubEvent := createHubEvent(relevantLabels, variableUpdate, valkeyKey, alert)
+				doVariableUpdateAndLog(valkeyKey, mdaiHubEvent, valkeyClient, ctx, replaceOperationCommand, valkeyErrors)
 			default:
 				logger.Error("Unknown variable update operation", zap.String("operation", variableUpdate.Operation), zap.Any("alert", alert))
 				multierr.Append(valkeyErrors, errors.New(fmt.Sprintf("Unknown variable update operation: %s", variableUpdate.Operation)))
@@ -247,27 +263,14 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 	}
 }
 
-func replaceValkeyValue(relevantLabels []string, variableUpdate *mdaiv1.VariableUpdate, valkeyKey string, alert types.Alert, valkeyClient valkey.Client, ctx context.Context, valkeyErrors error) {
-	if len(relevantLabels) > 1 {
-		logger.Info("Multiple relevantLabels found for replace action",
-			zap.String("selected_label", relevantLabels[0]),
-			zap.Any("all_labels", relevantLabels),
-		)
-	}
-	mdaiHubEvent := types.MdaiHubEvent{
-		Type:      "variable_updated",
-		Operation: variableUpdate.Operation,
-		Variable:  valkeyKey,
-		Value:     alert.Labels[relevantLabels[0]],
-	}
-	logger.Info("Replacing value",
+func doVariableUpdateAndLog(valkeyKey string, mdaiHubEvent types.MdaiHubEvent, valkeyClient valkey.Client, ctx context.Context, addOperationCommand valkey.Completed, valkeyErrors error) {
+	logger.Info("Adding element",
 		zap.String("variable", valkeyKey),
 		zap.Any("mdaiHubEvent", mdaiHubEvent),
 	)
-	thirtyDaysThreshold := strconv.FormatInt(time.Now().Add(-30*24*time.Hour).UnixMilli(), 10)
 	results := valkeyClient.DoMulti(ctx,
-		valkeyClient.B().Set().Key(valkeyKey).Value(alert.Labels[relevantLabels[0]]).Build(),
-		valkeyClient.B().Xadd().Key(mdaiHubEventHistoryStreamName).Minid().Threshold(thirtyDaysThreshold).Id("*").FieldValue().FieldValueIter(mdaiHubEvent.ToSequence()).Build(),
+		addOperationCommand,
+		valkeyClient.B().Xadd().Key(mdaiHubEventHistoryStreamName).Minid().Threshold(getAuditLogTTLMinId()).Id("*").FieldValue().FieldValueIter(mdaiHubEvent.ToSequence()).Build(),
 	)
 	for _, result := range results {
 		if result.Error() != nil {
@@ -277,56 +280,17 @@ func replaceValkeyValue(relevantLabels []string, variableUpdate *mdaiv1.Variable
 	}
 }
 
-func removeElementFromValkeySet(relevantLabels []string, variableUpdate *mdaiv1.VariableUpdate, valkeyKey string, alert types.Alert, valkeyClient valkey.Client, ctx context.Context, valkeyErrors error) {
-	for _, element := range relevantLabels {
-		mdaiHubEvent := types.MdaiHubEvent{
-			Type:      "variable_updated",
-			Operation: variableUpdate.Operation,
-			Variable:  valkeyKey,
-			Value:     alert.Labels[element],
-		}
-		logger.Info("Removing element",
-			zap.String("variable", valkeyKey),
-			zap.Any("mdaiHubEvent", mdaiHubEvent),
-		)
-
-		thirtyDaysThreshold := strconv.FormatInt(time.Now().Add(-30*24*time.Hour).UnixMilli(), 10)
-		results := valkeyClient.DoMulti(ctx,
-			valkeyClient.B().Srem().Key(valkeyKey).Member(alert.Labels[element]).Build(),
-			valkeyClient.B().Xadd().Key(mdaiHubEventHistoryStreamName).Minid().Threshold(thirtyDaysThreshold).Id("*").FieldValue().FieldValueIter(mdaiHubEvent.ToSequence()).Build(),
-		)
-		for _, result := range results {
-			if result.Error() != nil {
-				logger.Error("Valkey error", zap.Error(result.Error()))
-				multierr.Append(valkeyErrors, result.Error())
-			}
-		}
+func createHubEvent(relevantLabels []string, variableUpdate *mdaiv1.VariableUpdate, valkeyKey string, alert types.Alert) types.MdaiHubEvent {
+	mdaiHubEvent := types.MdaiHubEvent{
+		Type:      "variable_updated",
+		Operation: variableUpdate.Operation,
+		Variable:  valkeyKey,
+		Value:     alert.Labels[relevantLabels[0]],
 	}
+	return mdaiHubEvent
 }
 
-func addElementToValkeySet(relevantLabels []string, variableUpdate *mdaiv1.VariableUpdate, valkeyKey string, alert types.Alert, valkeyClient valkey.Client, ctx context.Context, valkeyErrors error) {
-	for _, element := range relevantLabels {
-		mdaiHubEvent := types.MdaiHubEvent{
-			Type:      "variable_updated",
-			Operation: variableUpdate.Operation,
-			Variable:  valkeyKey,
-			Value:     alert.Labels[element],
-		}
-		logger.Info("Adding element",
-			zap.String("variable", valkeyKey),
-			zap.Any("mdaiHubEvent", mdaiHubEvent),
-		)
-
-		thirtyDaysThreshold := strconv.FormatInt(time.Now().Add(-30*24*time.Hour).UnixMilli(), 10)
-		results := valkeyClient.DoMulti(ctx,
-			valkeyClient.B().Sadd().Key(valkeyKey).Member(alert.Labels[element]).Build(),
-			valkeyClient.B().Xadd().Key(mdaiHubEventHistoryStreamName).Minid().Threshold(thirtyDaysThreshold).Id("*").FieldValue().FieldValueIter(mdaiHubEvent.ToSequence()).Build(),
-		)
-		for _, result := range results {
-			if result.Error() != nil {
-				logger.Error("Valkey error", zap.Error(result.Error()))
-				multierr.Append(valkeyErrors, result.Error())
-			}
-		}
-	}
+func getAuditLogTTLMinId() string {
+	thirtyDaysThreshold := strconv.FormatInt(time.Now().Add(-30*24*time.Hour).UnixMilli(), 10)
+	return thirtyDaysThreshold
 }
