@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 
@@ -122,7 +123,7 @@ func handleEventsGet(ctx context.Context, valkeyClient valkey.Client) http.Handl
 			if err != nil {
 				logger.Error("failed to convert entry to map", zap.Error(err))
 				continue
-			} 
+			}
 			entries = append(entries, entryMap.FieldValues)
 		}
 		resultMapJson, err := json.Marshal(entries)
@@ -273,11 +274,12 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 			default:
 				logger.Error("Unknown variable update operation", zap.String("operation", variableUpdate.Operation), zap.Any("alert", alert))
 			}
-
-			if result := valkeyClient.Do(ctx, valkeyClient.B().Xadd().Key(mdaiHubEventHistoryStreamName).Id("*").FieldValue().FieldValueIter(mdaiHubEvent.ToSequence()).Build()); result.Error() != nil {
+			thirtyDaysThreshold := strconv.FormatInt(time.Now().Add(-30*24*time.Hour).UnixMilli(), 10)
+			if result := valkeyClient.Do(ctx, valkeyClient.B().Xadd().Key(mdaiHubEventHistoryStreamName).Minid().Threshold(thirtyDaysThreshold).Id("*").FieldValue().FieldValueIter(mdaiHubEvent.ToSequence()).Build()); result.Error() != nil {
 				logger.Error("Valkey error writing audit entry!", zap.Error(result.Error()))
 			}
 		}
+
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintf(w, `{"success": "variable(s) updated"}`)
 	}
