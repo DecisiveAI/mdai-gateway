@@ -259,11 +259,13 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 		if valkeyErrors != nil {
 			logger.Error("Errors occurred writing updates to valkey", zap.Error(valkeyErrors))
 			http.Error(w, "valkey errors: "+valkeyErrors.Error(), http.StatusInternalServerError)
-		} else {
-			logger.Info("Successfully wrote all variable updates")
-			w.WriteHeader(http.StatusOK)
-			fmt.Fprintf(w, `{"success": "variable(s) updated"}`)
+			return
 		}
+
+		logger.Info("Successfully wrote all variable updates")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, `{"success": "variable(s) updated"}`)
+
 	}
 }
 
