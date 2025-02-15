@@ -265,7 +265,6 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 		logger.Info("Successfully wrote all variable updates")
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintf(w, `{"success": "variable(s) updated"}`)
-
 	}
 }
 
