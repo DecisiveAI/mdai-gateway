@@ -25,8 +25,12 @@ import (
 )
 
 const (
-	valkeyEndpointEnvVarKey = "VALKEY_ENDPOINT"
-	valkeyPasswordEnvVarKey = "VALKEY_PASSWORD"
+	valkeyEndpointEnvVarKey            = "VALKEY_ENDPOINT"
+	valkeyPasswordEnvVarKey            = "VALKEY_PASSWORD"
+	valkeyAuditStreamExpiryMSEnvVarKey = "VALKEY_AUDIT_STREAM_EXPIRY_MS"
+	httpPortEnvVarKey                  = "HTTP_PORT"
+
+	defaultHttpPort = "8081"
 
 	firingStatus   = "firing"
 	resolvedStatus = "resolved"
@@ -44,9 +48,11 @@ const (
 	mdaiHubEventHistoryStreamName = "mdai_hub_event_history"
 )
 
-var processMutex sync.Mutex
-
-var logger *zap.Logger
+var (
+	processMutex            sync.Mutex
+	logger                  *zap.Logger
+	valkeyAuditStreamExpiry = 30 * 24 * time.Hour
+)
 
 func init() {
 	// Define custom encoder configuration
@@ -68,10 +74,23 @@ func main() {
 	var valkeyClient valkey.Client
 	ctx := context.Background()
 
+	httpPort := getEnvVariableWithDefault(httpPortEnvVarKey, defaultHttpPort)
+	valkeyStreamExpiryMsStr := os.Getenv(valkeyAuditStreamExpiryMSEnvVarKey)
+	if valkeyStreamExpiryMsStr != "" {
+		envExpiryMs, err := strconv.Atoi(valkeyStreamExpiryMsStr)
+		if err != nil {
+			logger.Fatal("Failed to parse valkeyStreamExpiryMs env var", zap.Error(err))
+			return
+		}
+		valkeyAuditStreamExpiry = time.Duration(envExpiryMs) * time.Millisecond
+		logger.Info("Using custom "+mdaiHubEventHistoryStreamName+" expiration threshold MS", zap.Int64("valkeyAuditStreamExpiryMs", valkeyAuditStreamExpiry.Milliseconds()))
+
+	}
+
 	operation := func() error {
 		var err error
 		valkeyClient, err = valkey.NewClient(valkey.ClientOption{
-			InitAddress: []string{getEnvVariableWithDefault(valkeyEndpointEnvVarKey, "mdai-valkey-primary.mdai.svc.cluster.local:6379")},
+			InitAddress: []string{getEnvVariableWithDefault(valkeyEndpointEnvVarKey, "")},
 			Password:    getEnvVariableWithDefault(valkeyPasswordEnvVarKey, ""),
 		})
 		if err != nil {
@@ -92,8 +111,8 @@ func main() {
 	http.HandleFunc("/alerts", handleAlertsPost(ctx, valkeyClient))
 	http.HandleFunc("/events", handleEventsGet(ctx, valkeyClient))
 
-	logger.Info("Starting server", zap.String("address", ":8081"))
-	logger.Fatal("failed to start server", zap.Error(http.ListenAndServe(":8081", nil)))
+	logger.Info("Starting server", zap.String("address", ":"+httpPort))
+	logger.Fatal("failed to start server", zap.Error(http.ListenAndServe(":"+httpPort, nil)))
 }
 
 func getEnvVariableWithDefault(key, defaultValue string) string {
@@ -309,6 +328,6 @@ func createHubEvent(relevantLabels []string, variableUpdate *mdaiv1.VariableUpda
 }
 
 func getAuditLogTTLMinId() string {
-	thirtyDaysThreshold := strconv.FormatInt(time.Now().Add(-30*24*time.Hour).UnixMilli(), 10)
-	return thirtyDaysThreshold
+	minid := strconv.FormatInt(time.Now().Add(-valkeyAuditStreamExpiry).UnixMilli(), 10)
+	return minid
 }
