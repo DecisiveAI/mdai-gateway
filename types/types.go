@@ -1,8 +1,9 @@
 package types
 
 import (
-	mdaiv1 "github.com/DecisiveAI/mdai-operator/api/v1"
 	"time"
+
+	mdaiv1 "github.com/DecisiveAI/mdai-operator/api/v1"
 )
 
 type AlertManagerPayload struct {
@@ -15,6 +16,9 @@ type AlertManagerPayload struct {
 	ExternalURL       string            `json:"externalURL"`
 }
 
+// for now ignore the unused warning from linting
+//
+//nolint:golint,unused
 func (payload *AlertManagerPayload) isFiring() bool {
 	return payload.Status == "firing"
 }
