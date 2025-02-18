@@ -14,11 +14,6 @@ env:
   TOKEN: ${{ secrets.TOKEN_OPERATOR }}
   GOPRIVATE: github.com/decisiveai/mdai-operator
 
-permissions:
-  contents: read
-  pull-requests: read
-  checks: write
-
 jobs:
   lint:
     name: Lint on Ubuntu
