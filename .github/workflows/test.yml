@@ -10,12 +10,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
+permissions:
+  pull-requests: write
+
 env:
   GOPRIVATE: github.com/decisiveai/mdai-operator
   TOKEN: ${{ secrets.TOKEN_OPERATOR }}
-
-permissions:
-  pull-requests: write
 
 jobs:
   test:
@@ -24,6 +24,7 @@ jobs:
     steps:
       - name: Configure git for private modules
         run: git config --global url."https://user:${TOKEN}@github.com".insteadOf "https://github.com"
+
 
       - name: Clone the code
         uses: actions/checkout@v4
