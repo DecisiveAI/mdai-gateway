@@ -21,9 +21,9 @@ spec:
         - containerPort: {{ .Values.deployment.containerPort }}
         env:
         - name: HTTP_PORT
-          value: {{ .Values.deployment.containerPort }}
+          value: "{{ .Values.deployment.containerPort }}"
         - name: VALKEY_AUDIT_STREAM_EXPIRY_MS
-          value: {{ .Values.auditStreamExpiryMs }}
+          value: "{{ .Values.auditStreamExpiryMs }}"
         - name: VALKEY_PASSWORD
           valueFrom:
             secretKeyRef:
