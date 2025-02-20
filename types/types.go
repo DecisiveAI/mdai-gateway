@@ -1,7 +1,6 @@
 package types
 
 import (
-	mdaiv1 "github.com/DecisiveAI/mdai-operator/api/v1"
 	"iter"
 	"time"
 
