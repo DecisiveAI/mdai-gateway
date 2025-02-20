@@ -1,9 +1,10 @@
 package types
 
 import (
-	mdaiv1 "github.com/DecisiveAI/mdai-operator/api/v1"
 	"iter"
 	"time"
+
+	mdaiv1 "github.com/DecisiveAI/mdai-operator/api/v1"
 )
 
 type AlertManagerPayload struct {
@@ -14,10 +15,6 @@ type AlertManagerPayload struct {
 	CommonLabels      map[string]string `json:"commonLabels"`
 	CommonAnnotations map[string]string `json:"commonAnnotations"`
 	ExternalURL       string            `json:"externalURL"`
-}
-
-func (payload *AlertManagerPayload) isFiring() bool {
-	return payload.Status == "firing"
 }
 
 type Alert struct {

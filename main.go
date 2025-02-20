@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"go.uber.org/multierr"
 	"io"
 	"net/http"
 	"os"
@@ -12,6 +11,8 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"go.uber.org/multierr"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -25,7 +26,7 @@ import (
 )
 
 const (
-	valkeyEndpointEnvVarKey            = "VALKEY_ENDPOINT"
+	valkeyURIEnvVarKey                 = "VALKEY_URI"
 	valkeyPasswordEnvVarKey            = "VALKEY_PASSWORD"
 	valkeyAuditStreamExpiryMSEnvVarKey = "VALKEY_AUDIT_STREAM_EXPIRY_MS"
 	httpPortEnvVarKey                  = "HTTP_PORT"
@@ -87,16 +88,20 @@ func main() {
 		}
 		valkeyAuditStreamExpiry = time.Duration(envExpiryMs) * time.Millisecond
 		logger.Info("Using custom "+mdaiHubEventHistoryStreamName+" expiration threshold MS", zap.Int64("valkeyAuditStreamExpiryMs", valkeyAuditStreamExpiry.Milliseconds()))
-
 	}
 
 	operation := func() (string, error) {
 		var err error
-		valkeyClient, err = valkey.NewClient(valkey.ClientOption{
-			InitAddress: []string{getEnvVariableWithDefault(valkeyEndpointEnvVarKey, "")},
-			Password:    getEnvVariableWithDefault(valkeyPasswordEnvVarKey, ""),
-		})
+		valkeyURI := getEnvVariableWithDefault(valkeyURIEnvVarKey, "")
+		valkeyPassword := getEnvVariableWithDefault(valkeyPasswordEnvVarKey, "")
+		clientOption := valkey.MustParseURL(valkeyURI)
+		clientOption.Sentinel.Password = valkeyPassword
+		clientOption.SendToReplicas = func(cmd valkey.Completed) bool { return cmd.IsReadOnly() }
+		clientOption.Password = valkeyPassword
+		valkeyClient, err = valkey.NewClient(clientOption)
 		if err != nil {
+			logger.Warn("ClientOption: " + fmt.Sprintf("%+v", clientOption))
+			logger.Error("Failed to create valkey client", zap.Error(err), zap.String("valkeyURI", valkeyURI), zap.String("valkeyPassword", valkeyPassword))
 			retryCount++
 			return "", err
 		}
@@ -106,6 +111,7 @@ func main() {
 	exponentialBackoff.InitialInterval = 5 * time.Second
 
 	notifyFunc := func(err error, duration time.Duration) {
+		logger.Warn(err.Error())
 		logger.Warn("failed to initialize valkey client. retrying...", zap.Int("retry_count", retryCount), zap.Duration("duration", duration))
 	}
 
@@ -131,7 +137,7 @@ func getEnvVariableWithDefault(key, defaultValue string) string {
 }
 
 func handleEventsGet(ctx context.Context, valkeyClient valkey.Client) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, _ *http.Request) {
 		result := valkeyClient.Do(ctx, valkeyClient.B().Xrange().Key(mdaiHubEventHistoryStreamName).Start("-").End("+").Build())
 		err := result.Error()
 		if err != nil {
@@ -145,7 +151,7 @@ func handleEventsGet(ctx context.Context, valkeyClient valkey.Client) http.Handl
 			http.Error(w, "Unable to fetch history from Valkey", http.StatusInternalServerError)
 			return
 		}
-		entries := make([]map[string]string, 0)
+		entries := make([]map[string]string, 0, len(resultList))
 		for _, entry := range resultList {
 			entryMap, err := entry.AsXRangeEntry()
 			if err != nil {
