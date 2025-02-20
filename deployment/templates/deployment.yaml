@@ -19,18 +19,11 @@ spec:
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
         ports:
         - containerPort: {{ .Values.deployment.containerPort }}
+        envFrom:
+          - secretRef:
+              name: valkey-secret
         env:
         - name: HTTP_PORT
-          value: "{{ .Values.deployment.containerPort }}"
+          value: {{ .Values.service.port }}
         - name: VALKEY_AUDIT_STREAM_EXPIRY_MS
           value: "{{ .Values.auditStreamExpiryMs }}"
-        - name: VALKEY_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: valkey-secret
-              key: VALKEY_PASSWORD
-        - name: VALKEY_ENDPOINT
-          valueFrom:
-            secretKeyRef:
-              name: valkey-secret
-              key: VALKEY_ENDPOINT
