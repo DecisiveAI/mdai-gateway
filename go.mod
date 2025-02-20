@@ -9,6 +9,7 @@ require (
 	github.com/valkey-io/valkey-go v1.0.53
 	github.com/valkey-io/valkey-go/mock v1.0.53
 	go.uber.org/mock v0.5.0
+	go.uber.org/multierr v1.11.0
 	go.uber.org/zap v1.27.0
 )
 

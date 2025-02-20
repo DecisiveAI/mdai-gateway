@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"go.uber.org/multierr"
 	"io"
 	"net/http"
 	"os"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 
@@ -23,8 +25,12 @@ import (
 )
 
 const (
-	valkeyEndpointEnvVarKey = "VALKEY_ENDPOINT"
-	valkeyPasswordEnvVarKey = "VALKEY_PASSWORD"
+	valkeyEndpointEnvVarKey            = "VALKEY_ENDPOINT"
+	valkeyPasswordEnvVarKey            = "VALKEY_PASSWORD"
+	valkeyAuditStreamExpiryMSEnvVarKey = "VALKEY_AUDIT_STREAM_EXPIRY_MS"
+	httpPortEnvVarKey                  = "HTTP_PORT"
+
+	defaultHttpPort = "8081"
 
 	firingStatus   = "firing"
 	resolvedStatus = "resolved"
@@ -38,11 +44,15 @@ const (
 	ReplaceValue  = "mdai/replace_element"
 
 	VariableKeyPrefix = "variable/"
+
+	mdaiHubEventHistoryStreamName = "mdai_hub_event_history"
 )
 
-var processMutex sync.Mutex
-
-var logger *zap.Logger
+var (
+	processMutex            sync.Mutex
+	logger                  *zap.Logger
+	valkeyAuditStreamExpiry = 30 * 24 * time.Hour
+)
 
 func init() {
 	// Define custom encoder configuration
@@ -69,10 +79,23 @@ func main() {
 	)
 	ctx := context.Background()
 
+	httpPort := getEnvVariableWithDefault(httpPortEnvVarKey, defaultHttpPort)
+	valkeyStreamExpiryMsStr := os.Getenv(valkeyAuditStreamExpiryMSEnvVarKey)
+	if valkeyStreamExpiryMsStr != "" {
+		envExpiryMs, err := strconv.Atoi(valkeyStreamExpiryMsStr)
+		if err != nil {
+			logger.Fatal("Failed to parse valkeyStreamExpiryMs env var", zap.Error(err))
+			return
+		}
+		valkeyAuditStreamExpiry = time.Duration(envExpiryMs) * time.Millisecond
+		logger.Info("Using custom "+mdaiHubEventHistoryStreamName+" expiration threshold MS", zap.Int64("valkeyAuditStreamExpiryMs", valkeyAuditStreamExpiry.Milliseconds()))
+
+	}
+
 	operation := func() (string, error) {
 		var err error
 		valkeyClient, err = valkey.NewClient(valkey.ClientOption{
-			InitAddress: []string{getEnvVariableWithDefault(valkeyEndpointEnvVarKey, "mdai-valkey-primary.mdai.svc.cluster.local:6379")},
+			InitAddress: []string{getEnvVariableWithDefault(valkeyEndpointEnvVarKey, "")},
 			Password:    getEnvVariableWithDefault(valkeyPasswordEnvVarKey, ""),
 		})
 		if err != nil {
@@ -96,9 +119,10 @@ func main() {
 	}
 
 	http.HandleFunc("/alerts", handleAlertsPost(ctx, valkeyClient))
+	http.HandleFunc("/events", handleEventsGet(ctx, valkeyClient))
 
-	logger.Info("Starting server", zap.String("address", ":8081"))
-	logger.Fatal("failed to start server", zap.Error(http.ListenAndServe(":8081", nil)))
+	logger.Info("Starting server", zap.String("address", ":"+httpPort))
+	logger.Fatal("failed to start server", zap.Error(http.ListenAndServe(":"+httpPort, nil)))
 }
 
 func getEnvVariableWithDefault(key, defaultValue string) string {
@@ -106,6 +130,44 @@ func getEnvVariableWithDefault(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+func handleEventsGet(ctx context.Context, valkeyClient valkey.Client) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		result := valkeyClient.Do(ctx, valkeyClient.B().Xrange().Key(mdaiHubEventHistoryStreamName).Start("-").End("+").Build())
+		err := result.Error()
+		if err != nil {
+			logger.Error("valkey error", zap.Error(err))
+			http.Error(w, "Unable to fetch history from Valkey", http.StatusInternalServerError)
+			return
+		}
+		resultList, err := result.ToArray()
+		if err != nil {
+			logger.Error("failed to get valkey value as map", zap.Error(err))
+			http.Error(w, "Unable to fetch history from Valkey", http.StatusInternalServerError)
+			return
+		}
+		entries := make([]map[string]string, 0)
+		for _, entry := range resultList {
+			entryMap, err := entry.AsXRangeEntry()
+			if err != nil {
+				logger.Error("failed to convert entry to map", zap.Error(err))
+				continue
+			}
+			entries = append(entries, entryMap.FieldValues)
+		}
+		resultMapJson, err := json.Marshal(entries)
+		if err != nil {
+			logger.Error("failed to marshal events map to json", zap.Error(err))
+			http.Error(w, "Unable to fetch history from Valkey", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		if _, err := w.Write(resultMapJson); err != nil {
+			logger.Error("Failed to write response body (y tho)", zap.Error(err))
+		}
+	}
 }
 
 func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.HandlerFunc {
@@ -139,6 +201,7 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 			return payload.Alerts[i].StartsAt.Before(payload.Alerts[j].StartsAt)
 		})
 
+		var valkeyErrors error
 		for _, alert := range payload.Alerts {
 			hubName := alert.Annotations[HubName]
 			if hubName == "" {
@@ -189,38 +252,22 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 				continue
 			}
 
+			// next time, valkeyKeyKey!
 			valkeyKey := VariableKeyPrefix + hubName + "/" + variableUpdate.VariableRef
-
-			mdaiHubEvent := types.MdaiHubEvent{
-				Type:      "variable_updated",
-				Operation: variableUpdate.Operation,
-				Variable:  valkeyKey,
-			}
-
 			switch variableUpdate.Operation {
 			case AddElement:
 				for _, element := range relevantLabels {
-					mdaiHubEvent.Value = alert.Labels[element]
-					logger.Info("Adding element",
-						zap.String("variable", valkeyKey),
-						zap.Any("mdaiHubEvent", mdaiHubEvent),
-					)
-					if result := valkeyClient.Do(ctx, valkeyClient.B().Sadd().Key(valkeyKey).Member(alert.Labels[element]).Build()); result.Error() != nil {
-						logger.Error("Valkey error", zap.Error(result.Error()))
-						http.Error(w, "valkey error: "+result.Error().Error(), http.StatusInternalServerError)
-					}
+					addOperationCommand := valkeyClient.B().Sadd().Key(valkeyKey).Member(alert.Labels[element]).Build()
+					mdaiHubEvent := createHubEvent(relevantLabels, variableUpdate, valkeyKey, alert)
+					err := doVariableUpdateAndLog(ctx, valkeyClient, addOperationCommand, mdaiHubEvent, valkeyKey)
+					valkeyErrors = multierr.Append(valkeyErrors, err)
 				}
 			case RemoveElement:
 				for _, element := range relevantLabels {
-					mdaiHubEvent.Value = alert.Labels[element]
-					logger.Info("Removing element",
-						zap.String("variable", valkeyKey),
-						zap.Any("mdaiHubEvent", mdaiHubEvent),
-					)
-					if result := valkeyClient.Do(ctx, valkeyClient.B().Srem().Key(valkeyKey).Member(alert.Labels[element]).Build()); result.Error() != nil {
-						logger.Error("Valkey error", zap.Error(result.Error()))
-						http.Error(w, "valkey error: "+result.Error().Error(), http.StatusInternalServerError)
-					}
+					removeOperationCommand := valkeyClient.B().Srem().Key(valkeyKey).Member(alert.Labels[element]).Build()
+					mdaiHubEvent := createHubEvent(relevantLabels, variableUpdate, valkeyKey, alert)
+					err := doVariableUpdateAndLog(ctx, valkeyClient, removeOperationCommand, mdaiHubEvent, valkeyKey)
+					valkeyErrors = multierr.Append(valkeyErrors, err)
 				}
 			case ReplaceValue:
 				if len(relevantLabels) > 1 {
@@ -229,21 +276,68 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 						zap.Any("all_labels", relevantLabels),
 					)
 				}
-				mdaiHubEvent.Value = alert.Labels[relevantLabels[0]]
-				logger.Info("Replacing value",
-					zap.String("variable", valkeyKey),
-					zap.Any("mdaiHubEvent", mdaiHubEvent),
-				)
-
-				if result := valkeyClient.Do(ctx, valkeyClient.B().Set().Key(valkeyKey).Value(alert.Labels[relevantLabels[0]]).Build()); result.Error() != nil {
-					logger.Error("Valkey error", zap.Error(result.Error()))
-					http.Error(w, "valkey error: "+result.Error().Error(), http.StatusInternalServerError)
-				}
+				replaceOperationCommand := valkeyClient.B().Set().Key(valkeyKey).Value(alert.Labels[relevantLabels[0]]).Build()
+				mdaiHubEvent := createHubEvent(relevantLabels, variableUpdate, valkeyKey, alert)
+				err := doVariableUpdateAndLog(ctx, valkeyClient, replaceOperationCommand, mdaiHubEvent, valkeyKey)
+				valkeyErrors = multierr.Append(valkeyErrors, err)
 			default:
 				logger.Error("Unknown variable update operation", zap.String("operation", variableUpdate.Operation), zap.Any("alert", alert))
 			}
 		}
+
+		if valkeyErrors != nil {
+			logger.Error("Errors occurred writing updates to valkey", zap.Error(valkeyErrors))
+			http.Error(w, "valkey errors: "+valkeyErrors.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		logger.Info("Successfully wrote all variable updates")
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintf(w, `{"success": "variable(s) updated"}`)
 	}
+}
+
+func doVariableUpdateAndLog(ctx context.Context, valkeyClient valkey.Client, variableUpdateCommand valkey.Completed, mdaiHubEvent types.MdaiHubEvent, valkeyKey string) error {
+	logger.Info("Performing "+mdaiHubEvent.Operation+" operation",
+		zap.String("variable", valkeyKey),
+		zap.Any("mdaiHubEvent", mdaiHubEvent),
+	)
+	auditLogCommand := makeAuditLogCommand(valkeyClient, mdaiHubEvent)
+	results := valkeyClient.DoMulti(ctx,
+		variableUpdateCommand,
+		auditLogCommand,
+	)
+	valkeyMultiErr := accumulateValkeyErrors(results)
+	return valkeyMultiErr
+}
+
+func accumulateValkeyErrors(results []valkey.ValkeyResult) error {
+	var valkeyMultiErr error
+	for _, result := range results {
+		valkeyError := result.Error()
+		if valkeyError != nil {
+			valkeyMultiErr = multierr.Append(valkeyMultiErr, valkeyError)
+			logger.Error("Valkey error", zap.Error(valkeyError))
+		}
+	}
+	return valkeyMultiErr
+}
+
+func makeAuditLogCommand(valkeyClient valkey.Client, mdaiHubEvent types.MdaiHubEvent) valkey.Completed {
+	return valkeyClient.B().Xadd().Key(mdaiHubEventHistoryStreamName).Minid().Threshold(getAuditLogTTLMinId()).Id("*").FieldValue().FieldValueIter(mdaiHubEvent.ToSequence()).Build()
+}
+
+func createHubEvent(relevantLabels []string, variableUpdate *mdaiv1.VariableUpdate, valkeyKey string, alert types.Alert) types.MdaiHubEvent {
+	mdaiHubEvent := types.MdaiHubEvent{
+		Type:      "variable_updated",
+		Operation: variableUpdate.Operation,
+		Variable:  valkeyKey,
+		Value:     alert.Labels[relevantLabels[0]],
+	}
+	return mdaiHubEvent
+}
+
+func getAuditLogTTLMinId() string {
+	minid := strconv.FormatInt(time.Now().Add(-valkeyAuditStreamExpiry).UnixMilli(), 10)
+	return minid
 }
