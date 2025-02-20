@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"github.com/valkey-io/valkey-go"
 	"io"
 	"log"
 	"net/http"
@@ -11,6 +10,8 @@ import (
 	"os"
 	"slices"
 	"testing"
+
+	"github.com/valkey-io/valkey-go"
 
 	"github.com/stretchr/testify/require"
 	"github.com/valkey-io/valkey-go/mock"
@@ -83,7 +84,7 @@ func TestUpdateValkeyHandler(t *testing.T) {
 	mux.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusOK, rec.Code)
-	require.Equal(t, successResponse, rec.Body.String())
+	require.JSONEq(t, successResponse, rec.Body.String())
 
 	// one more time with different payload
 	mux = http.NewServeMux()
@@ -108,7 +109,7 @@ func TestUpdateValkeyHandler(t *testing.T) {
 	mux.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusOK, rec.Code)
-	require.Equal(t, successResponse, rec.Body.String())
+	require.JSONEq(t, successResponse, rec.Body.String())
 
 	// one more time to emulate a scenario when alert was re-created or renamed
 	mux = http.NewServeMux()
@@ -129,5 +130,5 @@ func TestUpdateValkeyHandler(t *testing.T) {
 	mux.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusOK, rec.Code)
-	require.Equal(t, successResponse, rec.Body.String())
+	require.JSONEq(t, successResponse, rec.Body.String())
 }
