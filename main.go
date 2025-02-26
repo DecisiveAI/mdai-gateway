@@ -67,6 +67,8 @@ func init() {
 		zap.DebugLevel,                        // Log info and above
 	)
 	logger = zap.New(core, zap.AddCaller())
+	// don't really care about failing of a defer that is the last thing run before the program exists
+	//nolint:all
 	defer logger.Sync() // Flush logs before exiting
 }
 
