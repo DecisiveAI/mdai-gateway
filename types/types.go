@@ -74,13 +74,12 @@ func (hubEvent MdaiHubEvent) ToSequence() iter.Seq2[string, string] {
 }
 
 type MdaiHubAction struct {
-	HubName         string `json:"hubName"`         //name of hub action was triggered
-	EventName       string `json:"eventName"`       //name of event that caused action
-	Type            string `json:"type"`            //type of action (variable_update, collector_restart)
-	Operation       string `json:"operation"`       //operation to perform (add_element, remove_element)
-	Target          string `json:"target"`          //target of action (ex. variable/mdaihub-sample/service_list)
-	Variable        string `json:"variable"`        //variable affected by action
-	StoredVariables string `json:"storedVariables"` //used with collector restart action to show stored variables
+	HubName   string `json:"hubName"`   //name of hub action was triggered
+	EventName string `json:"eventName"` //name of event that caused action
+	Type      string `json:"type"`      //type of action (variable_update, collector_restart)
+	Operation string `json:"operation"` //operation to perform (add_element, remove_element)
+	Target    string `json:"target"`    //target of action (ex. variable/mdaihub-sample/service_list)
+	Variable  string `json:"variable"`  //variable affected by action
 }
 
 func (hubAction MdaiHubAction) ToSequence() iter.Seq2[string, string] {

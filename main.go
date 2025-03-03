@@ -7,7 +7,6 @@ import (
 	"go.uber.org/multierr"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"regexp"
 	"sort"
@@ -41,6 +40,9 @@ const (
 	actionContextAnnotationsKey  = "action_context"
 	relevantLabelsAnnotationsKey = "relevant_labels"
 	HubName                      = "hub_name"
+	Expression                   = "expression"
+	CurrentValue                 = "current_value"
+	AlertName                    = "alert_name"
 
 	AddElement    = "mdai/add_element"
 	RemoveElement = "mdai/remove_element"
@@ -165,6 +167,7 @@ func handleEventsGet(ctx context.Context, valkeyClient valkey.Client) http.Handl
 				storedVars := showHubCollectorRestartVariables(entryMap.FieldValues)
 				entries = append(entries, map[string]interface{}{
 					"timestamp":        entryMap.FieldValues["timestamp"],
+					"hub_name":         entryMap.FieldValues["hub_name"],
 					"type":             "collector_restart",
 					"stored_variables": storedVars,
 				})
@@ -235,11 +238,6 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 				logger.Info("Skipping alert, missing relevant_labels", zap.Any("alert", alert))
 				continue
 			}
-			expression := extractExpression(alert.GeneratorURL)
-			if expression == "" {
-				logger.Info("Skipping alert, missing generatorURL", zap.Any("alert", alert))
-				continue
-			}
 			var actionContext mdaiv1.PrometheusAlertEvaluationStatus
 			if err := json.Unmarshal([]byte(actionContextJSON), &actionContext); err != nil {
 				logger.Info("Could not unmarshal action_context", zap.Any("alert", alert), zap.Error(err))
@@ -275,7 +273,7 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 			// next time, valkeyKeyKey!
 			valkeyKey := VariableKeyPrefix + hubName + "/" + variableUpdate.VariableRef
 
-			mdaiHubEvent := createHubEvent(relevantLabels, alert, expression)
+			mdaiHubEvent := createHubEvent(relevantLabels, alert)
 			err := makeAuditLogEventCommand(ctx, valkeyClient, mdaiHubEvent, valkeyKey)
 			if err != nil {
 				valkeyErrors = multierr.Append(valkeyErrors, err)
@@ -367,21 +365,21 @@ func makeAuditLogEventCommand(ctx context.Context, valkeyClient valkey.Client, m
 	return nil
 }
 
-func createHubEvent(relevantLabels []string, alert types.Alert, expr string) types.MdaiHubEvent {
+func createHubEvent(relevantLabels []string, alert types.Alert) types.MdaiHubEvent {
 	metricRegex := regexp.MustCompile(`([a-zA-Z_:][a-zA-Z0-9_:]*)\{`)
-	metricMatch := metricRegex.FindStringSubmatch(expr)
+	metricMatch := metricRegex.FindStringSubmatch(alert.Annotations[Expression])
 	metricName := ""
 	if len(metricMatch) > 1 {
 		metricName = metricMatch[1]
 	}
 	mdaiHubEvent := types.MdaiHubEvent{
 		HubName:    alert.Annotations[HubName],
-		Name:       alert.Annotations["alert_name"],
+		Name:       alert.Annotations[AlertName],
 		Variable:   alert.Labels[relevantLabels[0]],
 		Type:       "event_triggered",
 		MetricName: metricName,
-		Expression: expr,
-		Value:      alert.Annotations["current_value"],
+		Expression: alert.Annotations[Expression],
+		Value:      alert.Annotations[CurrentValue],
 		Status:     alert.Status,
 	}
 	return mdaiHubEvent
@@ -390,7 +388,7 @@ func createHubEvent(relevantLabels []string, alert types.Alert, expr string) typ
 func createHubAction(relevantLabels []string, variableUpdate *mdaiv1.VariableUpdate, valkeyKey string, alert types.Alert) types.MdaiHubAction {
 	mdaiHubAction := types.MdaiHubAction{
 		HubName:   alert.Annotations[HubName],
-		EventName: alert.Annotations["alert_name"],
+		EventName: alert.Annotations[AlertName],
 		Type:      "variable_updated",
 		Operation: variableUpdate.Operation,
 		Target:    valkeyKey,
@@ -416,16 +414,4 @@ func showHubCollectorRestartVariables(fields map[string]string) string {
 func getAuditLogTTLMinId() string {
 	minid := strconv.FormatInt(time.Now().Add(-valkeyAuditStreamExpiry).UnixMilli(), 10)
 	return minid
-}
-
-// TODO: Find better way to extract expression
-func extractExpression(generatorURL string) string {
-	parsedURL, err := url.Parse(generatorURL)
-	if err != nil {
-		fmt.Println("Error parsing URL:", err)
-		return ""
-	}
-	queryParams := parsedURL.Query()
-	expr := queryParams.Get("g0.expr")
-	return expr
 }
