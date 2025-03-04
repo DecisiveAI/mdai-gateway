@@ -169,7 +169,7 @@ func handleEventsGet(ctx context.Context, valkeyClient valkey.Client) http.Handl
 				storedVars := showHubCollectorRestartVariables(entryMap.FieldValues)
 				entries = append(entries, map[string]interface{}{
 					"timestamp":        entryMap.FieldValues["timestamp"],
-					"hub_name":         entryMap.FieldValues["hub_name"],
+					"hubName":          entryMap.FieldValues["hub_name"],
 					"type":             "collector_restart",
 					"stored_variables": storedVars,
 				})
