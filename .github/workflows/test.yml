@@ -34,53 +34,51 @@ jobs:
         run: |
           go mod vendor
           go mod tidy
-          CGO_ENABLED=0 go test -coverprofile=coverage.txt -mod=vendor -v -count=1 ./...
+          CGO_ENABLED=0 go test -coverprofile=coverage.out -mod=vendor -v -count=1 ./...
 
-      - name: Install gocover-covertura
-        run: |
-          #!/usr/bin/env bash
-
-          git clone https://github.com/eldondev/gocover-cobertura
-
-          pushd gocover-cobertura
-
-          go build
-
-          popd
-
-      - name: Convert go coverage to corbetura format
-        run: ./gocover-cobertura/gocover-cobertura < coverage.txt > coverage.xml
-
-      - name: Generate code coverage report
-        uses: irongut/CodeCoverageSummary@v1.3.0
+      - name: Archive code coverage results
+        uses: actions/upload-artifact@v4
         with:
-          filename: coverage.xml
-          badge: false
-          fail_below_min: false
-          format: markdown
-          hide_branch_rate: false
-          hide_complexity: true
-          indicators: true
-          output: both
-          thresholds: '60 80'
+          name: code-coverage
+          path: coverage.out
+#
+#      - name: Generate Code Coverage Report
+#        uses: fgrosse/go-coverage-report@v1.1.1
+#        with:
+#          coverage-artifact-name: code-coverage # can be omitted if you used this default value
+#          coverage-file-name: coverage.out # can be omitted if you used this default value
+#
+#      - name: Add Coverage PR Comment
+#        uses: marocchino/sticky-pull-request-comment@v2
+#        if: github.event_name == 'pull_request' && hashFiles('code-coverage-results.md') != ''
+#        with:
+#          recreate: true
+#          path: code-coverage-results.md
 
-      - name: Add Coverage PR Comment
-        uses: marocchino/sticky-pull-request-comment@v2
-        if: github.event_name == 'pull_request'
-        with:
-          recreate: true
-          path: code-coverage-results.md
-
-      - name: Add Coverage Report to GitHub Pages
+      # Step to create a coverage badge in README.md
+      - name: Generate Go Coverage Badge  # Pass the `coverage.out` output to this action
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          mkdir -p public
-          mv code-coverage-results.md public/
-
-      - name: Deploy Coverage Report to GitHub Pages
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: peaceiris/actions-gh-pages@v4
+        uses: tj-actions/coverage-badge-go@v2
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./public
-          publish_branch: gh-pages
+          filename: coverage.out
+
+      - name: Verify Changed files
+        uses: tj-actions/verify-changed-files@v16
+        id: verify-changed-files
+        with:
+          files: README.md
+
+      - name: Commit changes
+        if: steps.verify-changed-files.outputs.files_changed == 'true'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add README.md
+          git commit -m "chore: Updated coverage badge."
+
+      - name: Push changes
+        if: steps.verify-changed-files.outputs.files_changed == 'true'
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ github.token }}
+          branch: ${{ github.head_ref }}
