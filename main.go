@@ -8,8 +8,10 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"regexp"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -38,6 +40,11 @@ const (
 	actionContextAnnotationsKey  = "action_context"
 	relevantLabelsAnnotationsKey = "relevant_labels"
 	HubName                      = "hub_name"
+	Expression                   = "expression"
+	CurrentValue                 = "current_value"
+	AlertName                    = "alert_name"
+	EventTriggered               = "event_triggered"
+	VariableUpdated              = "variable_updated"
 
 	AddElement    = "mdai/add_element"
 	RemoveElement = "mdai/remove_element"
@@ -52,6 +59,7 @@ var (
 	processMutex            sync.Mutex
 	logger                  *zap.Logger
 	valkeyAuditStreamExpiry = 30 * 24 * time.Hour
+	metricRegex             = regexp.MustCompile(`([a-zA-Z_:][a-zA-Z0-9_:]*)\{`)
 )
 
 func init() {
@@ -143,18 +151,33 @@ func handleEventsGet(ctx context.Context, valkeyClient valkey.Client) http.Handl
 		}
 		resultList, err := result.ToArray()
 		if err != nil {
-			logger.Error("failed to get valkey value as map", zap.Error(err))
+			logger.Error("failed to get valkey variable as map", zap.Error(err))
 			http.Error(w, "Unable to fetch history from Valkey", http.StatusInternalServerError)
 			return
 		}
-		entries := make([]map[string]string, 0)
+		entries := make([]map[string]any, 0)
 		for _, entry := range resultList {
 			entryMap, err := entry.AsXRangeEntry()
 			if err != nil {
 				logger.Error("failed to convert entry to map", zap.Error(err))
 				continue
 			}
-			entries = append(entries, entryMap.FieldValues)
+
+			if entryMap.FieldValues["type"] == "collector_restart" {
+				storedVars := showHubCollectorRestartVariables(entryMap.FieldValues)
+				entries = append(entries, map[string]any{
+					"timestamp":        entryMap.FieldValues["timestamp"],
+					"hubName":          entryMap.FieldValues["hub_name"],
+					"type":             "collector_restart",
+					"stored_variables": storedVars,
+				})
+			} else {
+				transformedEntry := make(map[string]any)
+				for k, v := range entryMap.FieldValues {
+					transformedEntry[k] = v
+				}
+				entries = append(entries, transformedEntry)
+			}
 		}
 		resultMapJson, err := json.Marshal(entries)
 		if err != nil {
@@ -219,7 +242,6 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 				logger.Info("Skipping alert, missing relevant_labels", zap.Any("alert", alert))
 				continue
 			}
-
 			var actionContext mdaiv1.PrometheusAlertEvaluationStatus
 			if err := json.Unmarshal([]byte(actionContextJSON), &actionContext); err != nil {
 				logger.Info("Could not unmarshal action_context", zap.Any("alert", alert), zap.Error(err))
@@ -254,19 +276,26 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 
 			// next time, valkeyKeyKey!
 			valkeyKey := VariableKeyPrefix + hubName + "/" + variableUpdate.VariableRef
+
+			mdaiHubEvent := createHubEvent(relevantLabels, alert)
+			err := insertAuditLogEvent(ctx, valkeyClient, mdaiHubEvent, valkeyKey)
+			if err != nil {
+				valkeyErrors = multierr.Append(valkeyErrors, err)
+			}
+
 			switch variableUpdate.Operation {
 			case AddElement:
 				for _, element := range relevantLabels {
 					addOperationCommand := valkeyClient.B().Sadd().Key(valkeyKey).Member(alert.Labels[element]).Build()
-					mdaiHubEvent := createHubEvent(relevantLabels, variableUpdate, valkeyKey, alert)
-					err := doVariableUpdateAndLog(ctx, valkeyClient, addOperationCommand, mdaiHubEvent, valkeyKey)
+					mdaiHubAction := createHubAction(relevantLabels, variableUpdate, valkeyKey, alert)
+					err := doVariableUpdateAndLog(ctx, valkeyClient, addOperationCommand, mdaiHubAction, valkeyKey)
 					valkeyErrors = multierr.Append(valkeyErrors, err)
 				}
 			case RemoveElement:
 				for _, element := range relevantLabels {
 					removeOperationCommand := valkeyClient.B().Srem().Key(valkeyKey).Member(alert.Labels[element]).Build()
-					mdaiHubEvent := createHubEvent(relevantLabels, variableUpdate, valkeyKey, alert)
-					err := doVariableUpdateAndLog(ctx, valkeyClient, removeOperationCommand, mdaiHubEvent, valkeyKey)
+					mdaiHubAction := createHubAction(relevantLabels, variableUpdate, valkeyKey, alert)
+					err := doVariableUpdateAndLog(ctx, valkeyClient, removeOperationCommand, mdaiHubAction, valkeyKey)
 					valkeyErrors = multierr.Append(valkeyErrors, err)
 				}
 			case ReplaceValue:
@@ -277,8 +306,8 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 					)
 				}
 				replaceOperationCommand := valkeyClient.B().Set().Key(valkeyKey).Value(alert.Labels[relevantLabels[0]]).Build()
-				mdaiHubEvent := createHubEvent(relevantLabels, variableUpdate, valkeyKey, alert)
-				err := doVariableUpdateAndLog(ctx, valkeyClient, replaceOperationCommand, mdaiHubEvent, valkeyKey)
+				mdaiHubAction := createHubAction(relevantLabels, variableUpdate, valkeyKey, alert)
+				err := doVariableUpdateAndLog(ctx, valkeyClient, replaceOperationCommand, mdaiHubAction, valkeyKey)
 				valkeyErrors = multierr.Append(valkeyErrors, err)
 			default:
 				logger.Error("Unknown variable update operation", zap.String("operation", variableUpdate.Operation), zap.Any("alert", alert))
@@ -297,12 +326,12 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 	}
 }
 
-func doVariableUpdateAndLog(ctx context.Context, valkeyClient valkey.Client, variableUpdateCommand valkey.Completed, mdaiHubEvent types.MdaiHubEvent, valkeyKey string) error {
-	logger.Info("Performing "+mdaiHubEvent.Operation+" operation",
+func doVariableUpdateAndLog(ctx context.Context, valkeyClient valkey.Client, variableUpdateCommand valkey.Completed, mdaiHubAction types.MdaiHubAction, valkeyKey string) error {
+	logger.Info("Performing "+mdaiHubAction.Operation+" operation",
 		zap.String("variable", valkeyKey),
-		zap.Any("mdaiHubEvent", mdaiHubEvent),
+		zap.Any("mdaiHubAction", mdaiHubAction),
 	)
-	auditLogCommand := makeAuditLogCommand(valkeyClient, mdaiHubEvent)
+	auditLogCommand := makeAuditLogActionCommand(valkeyClient, mdaiHubAction)
 	results := valkeyClient.DoMulti(ctx,
 		variableUpdateCommand,
 		auditLogCommand,
@@ -323,18 +352,68 @@ func accumulateValkeyErrors(results []valkey.ValkeyResult) error {
 	return valkeyMultiErr
 }
 
-func makeAuditLogCommand(valkeyClient valkey.Client, mdaiHubEvent types.MdaiHubEvent) valkey.Completed {
-	return valkeyClient.B().Xadd().Key(mdaiHubEventHistoryStreamName).Minid().Threshold(getAuditLogTTLMinId()).Id("*").FieldValue().FieldValueIter(mdaiHubEvent.ToSequence()).Build()
+func makeAuditLogActionCommand(valkeyClient valkey.Client, mdaiHubAction types.MdaiHubAction) valkey.Completed {
+	return valkeyClient.B().Xadd().Key(mdaiHubEventHistoryStreamName).Minid().Threshold(getAuditLogTTLMinId()).Id("*").FieldValue().FieldValueIter(mdaiHubAction.ToSequence()).Build()
 }
 
-func createHubEvent(relevantLabels []string, variableUpdate *mdaiv1.VariableUpdate, valkeyKey string, alert types.Alert) types.MdaiHubEvent {
+func insertAuditLogEvent(ctx context.Context, valkeyClient valkey.Client, mdaiHubEvent types.MdaiHubEvent, valkeyKey string) error {
+	result := valkeyClient.Do(ctx, valkeyClient.B().Xadd().Key(mdaiHubEventHistoryStreamName).Minid().Threshold(getAuditLogTTLMinId()).Id("*").FieldValue().FieldValueIter(mdaiHubEvent.ToSequence()).Build())
+	if err := result.Error(); err != nil {
+		logger.Error("Valkey error", zap.Error(err))
+		return err
+	}
+	return nil
+}
+
+func createHubEvent(relevantLabels []string, alert types.Alert) types.MdaiHubEvent {
+	metricMatch := metricRegex.FindStringSubmatch(alert.Annotations[Expression])
+	metricName := ""
+	if len(metricMatch) > 1 {
+		metricName = metricMatch[1]
+	}
+
+	relevantLabelValues := make([]string, len(relevantLabels))
+	for idx, relevantLabel := range relevantLabels {
+		relevantLabelValues[idx] = alert.Labels[relevantLabel]
+	}
+
 	mdaiHubEvent := types.MdaiHubEvent{
-		Type:      "variable_updated",
-		Operation: variableUpdate.Operation,
-		Variable:  valkeyKey,
-		Value:     alert.Labels[relevantLabels[0]],
+		HubName:             alert.Annotations[HubName],
+		Name:                alert.Annotations[AlertName],
+		RelevantLabelValues: strings.Join(relevantLabelValues, ","),
+		Type:                EventTriggered,
+		MetricName:          metricName,
+		Expression:          alert.Annotations[Expression],
+		Value:               alert.Annotations[CurrentValue],
+		Status:              alert.Status,
 	}
 	return mdaiHubEvent
+}
+
+func createHubAction(relevantLabels []string, variableUpdate *mdaiv1.VariableUpdate, valkeyKey string, alert types.Alert) types.MdaiHubAction {
+	mdaiHubAction := types.MdaiHubAction{
+		HubName:   alert.Annotations[HubName],
+		EventName: alert.Annotations[AlertName],
+		Type:      VariableUpdated,
+		Operation: variableUpdate.Operation,
+		Target:    valkeyKey,
+		Variable:  alert.Labels[relevantLabels[0]],
+	}
+	return mdaiHubAction
+}
+
+func showHubCollectorRestartVariables(fields map[string]string) string {
+	var storedVars []string
+	ignoreKeys := map[string]bool{
+		"timestamp": true,
+		"type":      true,
+	}
+	for key, value := range fields {
+		if strings.HasSuffix(key, "_CSV") && !ignoreKeys[key] && value != "" && value != "n/a" {
+			storedVars = append(storedVars, value)
+		}
+	}
+	return strings.Join(storedVars, ",")
 }
 
 func getAuditLogTTLMinId() string {

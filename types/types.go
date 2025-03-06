@@ -40,29 +40,69 @@ type Config struct {
 }
 
 type MdaiHubEvent struct {
-	Type      string `json:"type"`
-	Operation string `json:"operation"`
-	Variable  string `json:"variable"`
-	Value     string `json:"value"`
+	HubName             string `json:"hubName"`             //name of hub event was triggered
+	Name                string `json:"name"`                //name of event to connect action
+	RelevantLabelValues string `json:"relevantLabelValues"` //variable triggering event
+	Type                string `json:"type"`                //triggered event
+	MetricName          string `json:"metricName"`          //expr delta & metric measured by observer
+	Expression          string `json:"expression"`          //expr used to trigger event
+	Value               string `json:"value"`               //value of metric when event triggered
+	Status              string `json:"status"`              //status of event (active, updated)
 }
 
-// TODO: More elegant way to iterate over fields
 func (hubEvent MdaiHubEvent) ToSequence() iter.Seq2[string, string] {
 	return func(yield func(K string, V string) bool) {
-		if !yield("timestamp", time.Now().UTC().Format(time.RFC3339)) {
-			return
+		fields := map[string]string{
+			"timestamp":           time.Now().UTC().Format(time.RFC3339),
+			"hubName":             hubEvent.HubName,
+			"name":                hubEvent.Name,
+			"relevantLabelValues": hubEvent.RelevantLabelValues,
+			"type":                hubEvent.Type,
+			"metricName":          hubEvent.MetricName,
+			"expression":          hubEvent.Expression,
+			"value":               hubEvent.Value,
+			"status":              hubEvent.Status,
 		}
-		if !yield("type", hubEvent.Type) {
-			return
+
+		for key, value := range fields {
+			if value == "" {
+				continue
+			}
+			if !yield(key, value) {
+				return
+			}
 		}
-		if !yield("operation", hubEvent.Operation) {
-			return
+	}
+}
+
+type MdaiHubAction struct {
+	HubName   string `json:"hubName"`   //name of hub action was triggered
+	EventName string `json:"eventName"` //name of event that caused action
+	Type      string `json:"type"`      //type of action (variable_update, collector_restart)
+	Operation string `json:"operation"` //operation to perform (add_element, remove_element)
+	Target    string `json:"target"`    //target of action (ex. variable/mdaihub-sample/service_list)
+	Variable  string `json:"variable"`  //variable affected by action
+}
+
+func (hubAction MdaiHubAction) ToSequence() iter.Seq2[string, string] {
+	return func(yield func(K string, V string) bool) {
+		fields := map[string]string{
+			"timestamp": time.Now().UTC().Format(time.RFC3339),
+			"hubName":   hubAction.HubName,
+			"eventName": hubAction.EventName,
+			"type":      hubAction.Type,
+			"operation": hubAction.Operation,
+			"target":    hubAction.Target,
+			"variable":  hubAction.Variable,
 		}
-		if !yield("variable", hubEvent.Variable) {
-			return
-		}
-		if !yield("value", hubEvent.Value) {
-			return
+
+		for key, value := range fields {
+			if value == "" {
+				continue
+			}
+			if !yield(key, value) {
+				return
+			}
 		}
 	}
 }
