@@ -40,28 +40,28 @@ type Config struct {
 }
 
 type MdaiHubEvent struct {
-	HubName    string `json:"hubName"`    //name of hub event was triggered
-	Name       string `json:"name"`       //name of event to connect action
-	Variable   string `json:"variable"`   //variable triggering event
-	Type       string `json:"type"`       //triggered event
-	MetricName string `json:"metricName"` //expr delta & metric measured by observer
-	Expression string `json:"expression"` //expr used to trigger event
-	Value      string `json:"value"`      //value of metric when event triggered
-	Status     string `json:"status"`     //status of event (active, updated)
+	HubName             string `json:"hubName"`             //name of hub event was triggered
+	Name                string `json:"name"`                //name of event to connect action
+	RelevantLabelValues string `json:"relevantLabelValues"` //variable triggering event
+	Type                string `json:"type"`                //triggered event
+	MetricName          string `json:"metricName"`          //expr delta & metric measured by observer
+	Expression          string `json:"expression"`          //expr used to trigger event
+	Value               string `json:"value"`               //value of metric when event triggered
+	Status              string `json:"status"`              //status of event (active, updated)
 }
 
 func (hubEvent MdaiHubEvent) ToSequence() iter.Seq2[string, string] {
 	return func(yield func(K string, V string) bool) {
 		fields := map[string]string{
-			"timestamp":  time.Now().UTC().Format(time.RFC3339),
-			"hubName":    hubEvent.HubName,
-			"name":       hubEvent.Name,
-			"variable":   hubEvent.Variable,
-			"type":       hubEvent.Type,
-			"metricName": hubEvent.MetricName,
-			"expression": hubEvent.Expression,
-			"value":      hubEvent.Value,
-			"status":     hubEvent.Status,
+			"timestamp":           time.Now().UTC().Format(time.RFC3339),
+			"hubName":             hubEvent.HubName,
+			"name":                hubEvent.Name,
+			"relevantLabelValues": hubEvent.RelevantLabelValues,
+			"type":                hubEvent.Type,
+			"metricName":          hubEvent.MetricName,
+			"expression":          hubEvent.Expression,
+			"value":               hubEvent.Value,
+			"status":              hubEvent.Status,
 		}
 
 		for key, value := range fields {
