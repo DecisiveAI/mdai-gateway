@@ -52,25 +52,23 @@ type MdaiHubEvent struct {
 
 func (hubEvent MdaiHubEvent) ToSequence() iter.Seq2[string, string] {
 	return func(yield func(K string, V string) bool) {
-		fields := []struct {
-			key   string
-			value string
-		}{
-			{"timestamp", time.Now().UTC().Format(time.RFC3339)},
-			{"hubName", hubEvent.HubName},
-			{"name", hubEvent.Name},
-			{"variable", hubEvent.Variable},
-			{"type", hubEvent.Type},
-			{"metricName", hubEvent.MetricName},
-			{"expression", hubEvent.Expression},
-			{"value", hubEvent.Value},
-			{"status", hubEvent.Status},
+		fields := map[string]string{
+			"timestamp":  time.Now().UTC().Format(time.RFC3339),
+			"hubName":    hubEvent.HubName,
+			"name":       hubEvent.Name,
+			"variable":   hubEvent.Variable,
+			"type":       hubEvent.Type,
+			"metricName": hubEvent.MetricName,
+			"expression": hubEvent.Expression,
+			"value":      hubEvent.Value,
+			"status":     hubEvent.Status,
 		}
-		for _, field := range fields {
-			if field.value == "" {
+
+		for key, value := range fields {
+			if value == "" {
 				continue
 			}
-			if !yield(field.key, field.value) {
+			if !yield(key, value) {
 				return
 			}
 		}
@@ -88,24 +86,21 @@ type MdaiHubAction struct {
 
 func (hubAction MdaiHubAction) ToSequence() iter.Seq2[string, string] {
 	return func(yield func(K string, V string) bool) {
-		fields := []struct {
-			key   string
-			value string
-		}{
-			{"timestamp", time.Now().UTC().Format(time.RFC3339)},
-			{"hubName", hubAction.HubName},
-			{"eventName", hubAction.EventName},
-			{"type", hubAction.Type},
-			{"operation", hubAction.Operation},
-			{"target", hubAction.Target},
-			{"variable", hubAction.Variable},
+		fields := map[string]string{
+			"timestamp": time.Now().UTC().Format(time.RFC3339),
+			"hubName":   hubAction.HubName,
+			"eventName": hubAction.EventName,
+			"type":      hubAction.Type,
+			"operation": hubAction.Operation,
+			"target":    hubAction.Target,
+			"variable":  hubAction.Variable,
 		}
 
-		for _, field := range fields {
-			if field.value == "" {
+		for key, value := range fields {
+			if value == "" {
 				continue
 			}
-			if !yield(field.key, field.value) {
+			if !yield(key, value) {
 				return
 			}
 		}

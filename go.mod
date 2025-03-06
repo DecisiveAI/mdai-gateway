@@ -4,7 +4,6 @@ go 1.23.2
 
 require (
 	github.com/DecisiveAI/mdai-operator v0.1.1
-	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cenkalti/backoff/v5 v5.0.2
 	github.com/stretchr/testify v1.10.0
 	github.com/valkey-io/valkey-go v1.0.53

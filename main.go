@@ -43,6 +43,8 @@ const (
 	Expression                   = "expression"
 	CurrentValue                 = "current_value"
 	AlertName                    = "alert_name"
+	EventTriggered               = "event_triggered"
+	VariableUpdated              = "variable_updated"
 
 	AddElement    = "mdai/add_element"
 	RemoveElement = "mdai/remove_element"
@@ -57,6 +59,7 @@ var (
 	processMutex            sync.Mutex
 	logger                  *zap.Logger
 	valkeyAuditStreamExpiry = 30 * 24 * time.Hour
+	metricRegex             = regexp.MustCompile(`([a-zA-Z_:][a-zA-Z0-9_:]*)\{`)
 )
 
 func init() {
@@ -148,11 +151,11 @@ func handleEventsGet(ctx context.Context, valkeyClient valkey.Client) http.Handl
 		}
 		resultList, err := result.ToArray()
 		if err != nil {
-			logger.Error("failed to get valkey value as map", zap.Error(err))
+			logger.Error("failed to get valkey variable as map", zap.Error(err))
 			http.Error(w, "Unable to fetch history from Valkey", http.StatusInternalServerError)
 			return
 		}
-		entries := make([]map[string]interface{}, 0)
+		entries := make([]map[string]any, 0)
 		for _, entry := range resultList {
 			entryMap, err := entry.AsXRangeEntry()
 			if err != nil {
@@ -160,20 +163,19 @@ func handleEventsGet(ctx context.Context, valkeyClient valkey.Client) http.Handl
 				continue
 			}
 
-			transformedEntry := make(map[string]interface{})
-			for k, v := range entryMap.FieldValues {
-				transformedEntry[k] = v
-			}
-
 			if entryMap.FieldValues["type"] == "collector_restart" {
 				storedVars := showHubCollectorRestartVariables(entryMap.FieldValues)
-				entries = append(entries, map[string]interface{}{
+				entries = append(entries, map[string]any{
 					"timestamp":        entryMap.FieldValues["timestamp"],
 					"hubName":          entryMap.FieldValues["hub_name"],
 					"type":             "collector_restart",
 					"stored_variables": storedVars,
 				})
 			} else {
+				transformedEntry := make(map[string]any)
+				for k, v := range entryMap.FieldValues {
+					transformedEntry[k] = v
+				}
 				entries = append(entries, transformedEntry)
 			}
 		}
@@ -368,7 +370,6 @@ func makeAuditLogEventCommand(ctx context.Context, valkeyClient valkey.Client, m
 }
 
 func createHubEvent(relevantLabels []string, alert types.Alert) types.MdaiHubEvent {
-	metricRegex := regexp.MustCompile(`([a-zA-Z_:][a-zA-Z0-9_:]*)\{`)
 	metricMatch := metricRegex.FindStringSubmatch(alert.Annotations[Expression])
 	metricName := ""
 	if len(metricMatch) > 1 {
@@ -378,7 +379,7 @@ func createHubEvent(relevantLabels []string, alert types.Alert) types.MdaiHubEve
 		HubName:    alert.Annotations[HubName],
 		Name:       alert.Annotations[AlertName],
 		Variable:   alert.Labels[relevantLabels[0]],
-		Type:       "event_triggered",
+		Type:       EventTriggered,
 		MetricName: metricName,
 		Expression: alert.Annotations[Expression],
 		Value:      alert.Annotations[CurrentValue],
@@ -391,7 +392,7 @@ func createHubAction(relevantLabels []string, variableUpdate *mdaiv1.VariableUpd
 	mdaiHubAction := types.MdaiHubAction{
 		HubName:   alert.Annotations[HubName],
 		EventName: alert.Annotations[AlertName],
-		Type:      "variable_updated",
+		Type:      VariableUpdated,
 		Operation: variableUpdate.Operation,
 		Target:    valkeyKey,
 		Variable:  alert.Labels[relevantLabels[0]],
