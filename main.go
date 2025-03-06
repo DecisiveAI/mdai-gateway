@@ -278,7 +278,7 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 			valkeyKey := VariableKeyPrefix + hubName + "/" + variableUpdate.VariableRef
 
 			mdaiHubEvent := createHubEvent(relevantLabels, alert)
-			err := makeAuditLogEventCommand(ctx, valkeyClient, mdaiHubEvent, valkeyKey)
+			err := insertAuditLogEvent(ctx, valkeyClient, mdaiHubEvent, valkeyKey)
 			if err != nil {
 				valkeyErrors = multierr.Append(valkeyErrors, err)
 			}
@@ -356,11 +356,7 @@ func makeAuditLogActionCommand(valkeyClient valkey.Client, mdaiHubAction types.M
 	return valkeyClient.B().Xadd().Key(mdaiHubEventHistoryStreamName).Minid().Threshold(getAuditLogTTLMinId()).Id("*").FieldValue().FieldValueIter(mdaiHubAction.ToSequence()).Build()
 }
 
-func makeAuditLogEventCommand(ctx context.Context, valkeyClient valkey.Client, mdaiHubEvent types.MdaiHubEvent, valkeyKey string) error {
-	logger.Info("Event triggered",
-		zap.String("variable", valkeyKey),
-		zap.Any("mdaiHubEvent", mdaiHubEvent),
-	)
+func insertAuditLogEvent(ctx context.Context, valkeyClient valkey.Client, mdaiHubEvent types.MdaiHubEvent, valkeyKey string) error {
 	result := valkeyClient.Do(ctx, valkeyClient.B().Xadd().Key(mdaiHubEventHistoryStreamName).Minid().Threshold(getAuditLogTTLMinId()).Id("*").FieldValue().FieldValueIter(mdaiHubEvent.ToSequence()).Build())
 	if err := result.Error(); err != nil {
 		logger.Error("Valkey error", zap.Error(err))
@@ -375,15 +371,21 @@ func createHubEvent(relevantLabels []string, alert types.Alert) types.MdaiHubEve
 	if len(metricMatch) > 1 {
 		metricName = metricMatch[1]
 	}
+
+	relevantLabelValues := make([]string, len(relevantLabels))
+	for idx, relevantLabel := range relevantLabels {
+		relevantLabelValues[idx] = alert.Labels[relevantLabel]
+	}
+
 	mdaiHubEvent := types.MdaiHubEvent{
-		HubName:    alert.Annotations[HubName],
-		Name:       alert.Annotations[AlertName],
-		Variable:   alert.Labels[relevantLabels[0]],
-		Type:       EventTriggered,
-		MetricName: metricName,
-		Expression: alert.Annotations[Expression],
-		Value:      alert.Annotations[CurrentValue],
-		Status:     alert.Status,
+		HubName:             alert.Annotations[HubName],
+		Name:                alert.Annotations[AlertName],
+		RelevantLabelValues: strings.Join(relevantLabelValues, ","),
+		Type:                EventTriggered,
+		MetricName:          metricName,
+		Expression:          alert.Annotations[Expression],
+		Value:               alert.Annotations[CurrentValue],
+		Status:              alert.Status,
 	}
 	return mdaiHubEvent
 }
