@@ -119,8 +119,10 @@ func main() {
 		logger.Fatal("failed to get valkey client", zap.Error(err))
 	}
 
+	adapter := mdaiAuditStream.NewAuditAdapter(logger, valkeyClient, valkeyAuditStreamExpiry)
+
 	http.HandleFunc("/alerts", handleAlertsPost(ctx, valkeyClient))
-	http.HandleFunc("/events", mdaiAuditStream.HandleEventsGet(ctx, valkeyClient))
+	http.HandleFunc("/events", adapter.HandleEventsGet(ctx, valkeyClient))
 
 	logger.Info("Starting server", zap.String("address", ":"+httpPort))
 	logger.Fatal("failed to start server", zap.Error(http.ListenAndServe(":"+httpPort, nil)))
@@ -216,9 +218,10 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 
 			// next time, valkeyKeyKey!
 			valkeyKey := VariableKeyPrefix + hubName + "/" + variableUpdate.VariableRef
+			adapter := mdaiAuditStream.NewAuditAdapter(logger, valkeyClient, valkeyAuditStreamExpiry)
 
-			mdaiHubEvent := mdaiAuditStream.CreateHubEvent(relevantLabels, alert)
-			err := mdaiAuditStream.InsertAuditLogEvent(ctx, valkeyClient, mdaiHubEvent)
+			mdaiHubEvent := adapter.CreateHubEvent(relevantLabels, alert)
+			err := adapter.InsertAuditLogEvent(ctx, valkeyClient, mdaiHubEvent)
 			if err != nil {
 				valkeyErrors = multierr.Append(valkeyErrors, err)
 			}
@@ -227,15 +230,15 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 			case AddElement:
 				for _, element := range relevantLabels {
 					addOperationCommand := valkeyClient.B().Sadd().Key(valkeyKey).Member(alert.Labels[element]).Build()
-					mdaiHubAction := mdaiAuditStream.CreateHubAction(relevantLabels, variableUpdate, valkeyKey, alert)
-					err := mdaiAuditStream.DoVariableUpdateAndLog(ctx, valkeyClient, addOperationCommand, mdaiHubAction, valkeyKey)
+					mdaiHubAction := adapter.CreateHubAction(relevantLabels, variableUpdate, valkeyKey, alert)
+					err := adapter.DoVariableUpdateAndLog(ctx, valkeyClient, addOperationCommand, mdaiHubAction, valkeyKey)
 					valkeyErrors = multierr.Append(valkeyErrors, err)
 				}
 			case RemoveElement:
 				for _, element := range relevantLabels {
 					removeOperationCommand := valkeyClient.B().Srem().Key(valkeyKey).Member(alert.Labels[element]).Build()
-					mdaiHubAction := mdaiAuditStream.CreateHubAction(relevantLabels, variableUpdate, valkeyKey, alert)
-					err := mdaiAuditStream.DoVariableUpdateAndLog(ctx, valkeyClient, removeOperationCommand, mdaiHubAction, valkeyKey)
+					mdaiHubAction := adapter.CreateHubAction(relevantLabels, variableUpdate, valkeyKey, alert)
+					err := adapter.DoVariableUpdateAndLog(ctx, valkeyClient, removeOperationCommand, mdaiHubAction, valkeyKey)
 					valkeyErrors = multierr.Append(valkeyErrors, err)
 				}
 			case ReplaceValue:
@@ -246,8 +249,8 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 					)
 				}
 				replaceOperationCommand := valkeyClient.B().Set().Key(valkeyKey).Value(alert.Labels[relevantLabels[0]]).Build()
-				mdaiHubAction := mdaiAuditStream.CreateHubAction(relevantLabels, variableUpdate, valkeyKey, alert)
-				err := mdaiAuditStream.DoVariableUpdateAndLog(ctx, valkeyClient, replaceOperationCommand, mdaiHubAction, valkeyKey)
+				mdaiHubAction := adapter.CreateHubAction(relevantLabels, variableUpdate, valkeyKey, alert)
+				err := adapter.DoVariableUpdateAndLog(ctx, valkeyClient, replaceOperationCommand, mdaiHubAction, valkeyKey)
 				valkeyErrors = multierr.Append(valkeyErrors, err)
 			default:
 				logger.Error("Unknown variable update operation", zap.String("operation", variableUpdate.Operation), zap.Any("alert", alert))
