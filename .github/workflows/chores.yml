@@ -1,0 +1,163 @@
+name: Chores
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  GOPRIVATE: github.com/decisiveai/opentelemetry-operator
+  TOKEN: ${{ secrets.TOKEN_OPERATOR }}
+
+jobs:
+  lint:
+    name: Lint on Ubuntu
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure git for private modules
+        run: git config --global url."https://user:${TOKEN}@github.com".insteadOf "https://github.com"
+
+      - name: Clone the code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run linter
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.63.4
+
+#  check-go-file-changes:
+#    name: Check if Go files changed
+#    runs-on: ubuntu-latest
+#    needs: lint
+#    outputs:
+#      go_files_changed: ${{ steps.check.outputs.go_files_changed }}
+#    steps:
+#      - name: Clone the code
+#        uses: actions/checkout@v4
+#        with:
+#          fetch-depth: 2 # Ensures we can compare with the previous commit
+#
+#      - name: Check for Go-related file changes
+#        id: check
+#        run: |
+#          if git diff --quiet HEAD^ HEAD -- '**/*.go' 'go.mod' 'go.sum'; then
+#            echo "No relevant Go file changes detected."
+#            echo "go_files_changed=false" >> $GITHUB_ENV
+#            echo "::set-output name=go_files_changed::false"
+#          else
+#            echo "Relevant Go file changes detected."
+#            echo "go_files_changed=true" >> $GITHUB_ENV
+#            echo "::set-output name=go_files_changed::true"
+#          fi
+
+  test:
+    name: Test on Ubuntu
+    runs-on: ubuntu-latest
+    needs: [lint]
+    steps:
+      - name: Configure git for private modules
+        run: git config --global url."https://user:${TOKEN}@github.com".insteadOf "https://github.com"
+
+      - name: Clone the code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Running Tests
+        run: |
+          go mod vendor
+          go mod tidy
+          CGO_ENABLED=0 go test -coverprofile=coverage.out -mod=vendor -v -count=1 ./...
+
+      - name: Archive code coverage results
+        uses: actions/upload-artifact@v4
+        with:
+          name: code-coverage
+          path: coverage.out
+
+#      - name: Generate Code Coverage Report
+#        uses: fgrosse/go-coverage-report@v1.1.1
+#        id: report
+#        with:
+#          coverage-artifact-name: code-coverage
+#          coverage-file-name: coverage.out
+#          skip-comment: 'true'
+#
+#      - name: Save Coverage Report to File
+#        if: steps.report.outputs.coverage_report != ''
+#        run: echo "${{ steps.report.outputs.coverage_report }}" > code-coverage-results.md
+#
+#      - name: Add Coverage PR Comment
+#        uses: marocchino/sticky-pull-request-comment@v2
+#        if: github.event_name == 'pull_request' && hashFiles('code-coverage-results.md') != ''
+#        with:
+#          recreate: true
+#          path: code-coverage-results.md
+#
+#      - name: Generate Go Coverage Badge
+#        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+#        id: generate-badge
+#        uses: tj-actions/coverage-badge-go@v2
+#        with:
+#          filename: coverage.out
+#
+#      - name: Verify Changed files
+#        if: steps.generate-badge.outcome == 'success'
+#        uses: tj-actions/verify-changed-files@v16
+#        id: verify-changed-files
+#        with:
+#          files: README.md
+#
+#      - name: Commit changes
+#        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.verify-changed-files.outputs.files_changed == 'true'
+#        run: |
+#          git config --local user.email "action@github.com"
+#          git config --local user.name "GitHub Action"
+#          git add README.md
+#          git commit -m "chore: Updated coverage badge."
+#
+#      - name: Push changes
+#        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.verify-changed-files.outputs.files_changed == 'true'
+#        uses: ad-m/github-push-action@master
+#        with:
+#          github_token: ${{ github.token }}
+#          branch: ${{ github.head_ref }}
+#
+#      - name: Capture coverage in health repo
+#        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+#        run: |
+#          go install github.com/axw/gocov/gocov@latest
+#          gocov convert coverage.out | gocov report > coverage-EH-webservice.txt
+#
+#      - name: Commit coverage to health repo
+#        env:
+#          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#        run: |
+#          # Clone the target repository
+#          git clone https://github.com/DecisiveAI/platform-health.git
+#          cd platform-health
+#
+#          # Configure git
+#          git config --global user.email "action@github.com"
+#          git config --global user.name "GitHub Action"
+#
+#          # Copy the new coverage file
+#          cp ../coverage-EH-webservice.txt .
+#
+#          # Commit and push changes
+#          git add coverage-EH-webservice.txt
+#          git commit -m "chore: Update coverage report from CI"
+#          git push https://x-access-token:${GH_TOKEN}@github.com/DecisiveAI/platform-health.git main
