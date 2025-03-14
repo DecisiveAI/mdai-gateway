@@ -63,7 +63,7 @@ jobs:
   test:
     name: Test on Ubuntu
     runs-on: ubuntu-latest
-    needs: [lint, check-go-file-changes]
+    needs: [lint]
     steps:
       - name: Configure git for private modules
         run: git config --global url."https://user:${TOKEN}@github.com".insteadOf "https://github.com"
