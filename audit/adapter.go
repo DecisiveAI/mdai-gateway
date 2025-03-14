@@ -70,7 +70,7 @@ func HandleEventsGet(ctx context.Context, valkeyClient valkey.Client) http.Handl
 				continue
 			}
 
-			if processedEntry := processEntry(entryMap, logger); processedEntry != nil {
+			if processedEntry := processEntry(entryMap); processedEntry != nil {
 				entries = append(entries, processedEntry)
 			}
 		}
@@ -89,16 +89,76 @@ func HandleEventsGet(ctx context.Context, valkeyClient valkey.Client) http.Handl
 	}
 }
 
-func accumulateValkeyErrors(results []valkey.ValkeyResult) error {
-	var valkeyMultiErr error
-	for _, result := range results {
-		valkeyError := result.Error()
-		if valkeyError != nil {
-			valkeyMultiErr = multierr.Append(valkeyMultiErr, valkeyError)
-			logger.Error("Valkey error", zap.Error(valkeyError))
+func processEntry(entryMap valkey.XRangeEntry) map[string]any {
+	timestamp := entryMap.FieldValues["timestamp"]
+	hubName := entryMap.FieldValues["hub_name"]
+	eventType := entryMap.FieldValues["type"]
+
+	switch eventType {
+	case CollectorRestart:
+		storedVars := showHubCollectorRestartVariables(entryMap.FieldValues)
+		return map[string]any{
+			"timestamp": timestamp,
+			"hubName":   hubName,
+			"event":     "mdai/" + CollectorRestart,
+			"trigger":   "mdai/" + ValkeyUpdate,
+			"context": map[string]any{
+				"storedVariables": storedVars,
+			},
+		}
+	case VariableUpdated:
+		return map[string]any{
+			"timestamp": timestamp,
+			"hubName":   hubName,
+			"event":     "action/" + VariableUpdated,
+			"trigger":   entryMap.FieldValues["event"] + "/" + entryMap.FieldValues["status"],
+			"context": map[string]any{
+				"variableRef": entryMap.FieldValues["variable_ref"],
+				"operation":   entryMap.FieldValues["operation"],
+				"target":      entryMap.FieldValues["target"],
+			},
+			"payload": map[string]any{
+				"variable": entryMap.FieldValues["variable"],
+			},
+		}
+	case EventTriggered:
+		return map[string]any{
+			"timestamp": timestamp,
+			"hubName":   hubName,
+			"event":     Evaluation + "/prometheus_alert",
+			"trigger":   Evaluation,
+			"context": map[string]any{
+				"name":       entryMap.FieldValues["name"],
+				"expression": entryMap.FieldValues["expression"],
+				"metric":     entryMap.FieldValues["metric_name"],
+			},
+			"payload": map[string]any{
+				"status":              entryMap.FieldValues["status"],
+				"relevantLabelValues": entryMap.FieldValues["relevant_label_values"],
+				"value":               entryMap.FieldValues["value"],
+			},
+		}
+	default:
+		transformedEntry := make(map[string]any)
+		for k, v := range entryMap.FieldValues {
+			transformedEntry[k] = v
+		}
+		return transformedEntry
+	}
+}
+
+func showHubCollectorRestartVariables(fields map[string]string) string {
+	var storedVars []string
+	ignoreKeys := map[string]bool{
+		"timestamp": true,
+		"type":      true,
+	}
+	for key, value := range fields {
+		if strings.HasSuffix(key, "_CSV") && !ignoreKeys[key] && value != "" && value != "n/a" {
+			storedVars = append(storedVars, value)
 		}
 	}
-	return valkeyMultiErr
+	return strings.Join(storedVars, ",")
 }
 
 func DoVariableUpdateAndLog(ctx context.Context, valkeyClient valkey.Client, variableUpdateCommand valkey.Completed, mdaiHubAction MdaiHubAction, valkeyKey string) error {
@@ -167,78 +227,19 @@ func CreateHubAction(relevantLabels []string, variableUpdate *mdaiv1.VariableUpd
 	return mdaiHubAction
 }
 
-func showHubCollectorRestartVariables(fields map[string]string) string {
-	var storedVars []string
-	ignoreKeys := map[string]bool{
-		"timestamp": true,
-		"type":      true,
-	}
-	for key, value := range fields {
-		if strings.HasSuffix(key, "_CSV") && !ignoreKeys[key] && value != "" && value != "n/a" {
-			storedVars = append(storedVars, value)
-		}
-	}
-	return strings.Join(storedVars, ",")
-}
-
 func getAuditLogTTLMinId() string {
 	minid := strconv.FormatInt(time.Now().Add(-valkeyAuditStreamExpiry).UnixMilli(), 10)
 	return minid
 }
 
-func processEntry(entryMap valkey.XRangeEntry, logger *zap.Logger) map[string]any {
-	timestamp := entryMap.FieldValues["timestamp"]
-	hubName := entryMap.FieldValues["hubName"]
-	eventType := entryMap.FieldValues["type"]
-
-	switch eventType {
-	case CollectorRestart:
-		storedVars := showHubCollectorRestartVariables(entryMap.FieldValues)
-		return map[string]any{
-			"timestamp": timestamp,
-			"hubName":   hubName,
-			"event":     "mdai/" + CollectorRestart,
-			"trigger":   "mdai/" + ValkeyUpdate,
-			"context": map[string]any{
-				"storedVariables": storedVars,
-			},
-			"payload": "n/a",
+func accumulateValkeyErrors(results []valkey.ValkeyResult) error {
+	var valkeyMultiErr error
+	for _, result := range results {
+		valkeyError := result.Error()
+		if valkeyError != nil {
+			valkeyMultiErr = multierr.Append(valkeyMultiErr, valkeyError)
+			logger.Error("Valkey error", zap.Error(valkeyError))
 		}
-	case VariableUpdated:
-		return map[string]any{
-			"timestamp": timestamp,
-			"hubName":   hubName,
-			"event":     "action/" + VariableUpdated,
-			"trigger":   entryMap.FieldValues["event"] + entryMap.FieldValues["status"],
-			"context": map[string]any{
-				"variableRef": entryMap.FieldValues["variableRef"],
-				"operation":   entryMap.FieldValues["operation"],
-				"target":      entryMap.FieldValues["target"],
-			},
-			"payload": entryMap.FieldValues["variable"],
-		}
-	case EventTriggered:
-		return map[string]any{
-			"timestamp": timestamp,
-			"hubName":   hubName,
-			"event":     Evaluation + "/prometheus_alert",
-			"trigger":   Evaluation,
-			"context": map[string]any{
-				"name":       entryMap.FieldValues["name"],
-				"expression": entryMap.FieldValues["expression"],
-				"metric":     entryMap.FieldValues["metricName"],
-			},
-			"payload": map[string]any{
-				"status":              entryMap.FieldValues["status"],
-				"relevantLabelValues": entryMap.FieldValues["relevantLabelValues"],
-				"value":               entryMap.FieldValues["value"],
-			},
-		}
-	default:
-		transformedEntry := make(map[string]any)
-		for k, v := range entryMap.FieldValues {
-			transformedEntry[k] = v
-		}
-		return transformedEntry
 	}
+	return valkeyMultiErr
 }
