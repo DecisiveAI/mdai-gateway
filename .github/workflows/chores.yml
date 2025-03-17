@@ -90,6 +90,7 @@ jobs:
           path: coverage.out
 
       - name: Generate Code Coverage Report
+        if: github.event_name == 'push' && github.ref != 'refs/heads/main'
         uses: fgrosse/go-coverage-report@v1.1.1
         id: report
         with:
