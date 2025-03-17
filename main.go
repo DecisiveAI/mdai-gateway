@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 
 	"go.uber.org/multierr"
 	"io"
 	"net/http"
 	"os"
-	"sort"
 	"strconv"
 	"sync"
 	"time"
