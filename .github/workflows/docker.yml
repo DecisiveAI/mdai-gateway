@@ -31,7 +31,7 @@ jobs:
           go-version: '~1.23'
 
       - name: Vendor
-        run: go mod vendor
+        run: make vendor
 
       - name: Build
         run: make build
