@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os/signal"
 	"sort"
 
 	"go.uber.org/multierr"
@@ -16,6 +17,8 @@ import (
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+
+	"go.opentelemetry.io/contrib/bridges/otelzap"
 
 	"github.com/cenkalti/backoff/v5"
 
@@ -67,7 +70,9 @@ func init() {
 		zapcore.Lock(os.Stdout),               // Output to stdout
 		zap.DebugLevel,                        // Log info and above
 	)
-	logger = zap.New(core, zap.AddCaller())
+	otelCore := otelzap.NewCore("github.com/decisiveai/event-handler-webservice")
+	multiCore := zapcore.NewTee(core, otelCore)
+	logger = zap.New(multiCore, zap.AddCaller())
 	// don't really care about failing of a defer that is the last thing run before the program exists
 	//nolint:all
 	defer logger.Sync() // Flush logs before exiting
@@ -78,7 +83,23 @@ func main() {
 		valkeyClient valkey.Client
 		retryCount   int
 	)
-	ctx := context.Background()
+
+	// Handle SIGINT (CTRL+C) gracefully.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+
+	// Set up OpenTelemetry.
+	otelShutdown, err := setupOTelSDK(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error setting up otel client: %s\n", err.Error())
+		return
+	}
+
+	defer func() {
+		if err := otelShutdown(ctx); err != nil {
+			fmt.Fprintf(os.Stderr, "OTEL SDK did not shut down gracefully! Error: %s\n", err.Error())
+		}
+	}()
 
 	httpPort := getEnvVariableWithDefault(httpPortEnvVarKey, defaultHttpPort)
 	valkeyStreamExpiryMsStr := os.Getenv(valkeyAuditStreamExpiryMSEnvVarKey)
@@ -86,7 +107,9 @@ func main() {
 		envExpiryMs, err := strconv.Atoi(valkeyStreamExpiryMsStr)
 		if err != nil {
 			logger.Fatal("Failed to parse valkeyStreamExpiryMs env var", zap.Error(err))
-			return
+			if err := otelShutdown(ctx); err != nil {
+				fmt.Fprintf(os.Stderr, "OTEL SDK did not shut down gracefully! Error: %s\n", err.Error())
+			}
 		}
 		valkeyAuditStreamExpiry = time.Duration(envExpiryMs) * time.Millisecond
 		logger.Info("Using custom "+mdaiHubEventHistoryStreamName+" expiration threshold MS", zap.Int64("valkeyAuditStreamExpiryMs", valkeyAuditStreamExpiry.Milliseconds()))
