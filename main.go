@@ -5,15 +5,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/signal"
-	"sort"
 
-	"go.uber.org/multierr"
 	"io"
 	"net/http"
 	"os"
+	"sort"
 	"strconv"
 	"sync"
 	"time"
+
+	"go.uber.org/multierr"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -73,7 +74,7 @@ func init() {
 	otelCore := otelzap.NewCore("github.com/decisiveai/event-handler-webservice")
 	multiCore := zapcore.NewTee(core, otelCore)
 	logger = zap.New(multiCore, zap.AddCaller())
-	// don't really care about failing of a defer that is the last thing run before the program exists
+	// don't really care about failing of defer that is the last thing run before the program exists
 	//nolint:all
 	defer logger.Sync() // Flush logs before exiting
 }
@@ -288,6 +289,6 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 
 		logger.Info("Successfully wrote all variable updates")
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, `{"success": "variable(s) updated"}`)
+		_, _ = fmt.Fprintf(w, `{"success": "variable(s) updated"}`)
 	}
 }

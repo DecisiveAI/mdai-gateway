@@ -4,3 +4,4 @@ build
 vendor
 .idea
 event-handler-webservice
+event-handler-webservice-*.tgz

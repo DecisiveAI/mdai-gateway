@@ -10,3 +10,4 @@ LICENSE
 main_test.go
 testdata
 event-handler-webservice
+event-handler-webservice-*.tgz
