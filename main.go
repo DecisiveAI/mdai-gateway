@@ -107,9 +107,7 @@ func main() {
 		envExpiryMs, err := strconv.Atoi(valkeyStreamExpiryMsStr)
 		if err != nil {
 			logger.Fatal("Failed to parse valkeyStreamExpiryMs env var", zap.Error(err))
-			if err := otelShutdown(ctx); err != nil {
-				logger.Error("OTEL SDK did not shut down gracefully!", zap.Error(err))
-			}
+			return
 		}
 		valkeyAuditStreamExpiry = time.Duration(envExpiryMs) * time.Millisecond
 		logger.Info("Using custom "+mdaiHubEventHistoryStreamName+" expiration threshold MS", zap.Int64("valkeyAuditStreamExpiryMs", valkeyAuditStreamExpiry.Milliseconds()))
