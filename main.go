@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os/signal"
-
 	"io"
 	"net/http"
 	"os"
@@ -85,9 +83,7 @@ func main() {
 		retryCount   int
 	)
 
-	// Handle SIGINT (CTRL+C) gracefully.
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer stop()
+	ctx := context.Background()
 
 	// Set up OpenTelemetry.
 	otelShutdown, err := setupOTelSDK(ctx)
