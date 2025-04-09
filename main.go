@@ -92,13 +92,12 @@ func main() {
 	// Set up OpenTelemetry.
 	otelShutdown, err := setupOTelSDK(ctx)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error setting up otel client: %s\n", err.Error())
+		logger.Error("Error setting up otel client", zap.Error(err))
 		return
 	}
-
 	defer func() {
 		if err := otelShutdown(ctx); err != nil {
-			fmt.Fprintf(os.Stderr, "OTEL SDK did not shut down gracefully! Error: %s\n", err.Error())
+			logger.Error("OTEL SDK did not shut down gracefully!", zap.Error(err))
 		}
 	}()
 
@@ -109,7 +108,7 @@ func main() {
 		if err != nil {
 			logger.Fatal("Failed to parse valkeyStreamExpiryMs env var", zap.Error(err))
 			if err := otelShutdown(ctx); err != nil {
-				fmt.Fprintf(os.Stderr, "OTEL SDK did not shut down gracefully! Error: %s\n", err.Error())
+				logger.Error("OTEL SDK did not shut down gracefully!", zap.Error(err))
 			}
 		}
 		valkeyAuditStreamExpiry = time.Duration(envExpiryMs) * time.Millisecond
