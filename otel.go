@@ -3,15 +3,10 @@ package main
 import (
 	"context"
 	"errors"
-	"time"
-
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
-	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/log/global"
 	"go.opentelemetry.io/otel/sdk/log"
-	"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 )
 
@@ -40,10 +35,7 @@ func setupOTelSDK(ctx context.Context) (shutdown func(context.Context) error, er
 	resourceWAttributes, err := resource.New(ctx, resource.WithAttributes(
 		attribute.String("mdai-logstream", "hub"),
 	))
-
-	if errors.Is(err, resource.ErrPartialResource) || errors.Is(err, resource.ErrSchemaURLConflict) {
-		panic(err)
-	} else if err != nil {
+	if err != nil {
 		panic(err)
 	}
 
@@ -51,19 +43,9 @@ func setupOTelSDK(ctx context.Context) (shutdown func(context.Context) error, er
 		resource.Default(),
 		resourceWAttributes,
 	)
-
 	if err != nil {
 		panic(err)
 	}
-
-	// Set up meter provider.
-	meterProvider, err := newMeterProvider(ctx, eventHandlerResource)
-	if err != nil {
-		handleErr(err)
-		return
-	}
-	shutdownFuncs = append(shutdownFuncs, meterProvider.Shutdown)
-	otel.SetMeterProvider(meterProvider)
 
 	// Set up logger provider.
 	loggerProvider, err := newLoggerProvider(ctx, eventHandlerResource)
@@ -75,20 +57,6 @@ func setupOTelSDK(ctx context.Context) (shutdown func(context.Context) error, er
 	global.SetLoggerProvider(loggerProvider)
 
 	return
-}
-
-func newMeterProvider(ctx context.Context, resource *resource.Resource) (*metric.MeterProvider, error) {
-	metricExporter, err := otlpmetrichttp.New(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	meterProvider := metric.NewMeterProvider(
-		metric.WithReader(metric.NewPeriodicReader(metricExporter,
-			metric.WithInterval(60*time.Second))),
-		metric.WithResource(resource),
-	)
-	return meterProvider, nil
 }
 
 func newLoggerProvider(ctx context.Context, resource *resource.Resource) (*log.LoggerProvider, error) {
