@@ -3,17 +3,33 @@ package main
 import (
 	"context"
 	"errors"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
 	"go.opentelemetry.io/otel/log/global"
 	"go.opentelemetry.io/otel/sdk/log"
 	"go.opentelemetry.io/otel/sdk/resource"
+	"go.uber.org/zap"
 )
+
+type ZapErrorHandler struct {
+	logger *zap.Logger
+}
+
+func (errorHandler ZapErrorHandler) Handle(err error) {
+	if errorHandler.logger != nil {
+		errorHandler.logger.Error(err.Error())
+	}
+}
+
+type shutdownFunc func(context.Context) error
 
 // setupOTelSDK bootstraps the OpenTelemetry pipeline.
 // If it does not return an error, make sure to call shutdown for proper cleanup.
-func setupOTelSDK(ctx context.Context) (shutdown func(context.Context) error, err error) {
-	var shutdownFuncs []func(context.Context) error
+func setupOTelSDK(ctx context.Context, internalLogger *zap.Logger) (shutdown shutdownFunc, err error) {
+	var shutdownFuncs []shutdownFunc
+
+	otel.SetErrorHandler(&ZapErrorHandler{logger: internalLogger})
 
 	// shutdown calls cleanup functions registered via shutdownFuncs.
 	// The errors from the calls are joined.

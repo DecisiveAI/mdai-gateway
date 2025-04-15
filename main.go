@@ -53,7 +53,9 @@ const (
 )
 
 var (
-	processMutex            sync.Mutex
+	processMutex sync.Mutex
+	// Intended ONLY for use by the OTEL SDK, use logger for all other purposes
+	internalLogger          *zap.Logger
 	logger                  *zap.Logger
 	valkeyAuditStreamExpiry = 30 * 24 * time.Hour
 )
@@ -69,6 +71,8 @@ func init() {
 		zapcore.Lock(os.Stdout),               // Output to stdout
 		zap.DebugLevel,                        // Log info and above
 	)
+	internalLogger = zap.New(core, zap.AddCaller())
+	defer internalLogger.Sync()
 	otelCore := otelzap.NewCore("github.com/decisiveai/event-handler-webservice")
 	multiCore := zapcore.NewTee(core, otelCore)
 	logger = zap.New(multiCore, zap.AddCaller())
@@ -86,7 +90,7 @@ func main() {
 	ctx := context.Background()
 
 	// Set up OpenTelemetry.
-	otelShutdown, err := setupOTelSDK(ctx)
+	otelShutdown, err := setupOTelSDK(ctx, internalLogger)
 	if err != nil {
 		logger.Error("Error setting up otel client", zap.Error(err))
 		return
