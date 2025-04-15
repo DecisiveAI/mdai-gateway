@@ -72,7 +72,9 @@ func init() {
 		zap.DebugLevel,                        // Log info and above
 	)
 	internalLogger = zap.New(core, zap.AddCaller())
-	defer internalLogger.Sync()
+	// don't really care about failing of defer that is the last thing run before the program exists
+	//nolint:all
+	defer internalLogger.Sync() // Flush logs before exiting
 	otelCore := otelzap.NewCore("github.com/decisiveai/event-handler-webservice")
 	multiCore := zapcore.NewTee(core, otelCore)
 	logger = zap.New(multiCore, zap.AddCaller())
