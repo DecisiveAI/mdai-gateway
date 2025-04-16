@@ -24,7 +24,7 @@ docker-push: tidy vendor docker-login
 
 .PHONY: build
 build: tidy vendor
-	CGO_ENABLED=0 go build -mod=vendor -ldflags="-w -s" -o event-handler-webservice main.go
+	CGO_ENABLED=0 go build -mod=vendor -ldflags="-w -s" -o event-handler-webservice .
 
 .PHONY: test
 test: tidy vendor
