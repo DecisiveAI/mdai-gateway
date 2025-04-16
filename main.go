@@ -17,6 +17,8 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
+	"go.opentelemetry.io/contrib/bridges/otelzap"
+
 	"github.com/cenkalti/backoff/v5"
 
 	mdaiv1 "github.com/DecisiveAI/mdai-operator/api/v1"
@@ -51,7 +53,9 @@ const (
 )
 
 var (
-	processMutex            sync.Mutex
+	processMutex sync.Mutex
+	// Intended ONLY for use by the OTEL SDK, use logger for all other purposes
+	internalLogger          *zap.Logger
 	logger                  *zap.Logger
 	valkeyAuditStreamExpiry = 30 * 24 * time.Hour
 )
@@ -67,7 +71,13 @@ func init() {
 		zapcore.Lock(os.Stdout),               // Output to stdout
 		zap.DebugLevel,                        // Log info and above
 	)
-	logger = zap.New(core, zap.AddCaller())
+	internalLogger = zap.New(core, zap.AddCaller())
+	// don't really care about failing of defer that is the last thing run before the program exists
+	//nolint:all
+	defer internalLogger.Sync() // Flush logs before exiting
+	otelCore := otelzap.NewCore("github.com/decisiveai/event-handler-webservice")
+	multiCore := zapcore.NewTee(core, otelCore)
+	logger = zap.New(multiCore, zap.AddCaller())
 	// don't really care about failing of defer that is the last thing run before the program exists
 	//nolint:all
 	defer logger.Sync() // Flush logs before exiting
@@ -78,7 +88,20 @@ func main() {
 		valkeyClient valkey.Client
 		retryCount   int
 	)
+
 	ctx := context.Background()
+
+	// Set up OpenTelemetry.
+	otelShutdown, err := setupOTelSDK(ctx, internalLogger)
+	if err != nil {
+		logger.Error("Error setting up otel client", zap.Error(err))
+		return
+	}
+	defer func() {
+		if err := otelShutdown(ctx); err != nil {
+			logger.Error("OTEL SDK did not shut down gracefully!", zap.Error(err))
+		}
+	}()
 
 	httpPort := getEnvVariableWithDefault(httpPortEnvVarKey, defaultHttpPort)
 	valkeyStreamExpiryMsStr := os.Getenv(valkeyAuditStreamExpiryMSEnvVarKey)

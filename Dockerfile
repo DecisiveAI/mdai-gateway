@@ -5,7 +5,7 @@ ENV GOPRIVATE=github.com/decisiveai/mdai-operator
 WORKDIR /opt/event-handler-webservice
 
 COPY . .
-RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -mod=vendor -ldflags="-w -s" -o /event-handler-webservice main.go
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -mod=vendor -ldflags="-w -s" -o /event-handler-webservice .
 
 FROM gcr.io/distroless/static-debian12
 WORKDIR /

@@ -24,6 +24,8 @@ spec:
           value: "{{ .Values.deployment.containerPort }}"
         - name: VALKEY_AUDIT_STREAM_EXPIRY_MS
           value: "{{ .Values.auditStreamExpiryMs }}"
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: "{{ .Values.otelExporterOtlpEndpoint }}"
         - name: VALKEY_PASSWORD
           valueFrom:
             secretKeyRef:
