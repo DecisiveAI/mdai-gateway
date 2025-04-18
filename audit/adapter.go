@@ -9,12 +9,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/prometheus/alertmanager/template"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
 
-	mdaiv1 "github.com/DecisiveAI/mdai-operator/api/v1"
+	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 
-	"github.com/decisiveai/event-handler-webservice/types"
 	"github.com/valkey-io/valkey-go"
 )
 
@@ -196,7 +196,7 @@ func (c AuditAdapter) InsertAuditLogEvent(ctx context.Context, valkeyClient valk
 	return nil
 }
 
-func (c AuditAdapter) CreateHubEvent(relevantLabels []string, alert types.Alert) MdaiHubEvent {
+func (c AuditAdapter) CreateHubEvent(relevantLabels []string, alert template.Alert) MdaiHubEvent {
 	metricMatch := metricRegex.FindStringSubmatch(alert.Annotations[Expression])
 	metricName := ""
 	if len(metricMatch) > 1 {
@@ -221,13 +221,13 @@ func (c AuditAdapter) CreateHubEvent(relevantLabels []string, alert types.Alert)
 	return mdaiHubEvent
 }
 
-func (c AuditAdapter) CreateHubAction(relevantLabels []string, variableUpdate *mdaiv1.VariableUpdate, valkeyKey string, alert types.Alert) MdaiHubAction {
+func (c AuditAdapter) CreateHubAction(relevantLabels []string, variableUpdate *mdaiv1.VariableUpdate, valkeyKey string, alert template.Alert) MdaiHubAction {
 	mdaiHubAction := MdaiHubAction{
 		HubName:     alert.Annotations[HubName],
 		Event:       alert.Annotations[AlertName],
 		Status:      alert.Status,
 		Type:        VariableUpdated,
-		Operation:   variableUpdate.Operation,
+		Operation:   string(variableUpdate.Operation),
 		Target:      valkeyKey,
 		VariableRef: variableUpdate.VariableRef,
 		Variable:    alert.Labels[relevantLabels[0]],

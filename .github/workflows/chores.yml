@@ -316,7 +316,7 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
         run: |
-          git clone https://x-access-token:${GH_TOKEN}@github.com/DecisiveAI/platform-health.git
+          git clone https://x-access-token:${GH_TOKEN}@github.com/decisiveai/platform-health.git
           cd platform-health
           
           # Configure git
