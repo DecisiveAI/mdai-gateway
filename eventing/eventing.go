@@ -10,16 +10,20 @@ func EmitMdaiEvent(event types.MdaiEvent) {
 	// submits the provided event to the stream
 }
 
+// This would come from the config, presumably passed by the operator
 const NoisyServiceFired string = "NoisyServiceFired"
 const NoisyServiceResolved string = "NoisyServiceResolved"
 
-// This would come from the config, presumably passed by the operator
 var FakeConfiguredOODAs = WorkflowMap{
 	NoisyServiceFired:    {HandleAddNoisyServiceToSet},
 	NoisyServiceResolved: {HandleRemoveNoisyServiceFromSet},
 }
 
+// end stuff from config
+
+// where does this live?
 func ReceiveMdaiEvent(event types.MdaiEvent) {
+	// Is this where the Queue goes?
 	// TODO: Wire up eventing library
 	if workflow, exists := FakeConfiguredOODAs[event.Name]; exists {
 		for _, handlerName := range workflow {
