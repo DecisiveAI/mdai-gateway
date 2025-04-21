@@ -9,7 +9,7 @@ require (
 	github.com/go-logr/zapr v1.3.0
 	github.com/prometheus/alertmanager v0.28.1
 	github.com/stretchr/testify v1.10.0
-	github.com/valkey-io/valkey-go v1.0.57
+	github.com/valkey-io/valkey-go v1.0.54
 	github.com/valkey-io/valkey-go/mock v1.0.54
 	go.opentelemetry.io/contrib/bridges/otelzap v0.10.0
 	go.opentelemetry.io/otel v1.35.0
