@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"github.com/valkey-io/valkey-go"
 	"io"
 	"log"
 	"net/http"
@@ -11,6 +10,8 @@ import (
 	"os"
 	"slices"
 	"testing"
+
+	"github.com/valkey-io/valkey-go"
 
 	"github.com/stretchr/testify/require"
 	"github.com/valkey-io/valkey-go/mock"
@@ -84,7 +85,7 @@ func TestUpdateValkeyHandler(t *testing.T) {
 	).Return(mock.Result(mock.ValkeyString(""))).Times(1)
 	valkeyClient.EXPECT().DoMulti(ctx,
 		mock.Match("SET", "variable/mdaihub-sample/service_list", "service-c"),
-		XaddMatcher{operation: "mdai/replace_element", labelValue: "service-c"},
+		XaddMatcher{operation: "mdai/set", labelValue: "service-c"},
 	).Return([]valkey.ValkeyResult{mock.Result(mock.ValkeyInt64(1)), mock.Result(mock.ValkeyString(""))}).Times(1)
 
 	req := httptest.NewRequest(http.MethodPost, "/alerts", bytes.NewBuffer(alertPostBody1))
