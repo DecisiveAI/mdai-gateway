@@ -23,8 +23,7 @@ require (
 )
 
 //replace github.com/decisiveai/mdai-data-core v0.0.0 => ../mdai-data-core
-
-replace github.com/decisiveai/mdai-operator => ../mdai-operator
+//replace github.com/decisiveai/mdai-operator => ../mdai-operator
 
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
