@@ -7,7 +7,7 @@ require (
 	github.com/decisiveai/mdai-data-core v0.0.0
 	github.com/decisiveai/mdai-operator v0.1.11
 	github.com/go-logr/zapr v1.3.0
-	github.com/prometheus/alertmanager v0.28.0
+	github.com/prometheus/alertmanager v0.28.1
 	github.com/stretchr/testify v1.10.0
 	github.com/valkey-io/valkey-go v1.0.57
 	github.com/valkey-io/valkey-go/mock v1.0.54
