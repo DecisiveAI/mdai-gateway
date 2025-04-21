@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/decisiveai/event-handler-webservice/eventing"
 	"io"
+	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"sort"
 	"strconv"
 	"sync"
@@ -146,8 +149,9 @@ func main() {
 
 	auditAdapter := audit.NewAuditAdapter(zapr.NewLogger(logger), valkeyClient, valkeyAuditStreamExpiry)
 
-	http.HandleFunc("/alerts", handleAlertsPost(ctx, valkeyClient))
-	http.HandleFunc("/events", auditAdapter.HandleEventsGet(ctx))
+	http.HandleFunc("/alerts", handleAlertsPost())
+	http.HandleFunc("/audit", auditAdapter.HandleEventsGet(ctx))
+	http.HandleFunc("/events", handleEventsPost())
 
 	logger.Info("Starting server", zap.String("address", ":"+httpPort))
 	logger.Fatal("failed to start server", zap.Error(http.ListenAndServe(":"+httpPort, nil)))
@@ -160,7 +164,68 @@ func getEnvVariableWithDefault(key, defaultValue string) string {
 	return defaultValue
 }
 
-func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.HandlerFunc {
+func createEventUuid() (string, error) {
+	uuidBytes, err := exec.Command("uuidgen").Output()
+	if err != nil {
+		// TODO: Use our logger
+		log.Fatal(err)
+		return "", err
+	}
+
+	return string(uuidBytes), nil
+}
+
+func adaptPrometheusAlertToMdaiEvents(payload types.AlertManagerPayload) []types.MdaiEvent {
+	sort.Slice(payload.Alerts, func(i, j int) bool {
+		return payload.Alerts[i].StartsAt.Before(payload.Alerts[j].StartsAt)
+	})
+
+	mdaiEvents := make([]types.MdaiEvent, 0)
+
+	for _, alert := range payload.Alerts {
+		annotations := alert.Annotations
+		labels := alert.Labels
+		status := alert.Status
+
+		unMarshalledPayload := make(map[string]interface{})
+		for key, value := range labels {
+			unMarshalledPayload[key] = value
+		}
+		unMarshalledPayload["value"] = annotations["current_value"]
+		unMarshalledPayload["hubName"] = annotations["hub_name"]
+
+		payloadBytes, err := json.Marshal(unMarshalledPayload)
+		if err != nil {
+			// TODO: Use our logger
+			log.Fatal(err)
+		}
+
+		var Id string
+		if alert.Fingerprint != "" {
+			Id = alert.Fingerprint
+		} else {
+			uuid, err := createEventUuid()
+			if err == nil {
+				Id = uuid
+			}
+		}
+
+		mdaiEvent := types.MdaiEvent{
+			Name:      annotations["alert_name"] + "." + status,
+			Source:    "prometheus",
+			Id:        Id,
+			Timestamp: alert.StartsAt.String(),
+			Payload:   string(payloadBytes),
+		}
+
+		// TODO: Log event created
+		mdaiEvents = append(mdaiEvents, mdaiEvent)
+	}
+
+	return mdaiEvents
+}
+
+func handleAlertsPost() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		processMutex.Lock()
 		defer processMutex.Unlock()
@@ -186,134 +251,47 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 			return
 		}
 
-		// processing the alerts in chronological order
-		sort.Slice(payload.Alerts, func(i, j int) bool {
-			return payload.Alerts[i].StartsAt.Before(payload.Alerts[j].StartsAt)
-		})
+		mdaiEvents := adaptPrometheusAlertToMdaiEvents(payload)
 
-		var valkeyErrors error
-		auditAdapter := audit.NewAuditAdapter(zapr.NewLogger(logger), valkeyClient, valkeyAuditStreamExpiry)
-		for _, alert := range payload.Alerts {
-			hubName := alert.Annotations[HubName]
-			if hubName == "" {
-				logger.Info("Skipping alert because no hub_name found in alert annotations, payload: %v", zap.Any("alert", alert))
-				continue
-			}
-
-			actionContextJSON := alert.Annotations[actionContextAnnotationsKey]
-			if actionContextJSON == "" {
-				logger.Info("Skipping alert, missing action_context", zap.Any("alert", alert))
-				continue
-			}
-			relevantLabelsJSON := alert.Annotations[relevantLabelsAnnotationsKey]
-			if relevantLabelsJSON == "" {
-				logger.Info("Skipping alert, missing relevant_labels", zap.Any("alert", alert))
-				continue
-			}
-			var actionContext mdaiv1.PrometheusAlertEvaluationStatus
-			if err := json.Unmarshal([]byte(actionContextJSON), &actionContext); err != nil {
-				logger.Info("Could not unmarshal action_context", zap.Any("alert", alert), zap.Error(err))
-				continue
-			}
-			relevantLabels := make([]string, 0)
-			if err := json.Unmarshal([]byte(relevantLabelsJSON), &relevantLabels); err != nil {
-				logger.Info("Could not unmarshal relevant_labels", zap.Any("alert", alert), zap.Error(err))
-				continue
-			}
-
-			logger.Info("Processing alert", zap.Any("alert", alert))
-
-			var variableUpdate *mdaiv1.VariableUpdate
-			switch alert.Status {
-			case firingStatus:
-				if actionContext.Firing == nil || actionContext.Firing.VariableUpdate == nil {
-					logger.Error("No firing context found for alert", zap.Any("alert", alert))
-					continue
-				}
-				variableUpdate = actionContext.Firing.VariableUpdate
-			case resolvedStatus:
-				if actionContext.Resolved == nil || actionContext.Resolved.VariableUpdate == nil {
-					logger.Error("No resolved context found for alert", zap.Any("alert", alert))
-					continue
-				}
-				variableUpdate = actionContext.Resolved.VariableUpdate
-			default:
-				logger.Error("Invalid alert status: %s, payload: %v", zap.Any("alert", alert))
-				continue
-			}
-
-			dataAdapter := datacore.NewValkeyAdapter(valkeyClient, zapr.NewLogger(logger), hubName)
-			mdaiHubEvent := auditAdapter.CreateHubEvent(relevantLabels, alert)
-			logHubEvent(mdaiHubEvent)
-			if err := auditAdapter.InsertAuditLogEventFromEvent(ctx, mdaiHubEvent); err != nil {
-				valkeyErrors = errors.Join(valkeyErrors, err)
-			}
-
-			key := variableUpdate.VariableRef
-			processLabel := func(labels []string) error {
-				for _, label := range labels {
-					value := alert.Labels[label]
-					found, err := dataAdapter.DoVariableUpdateAndLog(
-						ctx,
-						variableUpdate,
-						auditAdapter.CreateHubAction(value, variableUpdate, key, alert),
-						key,
-						label,
-						value,
-						int64(len(relevantLabels)),
-					)
-					if err != nil {
-						return err
-					}
-					if !found {
-						logger.Error("Unknown variable update operation",
-							zap.String("operation", string(variableUpdate.Operation)),
-							zap.Any("alert", alert),
-						)
-						continue
-					}
-				}
-				return nil
-			}
-
-			switch variableUpdate.Operation {
-			case datacore.VariableUpdateSetAddElement, datacore.VariableUpdateSetRemoveElement:
-				valkeyErrors = errors.Join(valkeyErrors, processLabel(relevantLabels))
-			default:
-				if len(relevantLabels) > 1 {
-					logger.Info("Multiple relevantLabels found for replace action",
-						zap.String("selected_label", relevantLabels[0]),
-						zap.Any("all_labels", relevantLabels),
-					)
-				}
-				valkeyErrors = errors.Join(valkeyErrors, processLabel([]string{relevantLabels[0]}))
-			}
+		for _, mdaiEvent := range mdaiEvents {
+			eventing.EmitMdaiEvent(mdaiEvent)
 		}
-
-		if valkeyErrors != nil {
-			logger.Error("Errors occurred writing updates to valkey", zap.Error(valkeyErrors))
-			http.Error(w, "Handler can't successfully process the payload:\n "+valkeyErrors.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		logger.Info("Successfully wrote all variable updates")
-		w.WriteHeader(http.StatusOK)
-		_, _ = fmt.Fprintf(w, `{"success": "variable(s) updated"}`)
 	}
 }
 
-func logHubEvent(mdaiHubEvent audit.MdaiHubEvent) {
-	// TODO: 🤢 make an iterable type or log field maker in data core for MdaiHubEvent
-	hubEventVals := []zap.Field{
-		zap.String("mdai-logstream", "audit"),
-		zap.String("hubName", mdaiHubEvent.HubName),
-		zap.String("event", mdaiHubEvent.Event),
-		zap.String("status", mdaiHubEvent.Status),
-		zap.String("type", mdaiHubEvent.Type),
-		zap.String("expression", mdaiHubEvent.Expression),
-		zap.String("metricName", mdaiHubEvent.MetricName),
-		zap.String("value", mdaiHubEvent.Value),
-		zap.String("relevantLabelValues", mdaiHubEvent.RelevantLabelValues),
+func handleEventsPost() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		processMutex.Lock()
+		defer processMutex.Unlock()
+
+		if r.Method != http.MethodPost {
+			http.Error(w, "Only POST method is supported", http.StatusMethodNotAllowed)
+			return
+		}
+
+		// Read and parse the request body
+		var event types.MdaiEvent
+		decoder := json.NewDecoder(r.Body)
+		err := decoder.Decode(&event)
+
+		// Check for JSON decoding errors
+		if err != nil {
+			http.Error(w, "Invalid request body: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		if event.Id == "" {
+			uuid, err := createEventUuid()
+			if err == nil {
+				event.Id = uuid
+			}
+		}
+
+		eventing.EmitMdaiEvent(event)
+
+		// TODO: Send correct response
+		w.WriteHeader(http.StatusCreated)
+		w.Write([]byte("Event received successfully"))
+
 	}
-	logger.Info("AUDIT: Updated variable", hubEventVals...)
 }
