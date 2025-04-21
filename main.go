@@ -220,9 +220,6 @@ func adaptPrometheusAlertToMdaiEvents(payload types.AlertManagerPayload) []types
 
 func handleAlertsPost() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		processMutex.Lock()
-		defer processMutex.Unlock()
-
 		if r.Method != http.MethodPost {
 			http.Error(w, "Only POST method is supported", http.StatusMethodNotAllowed)
 			return
@@ -254,9 +251,6 @@ func handleAlertsPost() http.HandlerFunc {
 
 func handleEventsPost() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		processMutex.Lock()
-		defer processMutex.Unlock()
-
 		if r.Method != http.MethodPost {
 			http.Error(w, "Only POST method is supported", http.StatusMethodNotAllowed)
 			return
