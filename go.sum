@@ -12,6 +12,8 @@ github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc h1:U9qPSI2PIWSS1
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/decisiveai/mdai-data-core v0.0.0-20250422175823-5df69ed253dd h1:pzqY8HPB1suF95ybY6lqnZdb3GUqLIo0CwTAVONNtEM=
 github.com/decisiveai/mdai-data-core v0.0.0-20250422175823-5df69ed253dd/go.mod h1:LKD8rR7Qat6mJ6vXUEALOmmQCKG7wTuF2m5nMGPWLlw=
+github.com/decisiveai/mdai-data-core v0.0.0-20250422205906-261672b61c1b h1:s48gXsXUTajQ0SMA++nyIA+1GLEUJ/9sshmnZmQuHeE=
+github.com/decisiveai/mdai-data-core v0.0.0-20250422205906-261672b61c1b/go.mod h1:LKD8rR7Qat6mJ6vXUEALOmmQCKG7wTuF2m5nMGPWLlw=
 github.com/decisiveai/mdai-operator v0.1.11 h1:yb/f+X6PaFjmtwoUFyA2tHAnSR/X7p6pHOa2IJIguE8=
 github.com/decisiveai/mdai-operator v0.1.11/go.mod h1:sFv2arXzeMAmF3IBn0jilgOw1atRi6htJD5oJ828QX0=
 github.com/fxamacker/cbor/v2 v2.7.0 h1:iM5WgngdRBanHcxugY4JySA0nk1wZorNOpTgCMedv5E=

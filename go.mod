@@ -4,8 +4,8 @@ go 1.23.2
 
 require (
 	github.com/cenkalti/backoff/v5 v5.0.2
-	github.com/decisiveai/mdai-data-core v0.0.0-20250422175823-5df69ed253dd
 	github.com/decisiveai/mdai-operator v0.1.11
+	github.com/decisiveai/mdai-data-core v0.0.0-20250422205906-261672b61c1b
 	github.com/go-logr/zapr v1.3.0
 	github.com/prometheus/alertmanager v0.28.1
 	github.com/stretchr/testify v1.10.0
