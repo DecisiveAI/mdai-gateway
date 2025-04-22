@@ -3,6 +3,7 @@ package eventing
 import (
 	"github.com/decisiveai/event-handler-webservice/types"
 	"log"
+	"strings"
 )
 
 func EmitMdaiEvent(event types.MdaiEvent) {
@@ -25,7 +26,14 @@ var FakeConfiguredOODAs = WorkflowMap{
 func ReceiveMdaiEvent(event types.MdaiEvent) {
 	// Is this where the Queue goes?
 	// TODO: Wire up eventing library
+
+	// Match on whole name, e.g. "NoisyServiceAlert.firing"
 	if workflow, exists := FakeConfiguredOODAs[event.Name]; exists {
+		for _, handlerName := range workflow {
+			safeInvokeHandler(handlerName, event)
+		}
+		// Match on alert name regardless of status, e.g. NoisyServiceAlert
+	} else if workflow, exists := FakeConfiguredOODAs[strings.Split(event.Name, ".")[0]]; exists {
 		for _, handlerName := range workflow {
 			safeInvokeHandler(handlerName, event)
 		}
