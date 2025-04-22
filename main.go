@@ -249,28 +249,11 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 					zap.String("operation", string(variableUpdate.Operation)),
 					zap.Any("alert", alert),
 				)
-			} else {
-				if def.LoopOverAllLabels {
-					for _, label := range relevantLabels {
-						variableCmd := def.BuildVariableCmd(dataAdapter, valkeyKey, datacore.OperationArgs{
-							Label:    label,
-							Value:    alert.Labels[label],
-							IntValue: int64(len(relevantLabels)),
-						})
-						auditAction := auditAdapter.CreateHubAction(alert.Labels[label], variableUpdate, valkeyKey, alert)
-						valkeyErrors = multierr.Append(
-							valkeyErrors,
-							auditAdapter.DoVariableUpdateAndLog(ctx, variableCmd, auditAction, valkeyKey),
-						)
-					}
-				} else {
-					if len(relevantLabels) > 1 {
-						logger.Info("Multiple relevantLabels found for replace action",
-							zap.String("selected_label", relevantLabels[0]),
-							zap.Any("all_labels", relevantLabels),
-						)
-					}
-					label := relevantLabels[0]
+				continue
+			}
+
+			if def.LoopOverAllLabels {
+				for _, label := range relevantLabels {
 					variableCmd := def.BuildVariableCmd(dataAdapter, valkeyKey, datacore.OperationArgs{
 						Label:    label,
 						Value:    alert.Labels[label],
@@ -282,6 +265,24 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 						auditAdapter.DoVariableUpdateAndLog(ctx, variableCmd, auditAction, valkeyKey),
 					)
 				}
+			} else {
+				if len(relevantLabels) > 1 {
+					logger.Info("Multiple relevantLabels found for replace action",
+						zap.String("selected_label", relevantLabels[0]),
+						zap.Any("all_labels", relevantLabels),
+					)
+				}
+				label := relevantLabels[0]
+				variableCmd := def.BuildVariableCmd(dataAdapter, valkeyKey, datacore.OperationArgs{
+					Label:    label,
+					Value:    alert.Labels[label],
+					IntValue: int64(len(relevantLabels)),
+				})
+				auditAction := auditAdapter.CreateHubAction(alert.Labels[label], variableUpdate, valkeyKey, alert)
+				valkeyErrors = multierr.Append(
+					valkeyErrors,
+					auditAdapter.DoVariableUpdateAndLog(ctx, variableCmd, auditAction, valkeyKey),
+				)
 			}
 		}
 
