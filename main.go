@@ -15,7 +15,6 @@ import (
 	"github.com/go-logr/zapr"
 	"github.com/prometheus/alertmanager/template"
 	"go.uber.org/multierr"
-
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
@@ -23,7 +22,7 @@ import (
 
 	"github.com/cenkalti/backoff/v5"
 
-	mdaiAuditStream "github.com/decisiveai/mdai-data-core/audit"
+	audit "github.com/decisiveai/mdai-data-core/audit"
 	datacore "github.com/decisiveai/mdai-data-core/variables"
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 
@@ -138,7 +137,7 @@ func main() {
 		logger.Fatal("failed to get valkey client", zap.Error(err))
 	}
 
-	adapter := mdaiAuditStream.NewAuditAdapter(zapr.NewLogger(logger), valkeyClient, valkeyAuditStreamExpiry)
+	adapter := audit.NewAuditAdapter(zapr.NewLogger(logger), valkeyClient, valkeyAuditStreamExpiry)
 
 	http.HandleFunc("/alerts", handleAlertsPost(ctx, valkeyClient))
 	http.HandleFunc("/events", adapter.HandleEventsGet(ctx))
@@ -186,6 +185,8 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 		})
 
 		var valkeyErrors error
+		auditAdapter := audit.NewAuditAdapter(zapr.NewLogger(logger), valkeyClient, valkeyAuditStreamExpiry)
+		dataAdapter := datacore.NewValkeyAdapter(valkeyClient, zapr.NewLogger(logger))
 		for _, alert := range payload.Alerts {
 			hubName := alert.Annotations[HubName]
 			if hubName == "" {
@@ -237,82 +238,50 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 
 			// next time, valkeyKeyKey!
 			valkeyKey := datacore.ComposeValkeyKey(hubName, variableUpdate.VariableRef)
-			adapter := mdaiAuditStream.NewAuditAdapter(zapr.NewLogger(logger), valkeyClient, valkeyAuditStreamExpiry)
-			dataAdapter := datacore.NewValkeyAdapter(valkeyClient, zapr.NewLogger(logger))
 
-			err := adapter.InsertAuditLogEventFromEvent(ctx, adapter.CreateHubEvent(relevantLabels, alert))
-			if err != nil {
+			if err := auditAdapter.InsertAuditLogEventFromEvent(ctx, auditAdapter.CreateHubEvent(relevantLabels, alert)); err != nil {
 				valkeyErrors = multierr.Append(valkeyErrors, err)
 			}
 
-			switch variableUpdate.Operation {
-			case mdaiv1.VariableUpdateSetAddElement:
-				for _, element := range relevantLabels {
-					addOperationCommand := dataAdapter.AddElementToSet(valkeyKey, alert.Labels[element])
-					mdaiHubAction := adapter.CreateHubAction(relevantLabels, variableUpdate, valkeyKey, alert)
-					err := adapter.DoVariableUpdateAndLog(ctx, addOperationCommand, mdaiHubAction, valkeyKey)
-					valkeyErrors = multierr.Append(valkeyErrors, err)
-				}
-			case mdaiv1.VariableUpdateSetRemoveElement:
-				for _, element := range relevantLabels {
-					removeOperationCommand := dataAdapter.RemoveElementFromSet(valkeyKey, alert.Labels[element])
-					mdaiHubAction := adapter.CreateHubAction(relevantLabels, variableUpdate, valkeyKey, alert)
-					err := adapter.DoVariableUpdateAndLog(ctx, removeOperationCommand, mdaiHubAction, valkeyKey)
-					valkeyErrors = multierr.Append(valkeyErrors, err)
-				}
-			case mdaiv1.VariableUpdateSet:
-				if len(relevantLabels) > 1 {
-					logger.Info("Multiple relevantLabels found for replace action",
-						zap.String("selected_label", relevantLabels[0]),
-						zap.Any("all_labels", relevantLabels),
+			def, found := dataAdapter.GetOperationDef(variableUpdate.Operation)
+			if !found {
+				logger.Error("Unknown variable update operation",
+					zap.String("operation", string(variableUpdate.Operation)),
+					zap.Any("alert", alert),
+				)
+			} else {
+				if def.LoopOverAllLabels {
+					for _, label := range relevantLabels {
+						variableCmd := def.BuildVariableCmd(dataAdapter, valkeyKey, datacore.OperationArgs{
+							Label:    label,
+							Value:    alert.Labels[label],
+							IntValue: int64(len(relevantLabels)),
+						})
+						auditAction := auditAdapter.CreateHubAction(alert.Labels[label], variableUpdate, valkeyKey, alert)
+						valkeyErrors = multierr.Append(
+							valkeyErrors,
+							auditAdapter.DoVariableUpdateAndLog(ctx, variableCmd, auditAction, valkeyKey),
+						)
+					}
+				} else {
+					if len(relevantLabels) > 1 {
+						logger.Info("Multiple relevantLabels found for replace action",
+							zap.String("selected_label", relevantLabels[0]),
+							zap.Any("all_labels", relevantLabels),
+						)
+					}
+					label := relevantLabels[0]
+					variableCmd := def.BuildVariableCmd(dataAdapter, valkeyKey, datacore.OperationArgs{
+						Label:    label,
+						Value:    alert.Labels[label],
+						IntValue: int64(len(relevantLabels)),
+					})
+					auditAction := auditAdapter.CreateHubAction(alert.Labels[label], variableUpdate, valkeyKey, alert)
+					valkeyErrors = multierr.Append(
+						valkeyErrors,
+						auditAdapter.DoVariableUpdateAndLog(ctx, variableCmd, auditAction, valkeyKey),
 					)
 				}
-				setOperationCommand := dataAdapter.SetString(valkeyKey, alert.Labels[relevantLabels[0]])
-				mdaiHubAction := adapter.CreateHubAction(relevantLabels, variableUpdate, valkeyKey, alert)
-				err := adapter.DoVariableUpdateAndLog(ctx, setOperationCommand, mdaiHubAction, valkeyKey)
-				valkeyErrors = multierr.Append(valkeyErrors, err)
-			case mdaiv1.VariableUpdateDelete:
-				deleteOperationCommand := dataAdapter.DeleteString(valkeyKey)
-				mdaiHubAction := adapter.CreateHubAction(relevantLabels, variableUpdate, valkeyKey, alert)
-				err := adapter.DoVariableUpdateAndLog(ctx, deleteOperationCommand, mdaiHubAction, valkeyKey)
-				valkeyErrors = multierr.Append(valkeyErrors, err)
-			case mdaiv1.VariableUpdateIntIncrBy:
-				// increment by the number of relevant labels
-				intIncrByOperationCommand := dataAdapter.IntIncrBy(valkeyKey, int64(len(relevantLabels)))
-				mdaiHubAction := adapter.CreateHubAction(relevantLabels, variableUpdate, valkeyKey, alert)
-				err := adapter.DoVariableUpdateAndLog(ctx, intIncrByOperationCommand, mdaiHubAction, valkeyKey)
-				valkeyErrors = multierr.Append(valkeyErrors, err)
-			case mdaiv1.VariableUpdateIntDecrBy:
-				// decrement by the number of relevant labels
-				intDecrByOperationCommand := dataAdapter.IntDecrBy(valkeyKey, int64(len(relevantLabels)))
-				mdaiHubAction := adapter.CreateHubAction(relevantLabels, variableUpdate, valkeyKey, alert)
-				err := adapter.DoVariableUpdateAndLog(ctx, intDecrByOperationCommand, mdaiHubAction, valkeyKey)
-				valkeyErrors = multierr.Append(valkeyErrors, err)
-			case mdaiv1.VariableUpdateSetMapEntry:
-				if len(relevantLabels) > 1 {
-					logger.Info("Multiple relevantLabels found for SetKey action",
-						zap.String("selected_label", relevantLabels[0]),
-						zap.Any("all_labels", relevantLabels),
-					)
-				}
-				setKeyOperationCommand := dataAdapter.SetMapEntry(valkeyKey, relevantLabels[0], alert.Labels[relevantLabels[0]])
-				mdaiHubAction := adapter.CreateHubAction(relevantLabels, variableUpdate, valkeyKey, alert)
-				err := adapter.DoVariableUpdateAndLog(ctx, setKeyOperationCommand, mdaiHubAction, valkeyKey)
-				valkeyErrors = multierr.Append(valkeyErrors, err)
-			case mdaiv1.VariableUpdateRemoveMapEntry:
-				removeKeyOperationCommand := dataAdapter.RemoveMapEntry(valkeyKey, relevantLabels[0])
-				mdaiHubAction := adapter.CreateHubAction(relevantLabels, variableUpdate, valkeyKey, alert)
-				err := adapter.DoVariableUpdateAndLog(ctx, removeKeyOperationCommand, mdaiHubAction, valkeyKey)
-				valkeyErrors = multierr.Append(valkeyErrors, err)
-			case mdaiv1.VariableUpdateBulkSetKeyValue:
-				for i, label := range relevantLabels {
-					setKeyOperationCommand := dataAdapter.SetMapEntry(valkeyKey, relevantLabels[i], alert.Labels[label])
-					mdaiHubAction := adapter.CreateHubAction(relevantLabels, variableUpdate, valkeyKey, alert)
-					err := adapter.DoVariableUpdateAndLog(ctx, setKeyOperationCommand, mdaiHubAction, valkeyKey)
-					valkeyErrors = multierr.Append(valkeyErrors, err)
-				}
-			default:
-				logger.Error("Unknown variable update operation", zap.String("operation", string(variableUpdate.Operation)), zap.Any("alert", alert))
 			}
 		}
 

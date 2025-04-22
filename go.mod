@@ -4,7 +4,7 @@ go 1.23.2
 
 require (
 	github.com/cenkalti/backoff/v5 v5.0.2
-	github.com/decisiveai/mdai-data-core v0.0.0-20250421192223-5eb0e662f2b4
+	github.com/decisiveai/mdai-data-core v0.0.0-20250422175823-5df69ed253dd
 	github.com/decisiveai/mdai-operator v0.1.11
 	github.com/go-logr/zapr v1.3.0
 	github.com/prometheus/alertmanager v0.28.1
@@ -21,9 +21,6 @@ require (
 	go.uber.org/multierr v1.11.0
 	go.uber.org/zap v1.27.0
 )
-
-//replace github.com/decisiveai/mdai-data-core v0.0.0 => ../mdai-data-core
-//replace github.com/decisiveai/mdai-operator => ../mdai-operator
 
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
