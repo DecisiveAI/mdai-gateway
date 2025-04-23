@@ -2,41 +2,19 @@ package types
 
 import (
 	"encoding/json"
+	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/prometheus/alertmanager/template"
 	"log"
 	"os/exec"
 	"sort"
-	"time"
-
-	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 )
 
-type AlertManagerPayload struct {
-	Receiver          string            `json:"receiver"`
-	Status            string            `json:"status"`
-	Alerts            []Alert           `json:"alerts"`
-	GroupLabels       map[string]string `json:"groupLabels"`
-	CommonLabels      map[string]string `json:"commonLabels"`
-	CommonAnnotations map[string]string `json:"commonAnnotations"`
-	ExternalURL       string            `json:"externalURL"`
-}
-
-// for now ignore the unused warning from linting
-//
-//nolint:golint,unused
-func (payload *AlertManagerPayload) isFiring() bool {
-	return payload.Status == "firing"
-}
-
-type Alert struct {
-	Status       string            `json:"status"`
-	Labels       map[string]string `json:"labels"`
-	Annotations  map[string]string `json:"annotations"`
-	StartsAt     time.Time         `json:"startsAt"`
-	EndsAt       time.Time         `json:"endsAt"`
-	GeneratorURL string            `json:"generatorURL"`
-	Fingerprint  string            `json:"fingerprint"`
-}
+const (
+	HubName      = "hub_name"
+	CurrentValue = "current_value"
+	AlertName    = "alert_name"
+	Prometheus   = "prometheus"
+)
 
 type Config struct {
 	Evaluations []mdaiv1.Evaluation `json:"evaluations" yaml:"evaluations"`
@@ -78,8 +56,8 @@ func AdaptPrometheusAlertToMdaiEvents(payload template.Data) []MdaiEvent {
 		for key, value := range labels {
 			unMarshalledPayload[key] = value
 		}
-		unMarshalledPayload["value"] = annotations["current_value"]
-		unMarshalledPayload["hubName"] = annotations["hub_name"]
+		unMarshalledPayload["value"] = annotations[CurrentValue]
+		unMarshalledPayload["hubName"] = annotations[HubName]
 
 		payloadBytes, err := json.Marshal(unMarshalledPayload)
 		if err != nil {
@@ -98,8 +76,8 @@ func AdaptPrometheusAlertToMdaiEvents(payload template.Data) []MdaiEvent {
 		}
 
 		mdaiEvent := MdaiEvent{
-			Name:      annotations["alert_name"] + "." + status,
-			Source:    "prometheus",
+			Name:      annotations[AlertName] + "." + status,
+			Source:    Prometheus,
 			Id:        Id,
 			Timestamp: alert.StartsAt.String(),
 			Payload:   string(payloadBytes),
