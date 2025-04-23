@@ -6,12 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"github.com/decisiveai/event-handler-webservice/eventing"
+	"github.com/prometheus/alertmanager/template"
 	"io"
-	"log"
 	"net/http"
 	"os"
-	"os/exec"
-	"sort"
 	"strconv"
 	"sync"
 	"time"
@@ -164,128 +162,55 @@ func getEnvVariableWithDefault(key, defaultValue string) string {
 	return defaultValue
 }
 
-func createEventUuid() (string, error) {
-	uuidBytes, err := exec.Command("uuidgen").Output()
-	if err != nil {
-		// TODO: Use our logger
-		log.Fatal(err)
-		return "", err
-	}
-
-	return string(uuidBytes), nil
-}
-
-func adaptPrometheusAlertToMdaiEvents(payload types.AlertManagerPayload) []types.MdaiEvent {
-	sort.Slice(payload.Alerts, func(i, j int) bool {
-		return payload.Alerts[i].StartsAt.Before(payload.Alerts[j].StartsAt)
-	})
-
-	mdaiEvents := make([]types.MdaiEvent, 0)
-
-	for _, alert := range payload.Alerts {
-		annotations := alert.Annotations
-		labels := alert.Labels
-		status := alert.Status
-
-		unMarshalledPayload := make(map[string]interface{})
-		for key, value := range labels {
-			unMarshalledPayload[key] = value
+func handleEventsRoute(ctx context.Context, valkeyClient valkey.Client) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			mdaiAuditStream.NewAuditAdapter(logger, valkeyClient, valkeyAuditStreamExpiry).HandleEventsGet(ctx, valkeyClient, w)
+			return
 		}
-		unMarshalledPayload["value"] = annotations["current_value"]
-		unMarshalledPayload["hubName"] = annotations["hub_name"]
+		if r.Method == http.MethodPost {
 
-		payloadBytes, err := json.Marshal(unMarshalledPayload)
-		if err != nil {
-			// TODO: Use our logger
-			log.Fatal(err)
-		}
+			bodyBytes, err := io.ReadAll(r.Body)
+			// Check for JSON decoding errors
+			if err != nil {
+				http.Error(w, "Invalid request body: "+err.Error(), http.StatusBadRequest)
+				return
+			}
 
-		var Id string
-		if alert.Fingerprint != "" {
-			Id = alert.Fingerprint
+			var alertData template.Data
+			if err := json.Unmarshal(bodyBytes, &alertData); err == nil {
+				events := types.AdaptPrometheusAlertToMdaiEvents(alertData)
+
+				for _, event := range events {
+					eventing.EmitMdaiEvent(event)
+				}
+				// TODO: Send correct response
+				w.WriteHeader(http.StatusCreated)
+				w.Write([]byte("Events received successfully"))
+				return
+			}
+
+			var event types.MdaiEvent
+			if err := json.Unmarshal(bodyBytes, &event); err == nil {
+				if event.Id == "" {
+					uuid, err := types.CreateEventUuid()
+					if err == nil {
+						event.Id = uuid
+					}
+				}
+
+				eventing.EmitMdaiEvent(event)
+				// TODO: Send correct response
+				w.WriteHeader(http.StatusCreated)
+				w.Write([]byte("Event received successfully"))
+				return
+			}
+
+			http.Error(w, "Invalid request body", http.StatusBadRequest)
 		} else {
-			uuid, err := createEventUuid()
-			if err == nil {
-				Id = uuid
-			}
-		}
-
-		mdaiEvent := types.MdaiEvent{
-			Name:      annotations["alert_name"] + "." + status,
-			Source:    "prometheus",
-			Id:        Id,
-			Timestamp: alert.StartsAt.String(),
-			Payload:   string(payloadBytes),
-		}
-
-		// TODO: Log event created
-		mdaiEvents = append(mdaiEvents, mdaiEvent)
-	}
-
-	return mdaiEvents
-}
-
-func handleAlertsPost() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "Only POST method is supported", http.StatusMethodNotAllowed)
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			logger.Info("failed to read body", zap.Error(err))
-			http.Error(w, "Failed to read request body", http.StatusBadRequest)
-			return
-		}
-
-		logger.Info("Received payload", zap.ByteString("payload", body))
-
-		var payload template.Data
-		if err := json.Unmarshal(body, &payload); err != nil {
-			logger.Info("Invalid JSON", zap.ByteString("body", body), zap.Error(err))
-			http.Error(w, "Invalid JSON", http.StatusBadRequest)
-			return
-		}
-
-		mdaiEvents := adaptPrometheusAlertToMdaiEvents(payload)
-
-		for _, mdaiEvent := range mdaiEvents {
-			eventing.EmitMdaiEvent(mdaiEvent)
-		}
-	}
-}
-
-func handleEventsPost() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "Only POST method is supported", http.StatusMethodNotAllowed)
-			return
-		}
-
-		// Read and parse the request body
-		var event types.MdaiEvent
-		decoder := json.NewDecoder(r.Body)
-		err := decoder.Decode(&event)
-
-		// Check for JSON decoding errors
-		if err != nil {
-			http.Error(w, "Invalid request body: "+err.Error(), http.StatusBadRequest)
-			return
-		}
-
-		if event.Id == "" {
-			uuid, err := createEventUuid()
-			if err == nil {
-				event.Id = uuid
-			}
-		}
-
-		eventing.EmitMdaiEvent(event)
-
-		// TODO: Send correct response
-		w.WriteHeader(http.StatusCreated)
-		w.Write([]byte("Event received successfully"))
 
 	}
 }
