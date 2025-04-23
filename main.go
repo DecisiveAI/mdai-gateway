@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,8 +13,8 @@ import (
 	"sync"
 	"time"
 
-	"go.uber.org/multierr"
-
+	"github.com/go-logr/zapr"
+	"github.com/prometheus/alertmanager/template"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
@@ -21,10 +22,10 @@ import (
 
 	"github.com/cenkalti/backoff/v5"
 
-	mdaiv1 "github.com/DecisiveAI/mdai-operator/api/v1"
+	audit "github.com/decisiveai/mdai-data-core/audit"
+	datacore "github.com/decisiveai/mdai-data-core/variables"
+	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 
-	mdaiAuditStream "github.com/decisiveai/event-handler-webservice/audit"
-	"github.com/decisiveai/event-handler-webservice/types"
 	"github.com/valkey-io/valkey-go"
 )
 
@@ -42,12 +43,6 @@ const (
 	actionContextAnnotationsKey  = "action_context"
 	relevantLabelsAnnotationsKey = "relevant_labels"
 	HubName                      = "hub_name"
-
-	AddElement    = "mdai/add_element"
-	RemoveElement = "mdai/remove_element"
-	ReplaceValue  = "mdai/replace_element"
-
-	VariableKeyPrefix = "variable/"
 
 	mdaiHubEventHistoryStreamName = "mdai_hub_event_history"
 )
@@ -142,10 +137,10 @@ func main() {
 		logger.Fatal("failed to get valkey client", zap.Error(err))
 	}
 
-	adapter := mdaiAuditStream.NewAuditAdapter(logger, valkeyClient, valkeyAuditStreamExpiry)
+	adapter := audit.NewAuditAdapter(zapr.NewLogger(logger), valkeyClient, valkeyAuditStreamExpiry)
 
 	http.HandleFunc("/alerts", handleAlertsPost(ctx, valkeyClient))
-	http.HandleFunc("/events", adapter.HandleEventsGet(ctx, valkeyClient))
+	http.HandleFunc("/events", adapter.HandleEventsGet(ctx))
 
 	logger.Info("Starting server", zap.String("address", ":"+httpPort))
 	logger.Fatal("failed to start server", zap.Error(http.ListenAndServe(":"+httpPort, nil)))
@@ -177,7 +172,7 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 
 		logger.Info("Received payload", zap.ByteString("payload", body))
 
-		var payload types.AlertManagerPayload
+		var payload template.Data
 		if err := json.Unmarshal(body, &payload); err != nil {
 			logger.Info("Invalid JSON", zap.ByteString("body", body), zap.Error(err))
 			http.Error(w, "Invalid JSON", http.StatusBadRequest)
@@ -190,6 +185,8 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 		})
 
 		var valkeyErrors error
+		auditAdapter := audit.NewAuditAdapter(zapr.NewLogger(logger), valkeyClient, valkeyAuditStreamExpiry)
+		dataAdapter := datacore.NewValkeyAdapter(valkeyClient, zapr.NewLogger(logger))
 		for _, alert := range payload.Alerts {
 			hubName := alert.Annotations[HubName]
 			if hubName == "" {
@@ -240,49 +237,58 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 			}
 
 			// next time, valkeyKeyKey!
-			valkeyKey := VariableKeyPrefix + hubName + "/" + variableUpdate.VariableRef
-			adapter := mdaiAuditStream.NewAuditAdapter(logger, valkeyClient, valkeyAuditStreamExpiry)
+			valkeyKey := datacore.ComposeValkeyKey(hubName, variableUpdate.VariableRef)
 
-			mdaiHubEvent := adapter.CreateHubEvent(relevantLabels, alert)
-			err := adapter.InsertAuditLogEvent(ctx, valkeyClient, mdaiHubEvent)
-			if err != nil {
-				valkeyErrors = multierr.Append(valkeyErrors, err)
+			if err := auditAdapter.InsertAuditLogEventFromEvent(ctx, auditAdapter.CreateHubEvent(relevantLabels, alert)); err != nil {
+				valkeyErrors = errors.Join(valkeyErrors, err)
 			}
 
-			switch variableUpdate.Operation {
-			case AddElement:
-				for _, element := range relevantLabels {
-					addOperationCommand := valkeyClient.B().Sadd().Key(valkeyKey).Member(alert.Labels[element]).Build()
-					mdaiHubAction := adapter.CreateHubAction(relevantLabels, variableUpdate, valkeyKey, alert)
-					err := adapter.DoVariableUpdateAndLog(ctx, valkeyClient, addOperationCommand, mdaiHubAction, valkeyKey)
-					valkeyErrors = multierr.Append(valkeyErrors, err)
+			def, found := dataAdapter.GetOperationDef(variableUpdate.Operation)
+			if !found {
+				logger.Error("Unknown variable update operation",
+					zap.String("operation", string(variableUpdate.Operation)),
+					zap.Any("alert", alert),
+				)
+				continue
+			}
+
+			if def.LoopOverAllLabels {
+				for _, label := range relevantLabels {
+					variableCmd := def.BuildVariableCmd(dataAdapter, valkeyKey, datacore.OperationArgs{
+						Label:    label,
+						Value:    alert.Labels[label],
+						IntValue: int64(len(relevantLabels)),
+					})
+					auditAction := auditAdapter.CreateHubAction(alert.Labels[label], variableUpdate, valkeyKey, alert)
+					valkeyErrors = errors.Join(
+						valkeyErrors,
+						auditAdapter.DoVariableUpdateAndLog(ctx, variableCmd, auditAction, valkeyKey),
+					)
 				}
-			case RemoveElement:
-				for _, element := range relevantLabels {
-					removeOperationCommand := valkeyClient.B().Srem().Key(valkeyKey).Member(alert.Labels[element]).Build()
-					mdaiHubAction := adapter.CreateHubAction(relevantLabels, variableUpdate, valkeyKey, alert)
-					err := adapter.DoVariableUpdateAndLog(ctx, valkeyClient, removeOperationCommand, mdaiHubAction, valkeyKey)
-					valkeyErrors = multierr.Append(valkeyErrors, err)
-				}
-			case ReplaceValue:
+			} else {
 				if len(relevantLabels) > 1 {
 					logger.Info("Multiple relevantLabels found for replace action",
 						zap.String("selected_label", relevantLabels[0]),
 						zap.Any("all_labels", relevantLabels),
 					)
 				}
-				replaceOperationCommand := valkeyClient.B().Set().Key(valkeyKey).Value(alert.Labels[relevantLabels[0]]).Build()
-				mdaiHubAction := adapter.CreateHubAction(relevantLabels, variableUpdate, valkeyKey, alert)
-				err := adapter.DoVariableUpdateAndLog(ctx, valkeyClient, replaceOperationCommand, mdaiHubAction, valkeyKey)
-				valkeyErrors = multierr.Append(valkeyErrors, err)
-			default:
-				logger.Error("Unknown variable update operation", zap.String("operation", variableUpdate.Operation), zap.Any("alert", alert))
+				label := relevantLabels[0]
+				variableCmd := def.BuildVariableCmd(dataAdapter, valkeyKey, datacore.OperationArgs{
+					Label:    label,
+					Value:    alert.Labels[label],
+					IntValue: int64(len(relevantLabels)),
+				})
+				auditAction := auditAdapter.CreateHubAction(alert.Labels[label], variableUpdate, valkeyKey, alert)
+				valkeyErrors = errors.Join(
+					valkeyErrors,
+					auditAdapter.DoVariableUpdateAndLog(ctx, variableCmd, auditAction, valkeyKey),
+				)
 			}
 		}
 
 		if valkeyErrors != nil {
 			logger.Error("Errors occurred writing updates to valkey", zap.Error(valkeyErrors))
-			http.Error(w, "valkey errors: "+valkeyErrors.Error(), http.StatusInternalServerError)
+			http.Error(w, "Handler can't successfully process the payload:\n "+valkeyErrors.Error(), http.StatusInternalServerError)
 			return
 		}
 
