@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,7 +15,6 @@ import (
 
 	"github.com/go-logr/zapr"
 	"github.com/prometheus/alertmanager/template"
-	"go.uber.org/multierr"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
@@ -240,7 +240,7 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 			valkeyKey := datacore.ComposeValkeyKey(hubName, variableUpdate.VariableRef)
 
 			if err := auditAdapter.InsertAuditLogEventFromEvent(ctx, auditAdapter.CreateHubEvent(relevantLabels, alert)); err != nil {
-				valkeyErrors = multierr.Append(valkeyErrors, err)
+				valkeyErrors = errors.Join(valkeyErrors, err)
 			}
 
 			def, found := dataAdapter.GetOperationDef(variableUpdate.Operation)
@@ -260,7 +260,7 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 						IntValue: int64(len(relevantLabels)),
 					})
 					auditAction := auditAdapter.CreateHubAction(alert.Labels[label], variableUpdate, valkeyKey, alert)
-					valkeyErrors = multierr.Append(
+					valkeyErrors = errors.Join(
 						valkeyErrors,
 						auditAdapter.DoVariableUpdateAndLog(ctx, variableCmd, auditAction, valkeyKey),
 					)
@@ -279,7 +279,7 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 					IntValue: int64(len(relevantLabels)),
 				})
 				auditAction := auditAdapter.CreateHubAction(alert.Labels[label], variableUpdate, valkeyKey, alert)
-				valkeyErrors = multierr.Append(
+				valkeyErrors = errors.Join(
 					valkeyErrors,
 					auditAdapter.DoVariableUpdateAndLog(ctx, variableCmd, auditAction, valkeyKey),
 				)
@@ -288,7 +288,7 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 
 		if valkeyErrors != nil {
 			logger.Error("Errors occurred writing updates to valkey", zap.Error(valkeyErrors))
-			http.Error(w, "valkey errors: "+valkeyErrors.Error(), http.StatusInternalServerError)
+			http.Error(w, "Handler can't successfully process the payload:\n "+valkeyErrors.Error(), http.StatusInternalServerError)
 			return
 		}
 
