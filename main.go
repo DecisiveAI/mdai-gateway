@@ -3,18 +3,15 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"github.com/decisiveai/event-handler-webservice/eventing"
-	"github.com/prometheus/alertmanager/template"
+	"github.com/decisiveai/event-handler-webservice/types"
+	"github.com/go-logr/zapr"
 	"io"
 	"net/http"
 	"os"
 	"strconv"
-	"sync"
 	"time"
 
-	"github.com/go-logr/zapr"
 	"github.com/prometheus/alertmanager/template"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -23,9 +20,7 @@ import (
 
 	"github.com/cenkalti/backoff/v5"
 
-	audit "github.com/decisiveai/mdai-data-core/audit"
-	datacore "github.com/decisiveai/mdai-data-core/variables"
-	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
+	"github.com/decisiveai/mdai-data-core/audit"
 
 	"github.com/valkey-io/valkey-go"
 )
@@ -38,18 +33,10 @@ const (
 
 	defaultHttpPort = "8081"
 
-	firingStatus   = "firing"
-	resolvedStatus = "resolved"
-
-	actionContextAnnotationsKey  = "action_context"
-	relevantLabelsAnnotationsKey = "relevant_labels"
-	HubName                      = "hub_name"
-
 	mdaiHubEventHistoryStreamName = "mdai_hub_event_history"
 )
 
 var (
-	processMutex sync.Mutex
 	// Intended ONLY for use by the OTEL SDK, use logger for all other purposes
 	internalLogger          *zap.Logger
 	logger                  *zap.Logger
@@ -138,11 +125,7 @@ func main() {
 		logger.Fatal("failed to get valkey client", zap.Error(err))
 	}
 
-	adapter := audit.NewAuditAdapter(zapr.NewLogger(logger), valkeyClient, valkeyAuditStreamExpiry)
-
-	http.HandleFunc("/alerts", handleAlertsPost())
-	http.HandleFunc("/audit", adapter.HandleAuditGet(ctx, valkeyClient))
-	http.HandleFunc("/events", handleEventsPost())
+	http.HandleFunc("/events", handleEventsRoute(ctx, valkeyClient))
 
 	logger.Info("Starting server", zap.String("address", ":"+httpPort))
 	logger.Fatal("failed to start server", zap.Error(http.ListenAndServe(":"+httpPort, nil)))
@@ -158,7 +141,7 @@ func getEnvVariableWithDefault(key, defaultValue string) string {
 func handleEventsRoute(ctx context.Context, valkeyClient valkey.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
-			mdaiAuditStream.NewAuditAdapter(logger, valkeyClient, valkeyAuditStreamExpiry).HandleEventsGet(ctx, valkeyClient, w)
+			audit.NewAuditAdapter(zapr.NewLogger(logger), valkeyClient, valkeyAuditStreamExpiry).HandleEventsGet(ctx)(w, r)
 			return
 		}
 		if r.Method == http.MethodPost {
