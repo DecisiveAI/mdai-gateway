@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/decisiveai/event-handler-webservice/types"
+	datacore "github.com/decisiveai/mdai-data-core/variables"
 	"log"
 )
 
@@ -32,24 +33,22 @@ func processEventPayload(event types.MdaiEvent) (map[string]interface{}, error) 
 	return payloadData, nil
 }
 
-func handleAddNoisyServiceToSet(event types.MdaiEvent) {
-	// TODO: incorporate variable library
+func handleAddNoisyServiceToSet(adapter *datacore.ValkeyAdapter, event types.MdaiEvent) {
 	payloadData, err := processEventPayload(event)
 	if err != nil {
 		// TODO: Wire up logger
 		log.Fatal("failed to process payload: %w", err)
 	}
 	serviceName := payloadData["service_name"].(string)
+
 	hubName := payloadData["hubName"].(string)
-	noisyServices := variables.Get(hubName, "service_list")
 
-	noisyServices.add(serviceName)
+	valkeyKey := datacore.ComposeValkeyKey(hubName, "service_list")
 
-	variables.Set(hubName, "service_list", noisyServices)
+	adapter.AddElementToSet(valkeyKey, serviceName)
 }
 
-func handleRemoveNoisyServiceFromSet(event types.MdaiEvent) {
-	// TODO: incorporate variable library
+func handleRemoveNoisyServiceFromSet(adapter *datacore.ValkeyAdapter, event types.MdaiEvent) {
 	payloadData, err := processEventPayload(event)
 	if err != nil {
 		// TODO: Wire up logger
@@ -57,9 +56,7 @@ func handleRemoveNoisyServiceFromSet(event types.MdaiEvent) {
 	}
 	serviceName := payloadData["service_name"].(string)
 	hubName := payloadData["hubName"].(string)
-	noisyServices := variables.Get(hubName, "service_list")
+	valkeyKey := datacore.ComposeValkeyKey(hubName, "service_list")
 
-	noisyServices.remove(serviceName)
-
-	variables.Set(hubName, "service_list", noisyServices)
+	adapter.RemoveElementFromSet(valkeyKey, serviceName)
 }
