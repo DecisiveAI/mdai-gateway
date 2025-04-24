@@ -25,7 +25,7 @@ type MdaiEvent struct {
 	Name      string `json:"name"`
 	Source    string `json:"source"`
 	Id        string `json:"id,omitempty"`
-	Timestamp string `json:"timestamp"`
+	Timestamp string `json:"timestamp,omitempty"`
 	Payload   string `json:"payload,omitempty"`
 }
 

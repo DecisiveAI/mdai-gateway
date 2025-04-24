@@ -196,6 +196,8 @@ func handleEventsRoute(ctx context.Context, valkeyClient valkey.Client) http.Han
 					}
 				}
 
+				event.Timestamp = time.Now().Format(time.RFC3339)
+
 				eventing.EmitMdaiEvent(event)
 				// TODO: Send correct response
 				w.WriteHeader(http.StatusCreated)
