@@ -2,6 +2,9 @@ package eventing
 
 import (
 	"github.com/decisiveai/event-handler-webservice/types"
+	datacore "github.com/decisiveai/mdai-data-core/variables"
+	"github.com/go-logr/logr"
+	"github.com/valkey-io/valkey-go"
 	"log"
 	"strings"
 )
@@ -23,19 +26,22 @@ var FakeConfiguredOODAs = WorkflowMap{
 // end stuff from config
 
 // where does this live?
-func ReceiveMdaiEvent(event types.MdaiEvent) {
+// TODO: get client, logger on init -- assuming this fn will live in its own module
+func ReceiveMdaiEvent(client valkey.Client, logger logr.Logger, event types.MdaiEvent) {
 	// Is this where the Queue goes?
 	// TODO: Wire up eventing library
+
+	dataAdapter := datacore.NewValkeyAdapter(client, logger)
 
 	// Match on whole name, e.g. "NoisyServiceAlert.firing"
 	if workflow, exists := FakeConfiguredOODAs[event.Name]; exists {
 		for _, handlerName := range workflow {
-			safeInvokeHandler(handlerName, event)
+			safeInvokeHandler(handlerName, dataAdapter, event)
 		}
 		// Match on alert name regardless of status, e.g. NoisyServiceAlert
 	} else if workflow, exists := FakeConfiguredOODAs[strings.Split(event.Name, ".")[0]]; exists {
 		for _, handlerName := range workflow {
-			safeInvokeHandler(handlerName, event)
+			safeInvokeHandler(handlerName, dataAdapter, event)
 		}
 	} else {
 		// TODO: wire up logger
@@ -43,9 +49,9 @@ func ReceiveMdaiEvent(event types.MdaiEvent) {
 	}
 }
 
-func safeInvokeHandler(handler HandlerName, event types.MdaiEvent) {
+func safeInvokeHandler(handler HandlerName, adapter *datacore.ValkeyAdapter, event types.MdaiEvent) {
 	if handler, exists := SupportedHandlers[handler]; exists {
-		handler(event)
+		handler(adapter, event)
 	} else {
 		// TODO: wire up logger
 		log.Printf("No handler found for event type: %s", handler)

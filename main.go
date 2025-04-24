@@ -148,7 +148,21 @@ func getEnvVariableWithDefault(key, defaultValue string) string {
 func handleEventsRoute(ctx context.Context, valkeyClient valkey.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
-			audit.NewAuditAdapter(zapr.NewLogger(logger), valkeyClient, valkeyAuditStreamExpiry).HandleEventsGet(ctx)(w, r)
+			eventsMap, err := audit.NewAuditAdapter(zapr.NewLogger(logger), valkeyClient, valkeyAuditStreamExpiry).HandleEventsGet(ctx)
+
+			resultMapJson, err := json.Marshal(eventsMap)
+			if err != nil {
+				logger.Error("failed to marshal events map to json")
+				http.Error(w, "Unable to fetch history from Valkey", http.StatusInternalServerError)
+				return
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			if _, err := w.Write(resultMapJson); err != nil {
+				logger.Error("Failed to write response body (y tho)")
+			}
+
 			return
 		}
 		if r.Method == http.MethodPost {
