@@ -9,8 +9,9 @@ import (
 )
 
 const (
-	HandleAddNoisyServiceToSet      HandlerName = "addNoisyServiceToSet"
-	HandleRemoveNoisyServiceFromSet HandlerName = "removeNoisyServiceFromSet"
+	HandleAddNoisyServiceToSet      HandlerName = "noisyServiceAlert.firing"
+	HandleRemoveNoisyServiceFromSet HandlerName = "noisyServiceAlert.resolved"
+	HandleNoisyServiceAlert         HandlerName = "noisyServiceAlert"
 )
 
 // Go doesn't support dynamic accessing of exports. So this is a workaround.
@@ -20,6 +21,7 @@ const (
 var SupportedHandlers = HandlerMap{
 	HandleAddNoisyServiceToSet:      handleAddNoisyServiceToSet,
 	HandleRemoveNoisyServiceFromSet: handleRemoveNoisyServiceFromSet,
+	HandleNoisyServiceAlert:         handleNoisyServiceList,
 }
 
 func processEventPayload(event types.MdaiEvent) (map[string]interface{}, error) {
@@ -31,6 +33,28 @@ func processEventPayload(event types.MdaiEvent) (map[string]interface{}, error) 
 	}
 
 	return payloadData, nil
+}
+
+func handleNoisyServiceList(adapter *datacore.ValkeyAdapter, event types.MdaiEvent) {
+	payloadData, err := processEventPayload(event)
+	if err != nil {
+		// TODO: Wire up logger
+		log.Fatal("failed to process payload: %w", err)
+	}
+	serviceName := payloadData["service_name"].(string)
+	status := payloadData["status"].(string)
+
+	hubName := payloadData["hubName"].(string)
+
+	valkeyKey := datacore.ComposeValkeyKey(hubName, "service_list")
+
+	if status == "firing" {
+		adapter.AddElementToSet(valkeyKey, serviceName)
+	} else if status == "resolved" {
+		adapter.RemoveElementFromSet(valkeyKey, serviceName)
+	} else {
+		log.Fatal("unknown alert status")
+	}
 }
 
 func handleAddNoisyServiceToSet(adapter *datacore.ValkeyAdapter, event types.MdaiEvent) {
