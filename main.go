@@ -3,8 +3,8 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"github.com/decisiveai/event-handler-webservice/eventing"
 	"github.com/decisiveai/event-handler-webservice/types"
+	"github.com/decisiveai/event-hub-poc/eventing"
 	"github.com/go-logr/zapr"
 	"io"
 	"net/http"
@@ -125,7 +125,13 @@ func main() {
 		logger.Fatal("failed to get valkey client", zap.Error(err))
 	}
 
-	http.HandleFunc("/events", handleEventsRoute(ctx, valkeyClient))
+	hub, err := eventing.NewEventHub("amqp://guest:guest@localhost:5672/", "mdai-events")
+	if err != nil {
+		logger.Fatal("Failed to create EventHub", zap.Error(err))
+	}
+	defer hub.Close()
+
+	http.HandleFunc("/events", handleEventsRoute(ctx, valkeyClient, hub))
 
 	logger.Info("Starting server", zap.String("address", ":"+httpPort))
 	logger.Fatal("failed to start server", zap.Error(http.ListenAndServe(":"+httpPort, nil)))
@@ -138,7 +144,7 @@ func getEnvVariableWithDefault(key, defaultValue string) string {
 	return defaultValue
 }
 
-func handleEventsRoute(ctx context.Context, valkeyClient valkey.Client) http.HandlerFunc {
+func handleEventsRoute(ctx context.Context, valkeyClient valkey.Client, hub *eventing.EventHub) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
 			eventsMap, err := audit.NewAuditAdapter(zapr.NewLogger(logger), valkeyClient, valkeyAuditStreamExpiry).HandleEventsGet(ctx)
@@ -172,7 +178,10 @@ func handleEventsRoute(ctx context.Context, valkeyClient valkey.Client) http.Han
 				events := types.AdaptPrometheusAlertToMdaiEvents(alertData)
 
 				for _, event := range events {
-					eventing.EmitMdaiEvent(event)
+					err := hub.PublishMessage(eventing.MdaiEvent(event))
+					if err != nil {
+						logger.Warn("Failed to publish event", zap.String("event name", event.Name))
+					}
 				}
 				// TODO: Send correct response
 				w.WriteHeader(http.StatusCreated)
@@ -191,7 +200,10 @@ func handleEventsRoute(ctx context.Context, valkeyClient valkey.Client) http.Han
 
 				event.Timestamp = time.Now().Format(time.RFC3339)
 
-				eventing.EmitMdaiEvent(event)
+				err := hub.PublishMessage(eventing.MdaiEvent(event))
+				if err != nil {
+					logger.Warn("Failed to publish event", zap.String("event name", event.Name))
+				}
 				// TODO: Send correct response
 				w.WriteHeader(http.StatusCreated)
 				w.Write([]byte("Event received successfully"))

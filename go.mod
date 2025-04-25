@@ -1,12 +1,12 @@
 module github.com/decisiveai/event-handler-webservice
 
-go 1.23.2
+go 1.23.4
 
 require (
 	github.com/cenkalti/backoff/v5 v5.0.2
+	github.com/decisiveai/event-hub-poc v0.0.0-20250425161403-470dc0c64509
 	github.com/decisiveai/mdai-data-core v0.1.0
 	github.com/decisiveai/mdai-operator v0.1.11
-	github.com/go-logr/logr v1.4.2
 	github.com/go-logr/zapr v1.3.0
 	github.com/prometheus/alertmanager v0.28.1
 	github.com/stretchr/testify v1.10.0
@@ -28,6 +28,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/fxamacker/cbor/v2 v2.7.0 // indirect
+	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
@@ -43,6 +44,7 @@ require (
 	github.com/prometheus/client_model v0.6.1 // indirect
 	github.com/prometheus/common v0.61.0 // indirect
 	github.com/prometheus/procfs v0.15.1 // indirect
+	github.com/rabbitmq/amqp091-go v1.10.0 // indirect
 	github.com/shurcooL/httpfs v0.0.0-20230704072500-f1e31cf0ba5c // indirect
 	github.com/shurcooL/vfsgen v0.0.0-20230704071429-0000e147ea92 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
@@ -71,3 +73,5 @@ require (
 )
 
 replace github.com/decisiveai/mdai-data-core => ../mdai-data-core
+
+replace github.com/decisiveai/event-hub-poc => ../event-hub-poc
