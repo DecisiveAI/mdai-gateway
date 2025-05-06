@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"github.com/decisiveai/event-handler-webservice/types"
 	"github.com/decisiveai/event-hub-poc/eventing"
 	"github.com/go-logr/zapr"
@@ -132,9 +133,17 @@ func main() {
 		logger.Fatal("failed to get valkey client", zap.Error(err))
 	}
 
-	hub, err := eventing.NewEventHub("amqp://guest:guest@localhost:5672/", "mdai-events")
+	rmqEndpoint := getEnvVariableWithDefault(rabbitmqEndpointEnvVarKey, "")
+	rmqPassword := getEnvVariableWithDefault(rabbitmqPasswordEnvVarKey, "")
+
+	rmqConnectString := "amqp://mdai:" + rmqPassword + "@" + rmqEndpoint + "/"
+	logger.Info("rmqConnectString", zap.String("rmqConnectString", rmqConnectString))
+
+	hub, err := eventing.NewEventHub("amqp://mdai:"+rmqPassword+"@"+rmqEndpoint+"/", "mdai-events", logger)
 	if err != nil {
 		logger.Fatal("Failed to create EventHub", zap.Error(err))
+	} else {
+		logger.Info("Successfully created EventHub", zap.String("rmqConnectString", rmqConnectString))
 	}
 	defer hub.Close()
 
@@ -154,11 +163,16 @@ func getEnvVariableWithDefault(key, defaultValue string) string {
 func handleEventsRoute(ctx context.Context, valkeyClient valkey.Client, hub *eventing.EventHub) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
-			eventsMap, err := audit.NewAuditAdapter(zapr.NewLogger(logger), valkeyClient, valkeyAuditStreamExpiry).HandleEventsGet(ctx)
+			eventsMap, err := audit.NewAuditAdapter(logger, valkeyClient, valkeyAuditStreamExpiry).HandleEventsGet(ctx)
+			if err != nil {
+				logger.Error("failed to get events", zap.Error(err))
+				http.Error(w, "Unable to fetch history from Valkey", http.StatusInternalServerError)
+				return
+			}
 
 			resultMapJson, err := json.Marshal(eventsMap)
 			if err != nil {
-				logger.Error("failed to marshal events map to json")
+				logger.Error("failed to marshal events map to json", zap.Error(err))
 				http.Error(w, "Unable to fetch history from Valkey", http.StatusInternalServerError)
 				return
 			}
@@ -166,62 +180,149 @@ func handleEventsRoute(ctx context.Context, valkeyClient valkey.Client, hub *eve
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 			if _, err := w.Write(resultMapJson); err != nil {
-				logger.Error("Failed to write response body (y tho)")
+				logger.Error("Failed to write response body", zap.Error(err))
 			}
-
 			return
 		}
+
 		if r.Method == http.MethodPost {
-
 			bodyBytes, err := io.ReadAll(r.Body)
-			// Check for JSON decoding errors
 			if err != nil {
-				http.Error(w, "Invalid request body: "+err.Error(), http.StatusBadRequest)
+				logger.Error("Failed to read request body", zap.Error(err))
+				http.Error(w, "Failed to read request body: "+err.Error(), http.StatusBadRequest)
 				return
 			}
 
-			var alertData template.Data
-			if err := json.Unmarshal(bodyBytes, &alertData); err == nil {
-				events := types.AdaptPrometheusAlertToMdaiEvents(alertData)
+			logger.Debug("Received POST request body", zap.ByteString("bodyBytes", bodyBytes))
 
-				for _, event := range events {
-					err := hub.PublishMessage(eventing.MdaiEvent(event))
-					if err != nil {
-						logger.Warn("Failed to publish event", zap.String("event name", event.Name))
-					}
-				}
-				// TODO: Send correct response
-				w.WriteHeader(http.StatusCreated)
-				w.Write([]byte("Events received successfully"))
+			// Try to determine the payload type by checking for key fields
+			var rawJson map[string]interface{}
+			if err := json.Unmarshal(bodyBytes, &rawJson); err != nil {
+				logger.Error("Failed to parse JSON", zap.Error(err))
+				http.Error(w, "Invalid JSON in request body", http.StatusBadRequest)
 				return
 			}
 
-			var event types.MdaiEvent
-			if err := json.Unmarshal(bodyBytes, &event); err == nil {
-				if event.Id == "" {
-					uuid, err := types.CreateEventUuid()
-					if err == nil {
-						event.Id = uuid
-					}
+			// Check if it looks like a Prometheus alert
+			if _, hasReceiver := rawJson["receiver"]; hasReceiver {
+				if _, hasAlerts := rawJson["alerts"]; hasAlerts {
+					handlePrometheusAlert(w, bodyBytes, hub, logger)
+					return
 				}
-
-				event.Timestamp = time.Now().Format(time.RFC3339)
-
-				err := hub.PublishMessage(eventing.MdaiEvent(event))
-				if err != nil {
-					logger.Warn("Failed to publish event", zap.String("event name", event.Name))
-				}
-				// TODO: Send correct response
-				w.WriteHeader(http.StatusCreated)
-				w.Write([]byte("Event received successfully"))
-				return
 			}
 
-			http.Error(w, "Invalid request body", http.StatusBadRequest)
-		} else {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			// Check if it looks like an MdaiEvent
+			if _, hasName := rawJson["name"]; hasName {
+				if _, hasPayload := rawJson["payload"]; hasPayload {
+					handleMdaiEvent(w, bodyBytes, hub, logger)
+					return
+				}
+			}
+
+			// If we got here, we couldn't identify the payload format
+			logger.Warn("Unrecognized payload format", zap.Any("rawJson", rawJson))
+			http.Error(w, "Invalid request body format", http.StatusBadRequest)
 			return
 		}
 
+		// Handle any other HTTP methods
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// Handle Prometheus Alertmanager alerts
+func handlePrometheusAlert(w http.ResponseWriter, bodyBytes []byte, hub *eventing.EventHub, logger *zap.Logger) {
+	var alertData template.Data
+	if err := json.Unmarshal(bodyBytes, &alertData); err != nil {
+		logger.Error("Failed to unmarshal Prometheus alert", zap.Error(err))
+		http.Error(w, "Invalid Prometheus alert format: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	logger.Info("Processing Prometheus alert",
+		zap.String("receiver", alertData.Receiver),
+		zap.String("status", alertData.Status),
+		zap.Int("alertCount", len(alertData.Alerts)))
+
+	events := types.AdaptPrometheusAlertToMdaiEvents(alertData)
+
+	successCount := 0
+	for _, event := range events {
+		if err := hub.PublishMessage(eventing.MdaiEvent(event)); err != nil {
+			logger.Warn("Failed to publish event",
+				zap.String("event_name", event.Name),
+				zap.Error(err))
+		} else {
+			successCount++
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+
+	response := map[string]interface{}{
+		"message":    "Processed Prometheus alerts",
+		"total":      len(events),
+		"successful": successCount,
+	}
+
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		logger.Error("Failed to write response", zap.Error(err))
+	}
+}
+
+// Handle direct MdaiEvent submissions
+func handleMdaiEvent(w http.ResponseWriter, bodyBytes []byte, hub *eventing.EventHub, logger *zap.Logger) {
+	var event eventing.MdaiEvent
+	if err := json.Unmarshal(bodyBytes, &event); err != nil {
+		logger.Error("Failed to unmarshal MdaiEvent", zap.Error(err))
+		http.Error(w, "Invalid MdaiEvent format: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Validate required fields
+	if event.Name == "" {
+		logger.Warn("Missing required field: name")
+		http.Error(w, "Missing required field: name", http.StatusBadRequest)
+		return
+	}
+
+	if event.Payload == "" {
+		logger.Warn("Missing required field: payload")
+		http.Error(w, "Missing required field: payload", http.StatusBadRequest)
+		return
+	}
+
+	// Generate ID if not provided
+	if event.Id == "" {
+		event.Id = types.CreateEventUuid()
+	}
+
+	// Set timestamp if not provided
+	if event.Timestamp.IsZero() {
+		event.Timestamp = time.Now()
+	}
+
+	logger.Info("Processing MdaiEvent",
+		zap.String("id", event.Id),
+		zap.String("name", event.Name),
+		zap.String("source", event.Source))
+
+	if err := hub.PublishMessage(event); err != nil {
+		logger.Error("Failed to publish MdaiEvent", zap.Error(err))
+		http.Error(w, fmt.Sprintf("Failed to publish event: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+
+	response := map[string]interface{}{
+		"message": "Event received successfully",
+		"id":      event.Id,
+	}
+
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		logger.Error("Failed to write response", zap.Error(err))
 	}
 }
