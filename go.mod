@@ -7,7 +7,7 @@ require (
 	github.com/decisiveai/event-hub-poc v0.0.0-20250425161403-470dc0c64509
 	github.com/decisiveai/mdai-data-core v0.1.0
 	github.com/decisiveai/mdai-operator v0.1.11
-	github.com/go-logr/zapr v1.3.0
+	github.com/google/uuid v1.6.0
 	github.com/prometheus/alertmanager v0.28.1
 	github.com/stretchr/testify v1.10.0
 	github.com/valkey-io/valkey-go v1.0.57
@@ -32,7 +32,6 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.26.3 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
