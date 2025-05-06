@@ -2,10 +2,11 @@ package types
 
 import (
 	"encoding/json"
+	"github.com/decisiveai/event-hub-poc/eventing"
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
+	"github.com/google/uuid"
 	"github.com/prometheus/alertmanager/template"
 	"log"
-	"os/exec"
 	"sort"
 )
 
@@ -21,31 +22,17 @@ type Config struct {
 	Variables   []mdaiv1.Variable   `json:"variables" yaml:"variables"`
 }
 
-type MdaiEvent struct {
-	Name      string `json:"name"`
-	Source    string `json:"source"`
-	Id        string `json:"id,omitempty"`
-	Timestamp string `json:"timestamp,omitempty"`
-	Payload   string `json:"payload,omitempty"`
+func CreateEventUuid() string {
+	id := uuid.New()
+	return id.String()
 }
 
-func CreateEventUuid() (string, error) {
-	uuidBytes, err := exec.Command("uuidgen").Output()
-	if err != nil {
-		// TODO: Use our logger
-		log.Fatal(err)
-		return "", err
-	}
-
-	return string(uuidBytes), nil
-}
-
-func AdaptPrometheusAlertToMdaiEvents(payload template.Data) []MdaiEvent {
+func AdaptPrometheusAlertToMdaiEvents(payload template.Data) []eventing.MdaiEvent {
 	sort.Slice(payload.Alerts, func(i, j int) bool {
 		return payload.Alerts[i].StartsAt.Before(payload.Alerts[j].StartsAt)
 	})
 
-	mdaiEvents := make([]MdaiEvent, 0)
+	mdaiEvents := make([]eventing.MdaiEvent, 0)
 
 	for _, alert := range payload.Alerts {
 		annotations := alert.Annotations
@@ -69,17 +56,14 @@ func AdaptPrometheusAlertToMdaiEvents(payload template.Data) []MdaiEvent {
 		if alert.Fingerprint != "" {
 			Id = alert.Fingerprint
 		} else {
-			uuid, err := CreateEventUuid()
-			if err == nil {
-				Id = uuid
-			}
+			Id = CreateEventUuid()
 		}
 
-		mdaiEvent := MdaiEvent{
+		mdaiEvent := eventing.MdaiEvent{
 			Name:      annotations[AlertName] + "." + status,
 			Source:    Prometheus,
 			Id:        Id,
-			Timestamp: alert.StartsAt.String(),
+			Timestamp: alert.StartsAt,
 			Payload:   string(payloadBytes),
 		}
 

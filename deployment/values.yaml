@@ -12,6 +12,9 @@ deployment:
   name: event-handler-webservice
   replicas: 1
   containerPort: 8081
+
+otelExporterOtlpEndpoint: http://mdai-collector-service.mdai.svc.cluster.local:4318
+
 image:
   repository: public.ecr.aws/p3k6k6h3/event-handler-webservice
   # tag: 0.0.1

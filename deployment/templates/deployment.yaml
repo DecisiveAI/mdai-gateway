@@ -26,13 +26,23 @@ spec:
           value: "{{ .Values.auditStreamExpiryMs }}"
         - name: OTEL_EXPORTER_OTLP_ENDPOINT
           value: "{{ .Values.otelExporterOtlpEndpoint }}"
-        - name: VALKEY_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: valkey-secret
-              key: VALKEY_PASSWORD
         - name: VALKEY_ENDPOINT
           valueFrom:
             secretKeyRef:
-              name: valkey-secret
               key: VALKEY_ENDPOINT
+              name: valkey-secret
+        - name: VALKEY_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: VALKEY_PASSWORD
+              name: valkey-secret
+        - name: RABBITMQ_ENDPOINT
+          valueFrom:
+            secretKeyRef:
+              name: rabbitmq-secret
+              key: RABBITMQ_ENDPOINT
+        - name: RABBITMQ_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: rabbitmq-secret
+              key: RABBITMQ_PASSWORD

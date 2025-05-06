@@ -6,14 +6,14 @@ import (
 	"fmt"
 	"github.com/decisiveai/event-handler-webservice/types"
 	"github.com/decisiveai/event-hub-poc/eventing"
-	"github.com/go-logr/zapr"
+	"github.com/prometheus/alertmanager/template"
+
 	"io"
 	"net/http"
 	"os"
 	"strconv"
 	"time"
 
-	"github.com/prometheus/alertmanager/template"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
@@ -30,9 +30,12 @@ const (
 	valkeyEndpointEnvVarKey            = "VALKEY_ENDPOINT"
 	valkeyPasswordEnvVarKey            = "VALKEY_PASSWORD"
 	valkeyAuditStreamExpiryMSEnvVarKey = "VALKEY_AUDIT_STREAM_EXPIRY_MS"
-	httpPortEnvVarKey                  = "HTTP_PORT"
 
-	defaultHttpPort = "8081"
+	rabbitmqEndpointEnvVarKey = "RABBITMQ_ENDPOINT"
+	rabbitmqPasswordEnvVarKey = "RABBITMQ_PASSWORD"
+
+	httpPortEnvVarKey = "HTTP_PORT"
+	defaultHttpPort   = "8081"
 
 	mdaiHubEventHistoryStreamName = "mdai_hub_event_history"
 )
@@ -103,8 +106,8 @@ func main() {
 	operation := func() (string, error) {
 		var err error
 		valkeyClient, err = valkey.NewClient(valkey.ClientOption{
-			InitAddress: []string{getEnvVariableWithDefault(valkeyEndpointEnvVarKey, "")},
-			Password:    getEnvVariableWithDefault(valkeyPasswordEnvVarKey, ""),
+			InitAddress: []string{getEnvVariableWithDefault(valkeyEndpointEnvVarKey, "mdai-valkey-primary.mdai.svc.cluster.local:6379")},
+			Password:    getEnvVariableWithDefault(valkeyPasswordEnvVarKey, "abc"),
 		})
 		if err != nil {
 			retryCount++
@@ -152,7 +155,6 @@ func getEnvVariableWithDefault(key, defaultValue string) string {
 	}
 	return defaultValue
 }
-
 func handleEventsRoute(ctx context.Context, valkeyClient valkey.Client, hub *eventing.EventHub) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
