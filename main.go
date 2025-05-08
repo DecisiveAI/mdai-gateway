@@ -186,7 +186,6 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 
 		var valkeyErrors error
 		auditAdapter := audit.NewAuditAdapter(zapr.NewLogger(logger), valkeyClient, valkeyAuditStreamExpiry)
-		dataAdapter := datacore.NewValkeyAdapter(valkeyClient, zapr.NewLogger(logger))
 		for _, alert := range payload.Alerts {
 			hubName := alert.Annotations[HubName]
 			if hubName == "" {
@@ -237,12 +236,13 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 			}
 
 			// next time, valkeyKeyKey!
-			valkeyKey := datacore.ComposeValkeyKey(hubName, variableUpdate.VariableRef)
+			valkeyKey := variableUpdate.VariableRef
 
 			if err := auditAdapter.InsertAuditLogEventFromEvent(ctx, auditAdapter.CreateHubEvent(relevantLabels, alert)); err != nil {
 				valkeyErrors = errors.Join(valkeyErrors, err)
 			}
 
+			dataAdapter := datacore.NewValkeyAdapter(valkeyClient, zapr.NewLogger(logger), hubName)
 			def, found := dataAdapter.GetOperationDef(variableUpdate.Operation)
 			if !found {
 				logger.Error("Unknown variable update operation",
