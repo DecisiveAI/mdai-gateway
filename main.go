@@ -144,7 +144,8 @@ func main() {
 
 	rmqConnectString := "amqp://mdai:" + rmqPassword + "@" + rmqEndpoint + "/"
 
-	hub, err := eventing.NewEventHub("amqp://mdai:"+rmqPassword+"@"+rmqEndpoint+"/", "mdai-events", logger)
+	hub, err := eventing.NewEventHub(rmqConnectString, "mdai-events", logger)
+	logger.Info("connect string ", zap.String("url", rmqConnectString))
 	if err != nil {
 		logger.Fatal("Failed to create EventHub", zap.Error(err))
 	} else {
