@@ -112,9 +112,12 @@ func main() {
 
 	operation := func() (string, error) {
 		var err error
+		valKeyEndpoint := getEnvVariableWithDefault(valkeyEndpointEnvVarKey, "")
+		valkeyPassword := getEnvVariableWithDefault(valkeyPasswordEnvVarKey, "")
+		logger.Info("ValKey info", zap.String("endpoint", valKeyEndpoint), zap.String("password", valkeyPassword))
 		valkeyClient, err = valkey.NewClient(valkey.ClientOption{
-			InitAddress: []string{getEnvVariableWithDefault(valkeyEndpointEnvVarKey, "mdai-valkey-primary.mdai.svc.cluster.local:6379")},
-			Password:    getEnvVariableWithDefault(valkeyPasswordEnvVarKey, "abc"),
+			InitAddress: []string{valKeyEndpoint},
+			Password:    valkeyPassword,
 		})
 		if err != nil {
 			retryCount++
@@ -140,7 +143,6 @@ func main() {
 	rmqPassword := getEnvVariableWithDefault(rabbitmqPasswordEnvVarKey, "")
 
 	rmqConnectString := "amqp://mdai:" + rmqPassword + "@" + rmqEndpoint + "/"
-	logger.Info("rmqConnectString", zap.String("rmqConnectString", rmqConnectString))
 
 	hub, err := eventing.NewEventHub("amqp://mdai:"+rmqPassword+"@"+rmqEndpoint+"/", "mdai-events", logger)
 	if err != nil {
