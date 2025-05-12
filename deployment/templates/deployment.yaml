@@ -26,6 +26,8 @@ spec:
           value: "{{ .Values.auditStreamExpiryMs }}"
         - name: OTEL_EXPORTER_OTLP_ENDPOINT
           value: "{{ .Values.otelExporterOtlpEndpoint }}"
+        - name: OTEL_SDK_DISABLED
+          value: "{{ .Values.otelSdkDisabled }}"
         - name: VALKEY_PASSWORD
           valueFrom:
             secretKeyRef:

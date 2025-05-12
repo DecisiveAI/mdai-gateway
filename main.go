@@ -34,6 +34,7 @@ const (
 	valkeyPasswordEnvVarKey            = "VALKEY_PASSWORD"
 	valkeyAuditStreamExpiryMSEnvVarKey = "VALKEY_AUDIT_STREAM_EXPIRY_MS"
 	httpPortEnvVarKey                  = "HTTP_PORT"
+	otelSdkDisabledEnvVar              = "OTEL_SDK_DISABLED"
 
 	defaultHttpPort = "8081"
 
@@ -86,10 +87,11 @@ func main() {
 
 	ctx := context.Background()
 
+	otelSdkEnabled := os.Getenv(otelSdkDisabledEnvVar) != "true"
 	// Set up OpenTelemetry.
-	otelShutdown, err := setupOTelSDK(ctx, internalLogger)
+	otelShutdown, err := setupOTelSDK(ctx, internalLogger, otelSdkEnabled)
 	if err != nil {
-		logger.Error("Error setting up otel client", zap.Error(err))
+		logger.Error("Error setting up OpenTelemetry SDK. Set "+otelSdkDisabledEnvVar+" to \"true\" to bypass this.", zap.Error(err))
 		return
 	}
 	defer func() {
