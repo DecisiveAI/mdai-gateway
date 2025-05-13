@@ -35,6 +35,7 @@ const (
 	valkeyAuditStreamExpiryMSEnvVarKey = "VALKEY_AUDIT_STREAM_EXPIRY_MS"
 	httpPortEnvVarKey                  = "HTTP_PORT"
 	otelSdkDisabledEnvVar              = "OTEL_SDK_DISABLED"
+	otelExporterOtlpEndpointEnvVar     = "OTEL_EXPORTER_OTLP_ENDPOINT"
 
 	defaultHttpPort = "8081"
 
@@ -86,8 +87,12 @@ func main() {
 	)
 
 	ctx := context.Background()
-
-	otelSdkEnabled := os.Getenv(otelSdkDisabledEnvVar) != "true"
+	otelSdkEnabledStr := os.Getenv(otelSdkDisabledEnvVar)
+	otelSdkEnabled := otelSdkEnabledStr != "true"
+	otlpEndpointStr := os.Getenv(otelExporterOtlpEndpointEnvVar)
+	if otelSdkEnabledStr == "" && otlpEndpointStr == "" {
+		logger.Warn("No OTLP endpoint is defined, but OTEL SDK is enabled. Please set either " + otelSdkDisabledEnvVar + " or " + otelExporterOtlpEndpointEnvVar + " environment variable. You will receive 'connection refused' logs until this is resolved.")
+	}
 	// Set up OpenTelemetry.
 	otelShutdown, err := setupOTelSDK(ctx, internalLogger, otelSdkEnabled)
 	if err != nil {
