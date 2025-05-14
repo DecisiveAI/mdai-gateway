@@ -26,7 +26,7 @@ type shutdownFunc func(context.Context) error
 
 // setupOTelSDK bootstraps the OpenTelemetry pipeline.
 // If it does not return an error, make sure to call shutdown for proper cleanup.
-func setupOTelSDK(ctx context.Context, internalLogger *zap.Logger) (shutdown shutdownFunc, err error) {
+func setupOTelSDK(ctx context.Context, internalLogger *zap.Logger, enabled bool) (shutdown shutdownFunc, err error) {
 	var shutdownFuncs []shutdownFunc
 
 	otel.SetErrorHandler(&ZapErrorHandler{logger: internalLogger})
@@ -41,6 +41,11 @@ func setupOTelSDK(ctx context.Context, internalLogger *zap.Logger) (shutdown shu
 		}
 		shutdownFuncs = nil
 		return err
+	}
+
+	if !enabled {
+		internalLogger.Info("OTEL SDK has been disabled with " + otelSdkDisabledEnvVar + " environment variable")
+		return shutdown, nil
 	}
 
 	// handleErr calls shutdown for cleanup and makes sure that all errors are returned.
