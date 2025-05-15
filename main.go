@@ -241,7 +241,7 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 			}
 
 			key := variableUpdate.VariableRef
-			var processLabel = func(labels []string) error {
+			processLabel := func(labels []string) error {
 				for _, label := range labels {
 					value := alert.Labels[label]
 					found, err := dataAdapter.DoVariableUpdateAndLog(
