@@ -10,8 +10,6 @@ github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSs
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc h1:U9qPSI2PIWSS1VwoXQT9A3Wy9MM3WgvqSxFWenqJduM=
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
-github.com/decisiveai/mdai-data-core v0.1.0 h1:kqjlcPbMQDx7BIGiLdDtSIaF6bs20OQ5l5EvByB2MQg=
-github.com/decisiveai/mdai-data-core v0.1.0/go.mod h1:LKD8rR7Qat6mJ6vXUEALOmmQCKG7wTuF2m5nMGPWLlw=
 github.com/decisiveai/mdai-data-core v0.1.2 h1:x5hAg4EFKWeOcLtniDtppdrct2Z0NO95zbIcNfIuzJQ=
 github.com/decisiveai/mdai-data-core v0.1.2/go.mod h1:LKD8rR7Qat6mJ6vXUEALOmmQCKG7wTuF2m5nMGPWLlw=
 github.com/decisiveai/mdai-operator v0.1.11 h1:yb/f+X6PaFjmtwoUFyA2tHAnSR/X7p6pHOa2IJIguE8=

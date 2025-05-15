@@ -245,7 +245,9 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 			// next time, valkeyKeyKey!
 			valkeyKey := variableUpdate.VariableRef
 
-			if err := auditAdapter.InsertAuditLogEventFromEvent(ctx, auditAdapter.CreateHubEvent(relevantLabels, alert)); err != nil {
+			mdaiHubEvent := auditAdapter.CreateHubEvent(relevantLabels, alert)
+			logger.Info("AUDIT: Updated variable", zap.Any("mdaiHubEvent", mdaiHubEvent))
+			if err := auditAdapter.InsertAuditLogEventFromEvent(ctx, mdaiHubEvent); err != nil {
 				valkeyErrors = errors.Join(valkeyErrors, err)
 			}
 
