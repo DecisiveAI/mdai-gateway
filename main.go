@@ -146,11 +146,15 @@ func main() {
 
 	auditAdapter := audit.NewAuditAdapter(zapr.NewLogger(logger), valkeyClient, valkeyAuditStreamExpiry)
 
-	http.HandleFunc("/alerts", handleAlertsPost(ctx, valkeyClient))
-	http.HandleFunc("/events", auditAdapter.HandleEventsGet(ctx))
+	router := http.NewServeMux()
+
+	router.HandleFunc("POST /alerts", handleAlertsPost(ctx, valkeyClient))
+	router.HandleFunc("GET /events", auditAdapter.HandleEventsGet(ctx))
+	router.HandleFunc("GET /variables/{hub}/", HandleListVariables(ctx))
+	router.HandleFunc("GET /variables/", HandleListVariables(ctx))
 
 	logger.Info("Starting server", zap.String("address", ":"+httpPort))
-	logger.Fatal("failed to start server", zap.Error(http.ListenAndServe(":"+httpPort, nil)))
+	logger.Fatal("failed to start server", zap.Error(http.ListenAndServe(":"+httpPort, router)))
 }
 
 func getEnvVariableWithDefault(key, defaultValue string) string {
