@@ -243,7 +243,9 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 			}
 
 			dataAdapter := datacore.NewValkeyAdapter(valkeyClient, zapr.NewLogger(logger), hubName)
-			if err := auditAdapter.InsertAuditLogEventFromEvent(ctx, auditAdapter.CreateHubEvent(relevantLabels, alert)); err != nil {
+			mdaiHubEvent := auditAdapter.CreateHubEvent(relevantLabels, alert)
+			logHubEvent(mdaiHubEvent)
+			if err := auditAdapter.InsertAuditLogEventFromEvent(ctx, mdaiHubEvent); err != nil {
 				valkeyErrors = errors.Join(valkeyErrors, err)
 			}
 
@@ -298,4 +300,20 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 		w.WriteHeader(http.StatusOK)
 		_, _ = fmt.Fprintf(w, `{"success": "variable(s) updated"}`)
 	}
+}
+
+func logHubEvent(mdaiHubEvent audit.MdaiHubEvent) {
+	// TODO: 🤢 make an iterable type or log field maker in data core for MdaiHubEvent
+	hubEventVals := []zap.Field{
+		zap.String("mdai-logstream", "audit"),
+		zap.String("hubName", mdaiHubEvent.HubName),
+		zap.String("event", mdaiHubEvent.Event),
+		zap.String("status", mdaiHubEvent.Status),
+		zap.String("type", mdaiHubEvent.Type),
+		zap.String("expression", mdaiHubEvent.Expression),
+		zap.String("metricName", mdaiHubEvent.MetricName),
+		zap.String("value", mdaiHubEvent.Value),
+		zap.String("relevantLabelValues", mdaiHubEvent.RelevantLabelValues),
+	}
+	logger.Info("AUDIT: Updated variable", hubEventVals...)
 }
