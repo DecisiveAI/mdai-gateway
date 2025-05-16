@@ -303,15 +303,17 @@ func handleAlertsPost(ctx context.Context, valkeyClient valkey.Client) http.Hand
 }
 
 func logHubEvent(mdaiHubEvent audit.MdaiHubEvent) {
-	hubEventVals := []zap.Field{zap.String("mdai-logstream", "audit")}
 	// TODO: 🤢 make an iterable type or log field maker in data core for MdaiHubEvent
-	hubEventVals = append(hubEventVals, zap.String("hubName", mdaiHubEvent.HubName))
-	hubEventVals = append(hubEventVals, zap.String("event", mdaiHubEvent.Event))
-	hubEventVals = append(hubEventVals, zap.String("status", mdaiHubEvent.Status))
-	hubEventVals = append(hubEventVals, zap.String("type", mdaiHubEvent.Type))
-	hubEventVals = append(hubEventVals, zap.String("expression", mdaiHubEvent.Expression))
-	hubEventVals = append(hubEventVals, zap.String("metricName", mdaiHubEvent.MetricName))
-	hubEventVals = append(hubEventVals, zap.String("value", mdaiHubEvent.Value))
-	hubEventVals = append(hubEventVals, zap.String("relevantLabelValues", mdaiHubEvent.RelevantLabelValues))
+	hubEventVals := []zap.Field{
+		zap.String("mdai-logstream", "audit"),
+		zap.String("hubName", mdaiHubEvent.HubName),
+		zap.String("event", mdaiHubEvent.Event),
+		zap.String("status", mdaiHubEvent.Status),
+		zap.String("type", mdaiHubEvent.Type),
+		zap.String("expression", mdaiHubEvent.Expression),
+		zap.String("metricName", mdaiHubEvent.MetricName),
+		zap.String("value", mdaiHubEvent.Value),
+		zap.String("relevantLabelValues", mdaiHubEvent.RelevantLabelValues),
+	}
 	logger.Info("AUDIT: Updated variable", hubEventVals...)
 }
