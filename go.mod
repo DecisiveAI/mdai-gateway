@@ -4,8 +4,7 @@ go 1.23.4
 
 require (
 	github.com/cenkalti/backoff/v5 v5.0.2
-	github.com/decisiveai/event-hub-poc v0.0.0-20250425161403-470dc0c64509
-	github.com/decisiveai/mdai-data-core v0.1.0
+	github.com/decisiveai/mdai-data-core v0.1.3
 	github.com/decisiveai/mdai-operator v0.1.11
 	github.com/google/uuid v1.6.0
 	github.com/prometheus/alertmanager v0.28.1
