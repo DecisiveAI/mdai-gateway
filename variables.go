@@ -5,43 +5,28 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"os"
 
+	"github.com/go-logr/zapr"
+	"github.com/valkey-io/valkey-go"
 	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/tools/clientcmd"
+
+	datacore "github.com/decisiveai/mdai-data-core/variables"
 )
 
 const manualEnvConfigMapNamePostfix = "-manual-variables"
 
-// getConfiguredManualVariables  reurns a map of Hub names to their corresponding ManualVariables:Types
-func getConfiguredManualVariables(ctx context.Context) (map[string]any, error) {
-	//config, err := rest.InClusterConfig()
-	kubeconfig, err := os.UserHomeDir()
-	if err != nil {
-		logger.Error("Failed to load config", zap.Error(err))
-		return nil, err
-	}
-
-	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig+"/.kube/config")
-	if err != nil {
-		logger.Error("Failed to build k8s config", zap.Error(err))
-		return nil, err
-	}
-	client, err := dynamic.NewForConfig(config)
-	if err != nil {
-		logger.Error("Failed to create k8s dynamic client", zap.Error(err))
-		return nil, err
-	}
+// getConfiguredManualVariables  returns a map of Hub names to their corresponding ManualVariables:Types
+func getConfiguredManualVariables(ctx context.Context, k8sClient dynamic.Interface) (map[string]any, error) {
 	gvrCR := schema.GroupVersionResource{
 		Group:    "hub.mydecisive.ai",
 		Version:  "v1",
 		Resource: "mdaihubs",
 	}
-	hubs, err := client.Resource(gvrCR).List(ctx, v1.ListOptions{})
+	hubs, err := k8sClient.Resource(gvrCR).List(ctx, v1.ListOptions{})
 	if err != nil {
 		panic(err)
 	}
@@ -51,7 +36,7 @@ func getConfiguredManualVariables(ctx context.Context) (map[string]any, error) {
 		Resource: "configmaps",
 	}
 
-	configMaps, err := client.Resource(gvrConfigMap).List(ctx, v1.ListOptions{})
+	configMaps, err := k8sClient.Resource(gvrConfigMap).List(ctx, v1.ListOptions{})
 	if err != nil {
 		logger.Error("Failed to list ConfigMap", zap.Error(err))
 		return nil, err
@@ -75,21 +60,23 @@ func getConfiguredManualVariables(ctx context.Context) (map[string]any, error) {
 	return hubMap, nil
 }
 
-func HandleListVariables(ctx context.Context) http.HandlerFunc {
+func HandleListVariables(ctx context.Context, k8sClient dynamic.Interface) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var response any
 		var httpStatus = http.StatusOK
 
-		hubsVariables, err := getConfiguredManualVariables(ctx)
+		hubsVariables, err := getConfiguredManualVariables(ctx, k8sClient)
 		if err != nil && hubsVariables == nil {
 			httpStatus = http.StatusInternalServerError
+			WriteJSONResponse(w, httpStatus, response)
+			return
 		}
 
-		hub := r.PathValue("hub")
-		if hub == "" {
+		hubName := r.PathValue("hub")
+		if hubName == "" {
 			response = hubsVariables
 		} else {
-			if hubVariables := hubsVariables[hub]; hubVariables != nil {
+			if hubVariables := hubsVariables[hubName]; hubVariables != nil {
 				response = hubVariables
 			}
 		}
@@ -97,6 +84,64 @@ func HandleListVariables(ctx context.Context) http.HandlerFunc {
 
 	}
 
+}
+
+func HandleGetVariables(ctx context.Context, valkeyClient valkey.Client, k8sClient dynamic.Interface) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var response any
+
+		hubsVariables, err := getConfiguredManualVariables(ctx, k8sClient)
+		if err != nil && hubsVariables == nil {
+			WriteJSONResponse(w, http.StatusInternalServerError, response)
+			return
+		}
+		hubName := r.PathValue("hub")
+		varName := r.PathValue("var")
+		// TODO: implement all variables handling (?)
+		if hubName == "" || varName == "" {
+			WriteJSONResponse(w, http.StatusBadRequest, "Missing hub or variable name")
+			return
+		}
+
+		valkeyAdapter := datacore.NewValkeyAdapter(valkeyClient, zapr.NewLogger(logger), hubName)
+		hub := hubsVariables[hubName]
+		if hub == nil {
+			WriteJSONResponse(w, http.StatusBadRequest, "no hub found")
+			return
+		}
+		varType := hub.(map[string]string)[varName]
+		if hub == nil {
+			WriteJSONResponse(w, http.StatusBadRequest, "no variable found")
+			return
+		}
+		var (
+			valkeyValue any
+			found       = true
+		)
+		switch varType {
+		case "set":
+			{
+				valkeyValue, err = valkeyAdapter.GetSetAsStringSlice(ctx, varName)
+			}
+		case "map":
+			{
+				valkeyValue, err = valkeyAdapter.GetMap(ctx, varName)
+			}
+		case "string", "int", "boolean":
+			{
+				valkeyValue, found, err = valkeyAdapter.GetString(ctx, varName)
+			}
+		}
+		if err != nil || !found {
+			WriteJSONResponse(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		response = map[string]any{
+			varName: valkeyValue,
+		}
+		WriteJSONResponse(w, http.StatusOK, response)
+
+	}
 }
 
 func WriteJSONResponse(w http.ResponseWriter, status int, v any) error {

@@ -17,6 +17,8 @@ import (
 	"github.com/prometheus/alertmanager/template"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/tools/clientcmd"
 
 	"go.opentelemetry.io/contrib/bridges/otelzap"
 
@@ -146,12 +148,28 @@ func main() {
 
 	auditAdapter := audit.NewAuditAdapter(zapr.NewLogger(logger), valkeyClient, valkeyAuditStreamExpiry)
 
+	// create k8s client
+	//config, err := rest.InClusterConfig()
+	kubeconfig, err := os.UserHomeDir()
+	if err != nil {
+		logger.Error("Failed to load k8s config", zap.Error(err))
+		return
+	}
+
+	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig+"/.kube/config")
+	if err != nil {
+		logger.Error("Failed to build k8s config", zap.Error(err))
+		return
+	}
+	k8sClient, err := dynamic.NewForConfig(config)
+
 	router := http.NewServeMux()
 
 	router.HandleFunc("POST /alerts", handleAlertsPost(ctx, valkeyClient))
 	router.HandleFunc("GET /events", auditAdapter.HandleEventsGet(ctx))
-	router.HandleFunc("GET /variables/{hub}/", HandleListVariables(ctx))
-	router.HandleFunc("GET /variables/", HandleListVariables(ctx))
+	router.HandleFunc("GET /variables/list/hub/{hub}/", HandleListVariables(ctx, k8sClient))
+	router.HandleFunc("GET /variables/list/", HandleListVariables(ctx, k8sClient))
+	router.HandleFunc("GET /variables/values/hub/{hub}/var/{var}/", HandleGetVariables(ctx, valkeyClient, k8sClient))
 
 	logger.Info("Starting server", zap.String("address", ":"+httpPort))
 	logger.Fatal("failed to start server", zap.Error(http.ListenAndServe(":"+httpPort, router)))
