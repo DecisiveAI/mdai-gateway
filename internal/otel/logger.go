@@ -1,8 +1,9 @@
-package main
+package otel
 
 import (
 	"context"
 	"errors"
+
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
@@ -10,6 +11,10 @@ import (
 	"go.opentelemetry.io/otel/sdk/log"
 	"go.opentelemetry.io/otel/sdk/resource"
 	"go.uber.org/zap"
+)
+
+const (
+	otelSdkDisabledEnvVar = "OTEL_SDK_DISABLED"
 )
 
 type ZapErrorHandler struct {
@@ -22,12 +27,16 @@ func (errorHandler ZapErrorHandler) Handle(err error) {
 	}
 }
 
-type shutdownFunc func(context.Context) error
+type ShutdownFunc func(context.Context) error
 
-// setupOTelSDK bootstraps the OpenTelemetry pipeline.
+// SetupOTelSDK bootstraps the OpenTelemetry pipeline.
 // If it does not return an error, make sure to call shutdown for proper cleanup.
-func setupOTelSDK(ctx context.Context, internalLogger *zap.Logger, enabled bool) (shutdown shutdownFunc, err error) {
-	var shutdownFuncs []shutdownFunc
+func SetupOTelSDK(ctx context.Context, internalLogger *zap.Logger, enabled bool) (ShutdownFunc, error) {
+	var (
+		shutdownFuncs []ShutdownFunc
+		err           error
+		shutdown      ShutdownFunc
+	)
 
 	otel.SetErrorHandler(&ZapErrorHandler{logger: internalLogger})
 
@@ -72,12 +81,12 @@ func setupOTelSDK(ctx context.Context, internalLogger *zap.Logger, enabled bool)
 	loggerProvider, err := newLoggerProvider(ctx, eventHandlerResource)
 	if err != nil {
 		handleErr(err)
-		return
+		return shutdown, err
 	}
 	shutdownFuncs = append(shutdownFuncs, loggerProvider.Shutdown)
 	global.SetLoggerProvider(loggerProvider)
 
-	return
+	return shutdown, nil
 }
 
 func newLoggerProvider(ctx context.Context, resource *resource.Resource) (*log.LoggerProvider, error) {

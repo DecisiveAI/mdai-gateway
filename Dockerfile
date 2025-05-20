@@ -1,11 +1,11 @@
-FROM --platform=$BUILDPLATFORM golang:1.23-bookworm AS builder
+FROM --platform=$BUILDPLATFORM golang:1.24-bookworm AS builder
 ARG TARGETOS
 ARG TARGETARCH
-ENV GOPRIVATE=github.com/decisiveai/mdai-operator
+ENV GOPRIVATE=github.com/decisiveai/mdai-operator,github.com/decisiveai/mdai-data-core
 WORKDIR /opt/event-handler-webservice
 
 COPY . .
-RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -mod=vendor -ldflags="-w -s" -o /event-handler-webservice .
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -mod=vendor -ldflags="-w -s" -o /event-handler-webservice ./cmd/event-handler-webservice
 
 FROM gcr.io/distroless/static-debian12
 WORKDIR /

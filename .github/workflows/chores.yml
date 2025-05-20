@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  GOPRIVATE: github.com/decisiveai/opentelemetry-operator
+  GOPRIVATE: github.com/decisiveai/mdai-operator,github.com/decisiveai/mdai-data-core
   TOKEN: ${{ secrets.TOKEN_OPERATOR }}
 
 jobs:
@@ -31,10 +31,10 @@ jobs:
           go-version-file: go.mod
 
       - name: Run linter
-        uses: golangci/golangci-lint-action@v7
+        uses: golangci/golangci-lint-action@v8
         with:
           install-mode: "binary"
-          version: v2.0.2
+          version: v2.1.6
 
   check-go-file-changes:
     name: Check if Go files changed
