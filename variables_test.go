@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/decisiveai/mdai-data-core/variables"
@@ -14,7 +17,21 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/dynamic/fake"
+)
+
+var (
+	mdaiHubGVR = schema.GroupVersionResource{
+		Group:    "hub.mydecisive.ai",
+		Version:  "v1",
+		Resource: "mdaihubs",
+	}
+	configMapGVR = schema.GroupVersionResource{
+		Group:    "",
+		Version:  "v1",
+		Resource: "configmaps",
+	}
 )
 
 func newAdapterWithMock(t *testing.T) (*ValkeyAdapter.ValkeyAdapter, *vmock.Client, context.Context, *gomock.Controller) {
@@ -24,20 +41,25 @@ func newAdapterWithMock(t *testing.T) (*ValkeyAdapter.ValkeyAdapter, *vmock.Clie
 	return adapter, client, context.Background(), ctrl
 }
 
+func newFakeDynamicClient(mdaiHub *unstructured.Unstructured, configMap *unstructured.Unstructured) dynamic.Interface {
+	scheme := runtime.NewScheme()
+	listKinds := map[schema.GroupVersionResource]string{
+		mdaiHubGVR:   "MdaiHubList",
+		configMapGVR: "ConfigMapList",
+	}
+	dynClient := fake.NewSimpleDynamicClientWithCustomListKinds(
+		scheme,
+		listKinds,
+		mdaiHub,
+		configMap,
+	)
+
+	return dynClient
+}
+
 func TestGetConfiguredManualVariables(t *testing.T) {
 
 	ctx := context.TODO()
-
-	mdaiHubGVR := schema.GroupVersionResource{
-		Group:    "hub.mydecisive.ai",
-		Version:  "v1",
-		Resource: "mdaihubs",
-	}
-	configMapGVR := schema.GroupVersionResource{
-		Group:    "",
-		Version:  "v1",
-		Resource: "configmaps",
-	}
 
 	mdaiHub := &unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -60,30 +82,16 @@ func TestGetConfiguredManualVariables(t *testing.T) {
 				"namespace": "mdai",
 			},
 			"data": map[string]interface{}{
-				"ATTRIBUTES":                "{}",
-				"ATTRIBUTES_MANUAL":         "{}",
-				"attrib.1":                  "value1",
-				"attrib.2":                  "value2",
-				"attrib.3":                  "value3",
-				"MANUAL_SERVICE_FILTER":     "man_single_service",
-				"SERVICE_ALERTED_MANAUL":    "true",
-				"SERVICE_LIST":              "",
-				"SERVICE_LIST_MAN":          "man_service_1|man_service_2|man_service_3",
-				"SEVERITY_FILTERS_BY_LEVEL": "{}",
-				"SEVERITY_NUMBER_MANUAL":    "3",
+				"any_service_alerted_man": "boolean",
+				"attribute_map_manual":    "map",
+				"service_list_manual":     "set",
+				"service_manual":          "string",
+				"severity_number_man":     "int",
 			},
 		},
 	}
 
-	scheme := runtime.NewScheme()
-	listKinds := map[schema.GroupVersionResource]string{
-		mdaiHubGVR:   "MdaiHubList",
-		configMapGVR: "ConfigMapList",
-	}
-
-	dynClient := fake.NewSimpleDynamicClientWithCustomListKinds(
-		scheme,
-		listKinds,
+	dynClient := newFakeDynamicClient(
 		mdaiHub,
 		configMap,
 	)
@@ -110,17 +118,11 @@ func TestGetConfiguredManualVariables(t *testing.T) {
 	assert.Equal(t, 1, len(hubMap))
 	// go through variables
 	hubVars := hubMap["mdaihub-sample"].(map[string]string)
-	assert.Equal(t, "{}", hubVars["ATTRIBUTES"])
-	assert.Equal(t, "{}", hubVars["ATTRIBUTES_MANUAL"])
-	assert.Equal(t, "value1", hubVars["attrib.1"])
-	assert.Equal(t, "value2", hubVars["attrib.2"])
-	assert.Equal(t, "value3", hubVars["attrib.3"])
-	assert.Equal(t, "man_single_service", hubVars["MANUAL_SERVICE_FILTER"])
-	assert.Equal(t, "true", hubVars["SERVICE_ALERTED_MANAUL"])
-	assert.Equal(t, "", hubVars["SERVICE_LIST"])
-	assert.Equal(t, "man_service_1|man_service_2|man_service_3", hubVars["SERVICE_LIST_MAN"])
-	assert.Equal(t, "{}", hubVars["SEVERITY_FILTERS_BY_LEVEL"])
-	assert.Equal(t, "3", hubVars["SEVERITY_NUMBER_MANUAL"])
+	assert.Equal(t, "boolean", hubVars["any_service_alerted_man"])
+	assert.Equal(t, "map", hubVars["attribute_map_manual"])
+	assert.Equal(t, "set", hubVars["service_list_manual"])
+	assert.Equal(t, "string", hubVars["service_manual"])
+	assert.Equal(t, "int", hubVars["severity_number_man"])
 
 	// Test valkey values
 	adapter, client, ctx, ctrl := newAdapterWithMock(t)
@@ -188,4 +190,136 @@ func TestGetConfiguredManualVariables(t *testing.T) {
 	assert.True(t, found)
 	assert.Equal(t, "3", gotInt)
 
+}
+
+func TestHandleListVariables_ListHub(t *testing.T) {
+	ctx := context.TODO()
+	mdaiHub := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "hub.mydecisive.ai/v1",
+			"kind":       "MdaiHub",
+			"metadata": map[string]interface{}{
+				"name":      "mdaihub-sample",
+				"namespace": "mdai",
+			},
+			"spec": map[string]interface{}{},
+		},
+	}
+
+	configMap := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "ConfigMap",
+			"metadata": map[string]interface{}{
+				"name":      "mdaihub-sample-manual-variables",
+				"namespace": "mdai",
+			},
+			"data": map[string]interface{}{
+				"any_service_alerted_man": "boolean",
+				"attribute_map_manual":    "map",
+				"service_list_manual":     "set",
+				"service_manual":          "string",
+				"severity_number_man":     "int",
+			},
+		},
+	}
+	dynClient := newFakeDynamicClient(
+		mdaiHub,
+		configMap,
+	)
+
+	handler := HandleListVariables(ctx, dynClient)
+
+	//  GET /variables/list/hub/mdaihub-sample/
+	req := httptest.NewRequest(http.MethodGet, "/variables/list/mdaihub-sample/", nil)
+	rr := httptest.NewRecorder()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /variables/list/{hub}/", handler)
+
+	mux.ServeHTTP(rr, req)
+
+	if status := rr.Code; status != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, status)
+	}
+	t.Logf("Response: %s", rr.Body.String())
+
+	expected := map[string]string{
+		"any_service_alerted_man": "boolean",
+		"attribute_map_manual":    "map",
+		"service_list_manual":     "set",
+		"service_manual":          "string",
+		"severity_number_man":     "int",
+	}
+
+	var result map[string]string
+
+	err := json.Unmarshal(rr.Body.Bytes(), &result)
+	assert.Nil(t, err)
+	assert.Equal(t, expected, result)
+
+}
+
+func TestHandleListVariables_List(t *testing.T) {
+	ctx := context.TODO()
+	mdaiHub := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "hub.mydecisive.ai/v1",
+			"kind":       "MdaiHub",
+			"metadata": map[string]interface{}{
+				"name":      "mdaihub-sample",
+				"namespace": "mdai",
+			},
+			"spec": map[string]interface{}{},
+		},
+	}
+
+	configMap := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "ConfigMap",
+			"metadata": map[string]interface{}{
+				"name":      "mdaihub-sample-manual-variables",
+				"namespace": "mdai",
+			},
+			"data": map[string]interface{}{
+				"any_service_alerted_man": "boolean",
+				"attribute_map_manual":    "map",
+				"service_list_manual":     "set",
+				"service_manual":          "string",
+				"severity_number_man":     "int",
+			},
+		},
+	}
+	dynClient := newFakeDynamicClient(
+		mdaiHub,
+		configMap,
+	)
+
+	handler := HandleListVariables(ctx, dynClient)
+
+	//  GET /variables/list/
+	req := httptest.NewRequest(http.MethodGet, "/variables/list/", nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if status := rr.Code; status != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, status)
+	}
+
+	expected := map[string]map[string]string{
+		"mdaihub-sample": {
+			"any_service_alerted_man": "boolean",
+			"attribute_map_manual":    "map",
+			"service_list_manual":     "set",
+			"service_manual":          "string",
+			"severity_number_man":     "int",
+		}}
+
+	var result map[string]map[string]string
+
+	err := json.Unmarshal(rr.Body.Bytes(), &result)
+	assert.Nil(t, err)
+	assert.Equal(t, expected, result)
 }

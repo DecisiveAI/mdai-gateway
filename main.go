@@ -167,7 +167,7 @@ func main() {
 
 	router.HandleFunc("POST /alerts", handleAlertsPost(ctx, valkeyClient))
 	router.HandleFunc("GET /events", auditAdapter.HandleEventsGet(ctx))
-	router.HandleFunc("GET /variables/list/hub/{hub}/", HandleListVariables(ctx, k8sClient))
+	router.HandleFunc("GET /variables/list/{hub}/", HandleListVariables(ctx, k8sClient))
 	router.HandleFunc("GET /variables/list/", HandleListVariables(ctx, k8sClient))
 	router.HandleFunc("GET /variables/values/hub/{hub}/var/{var}/", HandleGetVariables(ctx, valkeyClient, k8sClient))
 
