@@ -15,5 +15,5 @@
 
 ## TODOs:
 1. Ensure audit and debug logging is in place as appropriate
-2. If we're keeping eventing, add retry logic to eventing connection
+2. reconnect for rabbitmq
 3. Version?

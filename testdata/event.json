@@ -1,0 +1,5 @@
+{
+  "name": "NoisyServiceFired",
+  "payload": "{ \"service_name\": \"service.foo.123\" }",
+  "source": "postman-test"
+}

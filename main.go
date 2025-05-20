@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
 	"github.com/decisiveai/event-handler-webservice/types"
 	"github.com/decisiveai/event-hub-poc/eventing"
+	"github.com/go-logr/zapr"
 	"github.com/prometheus/alertmanager/template"
 
 	"io"
@@ -34,10 +36,10 @@ const (
 	rabbitmqEndpointEnvVarKey = "RABBITMQ_ENDPOINT"
 	rabbitmqPasswordEnvVarKey = "RABBITMQ_PASSWORD"
 
-	httpPortEnvVarKey = "HTTP_PORT"
-	defaultHttpPort   = "8081"
-	otelSdkDisabledEnvVar              = "OTEL_SDK_DISABLED"
-	otelExporterOtlpEndpointEnvVar     = "OTEL_EXPORTER_OTLP_ENDPOINT"
+	httpPortEnvVarKey              = "HTTP_PORT"
+	defaultHttpPort                = "8081"
+	otelSdkDisabledEnvVar          = "OTEL_SDK_DISABLED"
+	otelExporterOtlpEndpointEnvVar = "OTEL_EXPORTER_OTLP_ENDPOINT"
 
 	mdaiHubEventHistoryStreamName = "mdai_hub_event_history"
 )
@@ -73,11 +75,6 @@ func init() {
 }
 
 func main() {
-	var (
-		valkeyClient valkey.Client
-		retryCount   int
-	)
-
 	ctx := context.Background()
 	otelSdkEnabledStr := os.Getenv(otelSdkDisabledEnvVar)
 	otelSdkEnabled := otelSdkEnabledStr != "true"
@@ -110,20 +107,62 @@ func main() {
 
 	}
 
-	operation := func() (string, error) {
+	valkeyClient := initValkey(ctx)
+	defer valkeyClient.Close()
+
+	hub := initRmq(ctx)
+	defer hub.Close()
+
+	http.HandleFunc("/events", handleEventsRoute(ctx, valkeyClient, hub))
+
+	logger.Info("Starting server", zap.String("address", ":"+httpPort))
+	logger.Fatal("failed to start server", zap.Error(http.ListenAndServe(":"+httpPort, nil)))
+}
+
+func initRmq(ctx context.Context) *eventing.EventHub {
+	retryCount := 0
+	connectToRmq := func() (*eventing.EventHub, error) {
+		rmqEndpoint := getEnvVariableWithDefault(rabbitmqEndpointEnvVarKey, "localhost:5672")
+		rmqPassword := getEnvVariableWithDefault(rabbitmqPasswordEnvVarKey, "")
+
+		hub, err := eventing.NewEventHub("amqp://mdai:"+rmqPassword+"@"+rmqEndpoint+"/", eventing.EventQueueName, logger)
+		if err != nil {
+			retryCount++
+			return nil, err
+		}
+		logger.Info("Successfully created EventHub", zap.String("rmqEndpoint", rmqEndpoint))
+		return hub, nil
+	}
+
+	notifyRmqFunc := func(err error, duration time.Duration) {
+		logger.Warn("failed to initialize rmq. retrying...", zap.Int("retry_count", retryCount), zap.Duration("duration", duration))
+	}
+	hub, err := backoff.Retry(
+		ctx,
+		connectToRmq,
+		backoff.WithBackOff(backoff.NewExponentialBackOff()),
+		backoff.WithMaxElapsedTime(3*time.Minute),
+		backoff.WithNotify(notifyRmqFunc),
+	)
+	if err != nil {
+		logger.Fatal("failed to connect to rmq", zap.Error(err))
+	}
+	return hub
+}
+
+func initValkey(ctx context.Context) valkey.Client {
+	retryCount := 0
+	connectToValkey := func() (valkey.Client, error) {
 		var err error
-		valKeyEndpoint := getEnvVariableWithDefault(valkeyEndpointEnvVarKey, "")
-		valkeyPassword := getEnvVariableWithDefault(valkeyPasswordEnvVarKey, "")
-		logger.Info("ValKey info", zap.String("endpoint", valKeyEndpoint), zap.String("password", valkeyPassword))
-		valkeyClient, err = valkey.NewClient(valkey.ClientOption{
-			InitAddress: []string{valKeyEndpoint},
-			Password:    valkeyPassword,
+		client, err := valkey.NewClient(valkey.ClientOption{
+			InitAddress: []string{getEnvVariableWithDefault(valkeyEndpointEnvVarKey, "mdai-valkey-primary.mdai.svc.cluster.local:6379")},
+			Password:    getEnvVariableWithDefault(valkeyPasswordEnvVarKey, "abc"),
 		})
 		if err != nil {
 			retryCount++
-			return "", err
+			return nil, err
 		}
-		return "", nil
+		return client, nil
 	}
 	exponentialBackoff := backoff.NewExponentialBackOff()
 	exponentialBackoff.InitialInterval = 5 * time.Second
@@ -132,31 +171,19 @@ func main() {
 		logger.Warn("failed to initialize valkey client. retrying...", zap.Int("retry_count", retryCount), zap.Duration("duration", duration))
 	}
 
-	if _, err := backoff.Retry(ctx, operation,
+	valkeyClient, err := backoff.Retry(
+		ctx,
+		connectToValkey,
 		backoff.WithBackOff(backoff.NewExponentialBackOff()),
 		backoff.WithMaxElapsedTime(3*time.Minute),
-		backoff.WithNotify(notifyFunc)); err != nil {
+		backoff.WithNotify(notifyFunc),
+	)
+
+	if err != nil {
 		logger.Fatal("failed to get valkey client", zap.Error(err))
 	}
 
-	rmqEndpoint := getEnvVariableWithDefault(rabbitmqEndpointEnvVarKey, "")
-	rmqPassword := getEnvVariableWithDefault(rabbitmqPasswordEnvVarKey, "")
-
-	rmqConnectString := "amqp://mdai:" + rmqPassword + "@" + rmqEndpoint + "/"
-
-	hub, err := eventing.NewEventHub(rmqConnectString, "mdai-events", logger)
-	logger.Info("connect string ", zap.String("url", rmqConnectString))
-	if err != nil {
-		logger.Fatal("Failed to create EventHub", zap.Error(err))
-	} else {
-		logger.Info("Successfully created EventHub", zap.String("rmqConnectString", rmqConnectString))
-	}
-	defer hub.Close()
-
-	http.HandleFunc("/events", handleEventsRoute(ctx, valkeyClient, hub))
-
-	logger.Info("Starting server", zap.String("address", ":"+httpPort))
-	logger.Fatal("failed to start server", zap.Error(http.ListenAndServe(":"+httpPort, nil)))
+	return valkeyClient
 }
 
 func getEnvVariableWithDefault(key, defaultValue string) string {
@@ -168,7 +195,7 @@ func getEnvVariableWithDefault(key, defaultValue string) string {
 func handleEventsRoute(ctx context.Context, valkeyClient valkey.Client, hub *eventing.EventHub) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
-			eventsMap, err := audit.NewAuditAdapter(logger, valkeyClient, valkeyAuditStreamExpiry).HandleEventsGet(ctx)
+			eventsMap, err := audit.NewAuditAdapter(zapr.NewLogger(logger), valkeyClient, valkeyAuditStreamExpiry).HandleEventsGet(ctx)
 			if err != nil {
 				logger.Error("failed to get events", zap.Error(err))
 				http.Error(w, "Unable to fetch history from Valkey", http.StatusInternalServerError)
