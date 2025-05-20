@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"io"
 	"log"
 	"net/http"
@@ -11,11 +10,11 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/valkey-io/valkey-go"
-
 	"github.com/stretchr/testify/require"
+	"github.com/valkey-io/valkey-go"
 	"github.com/valkey-io/valkey-go/mock"
 	"go.uber.org/mock/gomock"
+	"go.uber.org/zap/zaptest"
 )
 
 func TestMain(m *testing.M) {
@@ -49,22 +48,26 @@ func TestUpdateValkeyHandler(t *testing.T) {
 		successResponse = `{"success": "variable(s) updated"}`
 	)
 
-	ctx := context.TODO()
+	ctx := t.Context()
+
+	logger := zaptest.NewLogger(t)
+	//nolint:errcheck
+	defer logger.Sync()
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	valkeyClient := mock.NewClient(ctrl)
 
-	alertPostBody1, err := os.ReadFile("testdata/alert_post_body_1.json")
+	alertPostBody1, err := os.ReadFile("../../testdata/alert_post_body_1.json")
 	require.NoError(t, err)
-	alertPostBody2, err := os.ReadFile("testdata/alert_post_body_2.json")
+	alertPostBody2, err := os.ReadFile("../../testdata/alert_post_body_2.json")
 	require.NoError(t, err)
-	alertPostBody3, err := os.ReadFile("testdata/alert_post_body_3.json")
+	alertPostBody3, err := os.ReadFile("../../testdata/alert_post_body_3.json")
 	require.NoError(t, err)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/alerts", handleAlertsPost(ctx, valkeyClient))
+	mux.HandleFunc("/alerts", handleAlertsPost(ctx, logger, valkeyClient))
 
 	valkeyClient.EXPECT().Do(ctx,
 		XaddMatcher{labelValue: "service-a"},
@@ -94,11 +97,11 @@ func TestUpdateValkeyHandler(t *testing.T) {
 	mux.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusOK, rec.Code)
-	require.Equal(t, successResponse, rec.Body.String())
+	require.JSONEq(t, successResponse, rec.Body.String())
 
 	// one more time with different payload
 	mux = http.NewServeMux()
-	mux.HandleFunc("/alerts", handleAlertsPost(ctx, valkeyClient))
+	mux.HandleFunc("/alerts", handleAlertsPost(ctx, logger, valkeyClient))
 
 	valkeyClient.EXPECT().Do(ctx,
 		XaddMatcher{labelValue: "service-a"},
@@ -128,11 +131,11 @@ func TestUpdateValkeyHandler(t *testing.T) {
 	mux.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusOK, rec.Code)
-	require.Equal(t, successResponse, rec.Body.String())
+	require.JSONEq(t, successResponse, rec.Body.String())
 
 	// one more time to emulate a scenario when alert was re-created or renamed
 	mux = http.NewServeMux()
-	mux.HandleFunc("/alerts", handleAlertsPost(ctx, valkeyClient))
+	mux.HandleFunc("/alerts", handleAlertsPost(ctx, logger, valkeyClient))
 
 	valkeyClient.EXPECT().Do(ctx,
 		XaddMatcher{labelValue: "service-a"},
@@ -155,5 +158,5 @@ func TestUpdateValkeyHandler(t *testing.T) {
 	mux.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusOK, rec.Code)
-	require.Equal(t, successResponse, rec.Body.String())
+	require.JSONEq(t, successResponse, rec.Body.String())
 }
