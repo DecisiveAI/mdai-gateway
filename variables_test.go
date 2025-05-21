@@ -779,3 +779,67 @@ func TestHandleGetVariables_NonExistentVariable(t *testing.T) {
 	assert.Contains(t, rr.Body.String(), "Variable not found")
 
 }
+func TestHandleGetVariables_String_NoValue(t *testing.T) {
+	ctx := context.TODO()
+	mdaiHub := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "hub.mydecisive.ai/v1",
+			"kind":       "MdaiHub",
+			"metadata": map[string]interface{}{
+				"name":      "mdaihub-sample",
+				"namespace": "mdai",
+			},
+			"spec": map[string]interface{}{},
+		},
+	}
+
+	configMap := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "ConfigMap",
+			"metadata": map[string]interface{}{
+				"name":      "mdaihub-sample-manual-variables",
+				"namespace": "mdai",
+			},
+			"data": map[string]interface{}{
+				"service_manual": "string",
+			},
+		},
+	}
+	dynClient := newFakeDynamicClient(
+		mdaiHub,
+		configMap,
+	)
+
+	// Test valkey values
+	_, client, ctx, ctrl := newAdapterWithMock(t)
+	defer ctrl.Finish()
+	key := "variable/mdaihub-sample/service_manual"
+	client.EXPECT().
+		Do(ctx, vmock.Match("GET", key)).
+		Return(vmock.Result(
+			vmock.ValkeyNil(),
+		))
+
+	handler := HandleGetVariables(ctx, client, dynClient)
+
+	req := httptest.NewRequest(http.MethodGet, "/variables/values/hub/mdaihub-sample/var/service_manual/", nil)
+	rr := httptest.NewRecorder()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /variables/values/hub/{hubName}/var/{varName}/", handler)
+
+	mux.ServeHTTP(rr, req)
+
+	if status := rr.Code; status != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, status)
+	}
+
+	expected := map[string]string{"service_manual": ""}
+
+	var result map[string]string
+
+	err := json.Unmarshal(rr.Body.Bytes(), &result)
+	assert.Nil(t, err)
+	assert.Equal(t, expected, result)
+}

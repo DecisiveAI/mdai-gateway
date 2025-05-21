@@ -117,10 +117,8 @@ func HandleGetVariables(ctx context.Context, valkeyClient valkey.Client, k8sClie
 			WriteJSONResponse(w, http.StatusNotFound, "Variable not found")
 			return
 		}
-		var (
-			valkeyValue any
-			found       = true
-		)
+		var valkeyValue any
+
 		switch varType {
 		case "set":
 			{
@@ -132,10 +130,10 @@ func HandleGetVariables(ctx context.Context, valkeyClient valkey.Client, k8sClie
 			}
 		case "string", "int", "boolean":
 			{
-				valkeyValue, found, err = valkeyAdapter.GetString(ctx, varName)
+				valkeyValue, _, err = valkeyAdapter.GetString(ctx, varName)
 			}
 		}
-		if err != nil || !found {
+		if err != nil {
 			WriteJSONResponse(w, http.StatusInternalServerError, err.Error())
 			return
 		}
