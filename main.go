@@ -167,9 +167,9 @@ func main() {
 
 	router.HandleFunc("POST /alerts", handleAlertsPost(ctx, valkeyClient))
 	router.HandleFunc("GET /events", auditAdapter.HandleEventsGet(ctx))
-	router.HandleFunc("GET /variables/list/{hub}/", HandleListVariables(ctx, k8sClient))
+	router.HandleFunc("GET /variables/list/hub/{hubName}/", HandleListVariables(ctx, k8sClient))
 	router.HandleFunc("GET /variables/list/", HandleListVariables(ctx, k8sClient))
-	router.HandleFunc("GET /variables/values/hub/{hub}/var/{var}/", HandleGetVariables(ctx, valkeyClient, k8sClient))
+	router.HandleFunc("GET /variables/values/hub/{hubName}/var/{varName}/", HandleGetVariables(ctx, valkeyClient, k8sClient))
 
 	logger.Info("Starting server", zap.String("address", ":"+httpPort))
 	logger.Fatal("failed to start server", zap.Error(http.ListenAndServe(":"+httpPort, router)))

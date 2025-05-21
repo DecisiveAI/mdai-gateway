@@ -72,12 +72,15 @@ func HandleListVariables(ctx context.Context, k8sClient dynamic.Interface) http.
 			return
 		}
 
-		hubName := r.PathValue("hub")
+		hubName := r.PathValue("hubName")
 		if hubName == "" {
 			response = hubsVariables
 		} else {
 			if hubVariables := hubsVariables[hubName]; hubVariables != nil {
 				response = hubVariables
+			} else {
+				response = "Hub not found"
+				httpStatus = http.StatusNotFound
 			}
 		}
 		WriteJSONResponse(w, httpStatus, response)
@@ -95,8 +98,8 @@ func HandleGetVariables(ctx context.Context, valkeyClient valkey.Client, k8sClie
 			WriteJSONResponse(w, http.StatusInternalServerError, response)
 			return
 		}
-		hubName := r.PathValue("hub")
-		varName := r.PathValue("var")
+		hubName := r.PathValue("hubName")
+		varName := r.PathValue("varName")
 		// TODO: implement all variables handling (?)
 		if hubName == "" || varName == "" {
 			WriteJSONResponse(w, http.StatusBadRequest, "Missing hub or variable name")
@@ -106,12 +109,12 @@ func HandleGetVariables(ctx context.Context, valkeyClient valkey.Client, k8sClie
 		valkeyAdapter := datacore.NewValkeyAdapter(valkeyClient, zapr.NewLogger(logger), hubName)
 		hub := hubsVariables[hubName]
 		if hub == nil {
-			WriteJSONResponse(w, http.StatusBadRequest, "no hub found")
+			WriteJSONResponse(w, http.StatusNotFound, "Hub not found")
 			return
 		}
-		varType := hub.(map[string]string)[varName]
-		if hub == nil {
-			WriteJSONResponse(w, http.StatusBadRequest, "no variable found")
+		varType, ok := hub.(map[string]string)[varName]
+		if !ok {
+			WriteJSONResponse(w, http.StatusNotFound, "Variable not found")
 			return
 		}
 		var (
