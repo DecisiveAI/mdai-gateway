@@ -17,3 +17,4 @@
 1. Ensure audit and debug logging is in place as appropriate
 2. reconnect for rabbitmq
 3. Version?
+4. fix unit tests

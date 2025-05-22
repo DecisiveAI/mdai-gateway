@@ -280,7 +280,7 @@ func handlePrometheusAlert(w http.ResponseWriter, bodyBytes []byte, hub *eventin
 
 	successCount := 0
 	for _, event := range events {
-		if err := hub.PublishMessage(eventing.MdaiEvent(event)); err != nil {
+		if err := hub.PublishMessage(event); err != nil {
 			logger.Warn("Failed to publish event",
 				zap.String("event_name", event.Name),
 				zap.Error(err))
@@ -316,6 +316,12 @@ func handleMdaiEvent(w http.ResponseWriter, bodyBytes []byte, hub *eventing.Even
 	if event.Name == "" {
 		logger.Warn("Missing required field: name")
 		http.Error(w, "Missing required field: name", http.StatusBadRequest)
+		return
+	}
+
+	if event.HubName == "" {
+		logger.Warn("Missing required field: hubName")
+		http.Error(w, "Missing required field: hubName", http.StatusBadRequest)
 		return
 	}
 

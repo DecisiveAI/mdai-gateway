@@ -11,7 +11,9 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/decisiveai/event-hub-poc/eventing"
 	"github.com/valkey-io/valkey-go"
+	"go.uber.org/zap"
 
 	"github.com/stretchr/testify/require"
 	"github.com/valkey-io/valkey-go/mock"
@@ -64,7 +66,8 @@ func TestUpdateValkeyHandler(t *testing.T) {
 	require.NoError(t, err)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/events", handleEventsRoute(ctx, valkeyClient))
+	hub, _ := eventing.NewEventHub("test-connection-string", "test-queue", zap.NewExample()) // TODO mock the eventing.EventHub struct
+	mux.HandleFunc("/events", handleEventsRoute(ctx, valkeyClient, hub))
 
 	valkeyClient.EXPECT().Do(ctx,
 		XaddMatcher{labelValue: "service-a"},
@@ -98,7 +101,7 @@ func TestUpdateValkeyHandler(t *testing.T) {
 
 	// one more time with different payload
 	mux = http.NewServeMux()
-	mux.HandleFunc("/events", handleEventsRoute(ctx, valkeyClient))
+	mux.HandleFunc("/events", handleEventsRoute(ctx, valkeyClient, hub))
 
 	valkeyClient.EXPECT().Do(ctx,
 		XaddMatcher{labelValue: "service-a"},
@@ -132,7 +135,7 @@ func TestUpdateValkeyHandler(t *testing.T) {
 
 	// one more time to emulate a scenario when alert was re-created or renamed
 	mux = http.NewServeMux()
-	mux.HandleFunc("/events", handleEventsRoute(ctx, valkeyClient))
+	mux.HandleFunc("/events", handleEventsRoute(ctx, valkeyClient, hub))
 
 	valkeyClient.EXPECT().Do(ctx,
 		XaddMatcher{labelValue: "service-a"},

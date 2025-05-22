@@ -2,12 +2,12 @@ package types
 
 import (
 	"encoding/json"
-	"github.com/decisiveai/event-hub-poc/eventing"
-	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
-	"github.com/google/uuid"
-	"github.com/prometheus/alertmanager/template"
 	"log"
 	"sort"
+
+	"github.com/decisiveai/event-hub-poc/eventing"
+	"github.com/google/uuid"
+	"github.com/prometheus/alertmanager/template"
 )
 
 const (
@@ -16,11 +16,6 @@ const (
 	AlertName    = "alert_name"
 	Prometheus   = "prometheus"
 )
-
-type Config struct {
-	Evaluations []mdaiv1.Evaluation `json:"evaluations" yaml:"evaluations"`
-	Variables   []mdaiv1.Variable   `json:"variables" yaml:"variables"`
-}
 
 func CreateEventUuid() string {
 	id := uuid.New()
