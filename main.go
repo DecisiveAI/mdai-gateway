@@ -7,7 +7,7 @@ import (
 
 	"github.com/decisiveai/event-handler-webservice/types"
 	"github.com/decisiveai/event-hub-poc/eventing"
-	"github.com/go-logr/zapr"
+
 	"github.com/prometheus/alertmanager/template"
 
 	"io"
@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/go-logr/zapr"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
@@ -194,6 +195,7 @@ func getEnvVariableWithDefault(key, defaultValue string) string {
 }
 func handleEventsRoute(ctx context.Context, valkeyClient valkey.Client, hub *eventing.EventHub) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		logger.Info("handling request ", zap.Any("request", r))
 		if r.Method == http.MethodGet {
 			eventsMap, err := audit.NewAuditAdapter(zapr.NewLogger(logger), valkeyClient, valkeyAuditStreamExpiry).HandleEventsGet(ctx)
 			if err != nil {
