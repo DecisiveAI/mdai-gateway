@@ -18,12 +18,12 @@ jobs:
   lint:
     name: Lint on Ubuntu
     runs-on: ubuntu-latest
+    env:
+      GOPRIVATE: github.com/decisiveai
     steps:
       - name: Configure git for private modules
-        env:
-          TOKEN: ${{ secrets.TOKEN_OPERATOR }}
         run: |
-          git config --global url."https://user:${TOKEN}@github.com".insteadOf "https://github.com"
+          git config --global url."https://user:${{ secrets.TOKEN_OPERATOR }}@github.com".insteadOf "https://github.com"
 
       - name: Clone the code
         uses: actions/checkout@v4
@@ -33,11 +33,14 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Download dependencies
+        run: go mod download
+
       - name: Run linter
-        uses: golangci/golangci-lint-action@v7
+        uses: golangci/golangci-lint-action@v8
         with:
           install-mode: "binary"
-          version: v2.0.2
+          version: "latest"
 
   check-go-file-changes:
     name: Check if Go files changed
