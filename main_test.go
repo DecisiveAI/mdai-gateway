@@ -66,7 +66,7 @@ func TestUpdateValkeyHandler(t *testing.T) {
 	require.NoError(t, err)
 
 	mux := http.NewServeMux()
-	hub, _ := eventing.NewEventHub("test-connection-string", "test-queue", zap.NewExample(), eventing.DefaultReconnectConfig()) // TODO mock the eventing.EventHub struct
+	hub, _ := eventing.NewEventHub("test-connection-string", "test-queue", zap.NewExample()) // TODO mock the eventing.EventHub struct
 	mux.HandleFunc("/events", handleEventsRoute(ctx, valkeyClient, hub))
 
 	valkeyClient.EXPECT().Do(ctx,

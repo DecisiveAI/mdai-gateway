@@ -126,7 +126,7 @@ func initRmq(ctx context.Context) *eventing.EventHub {
 		rmqEndpoint := getEnvVariableWithDefault(rabbitmqEndpointEnvVarKey, "localhost:5672")
 		rmqPassword := getEnvVariableWithDefault(rabbitmqPasswordEnvVarKey, "")
 
-		hub, err := eventing.NewEventHub("amqp://mdai:"+rmqPassword+"@"+rmqEndpoint+"/", eventing.EventQueueName, logger, eventing.DefaultReconnectConfig())
+		hub, err := eventing.NewEventHub("amqp://mdai:"+rmqPassword+"@"+rmqEndpoint+"/", eventing.EventQueueName, logger)
 		if err != nil {
 			retryCount++
 			return nil, err
