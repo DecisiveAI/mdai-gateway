@@ -4,17 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-
-	"github.com/decisiveai/event-handler-webservice/types"
-	"github.com/decisiveai/event-hub-poc/eventing"
-
-	"github.com/prometheus/alertmanager/template"
-
 	"io"
 	"net/http"
 	"os"
 	"strconv"
 	"time"
+
+	"github.com/decisiveai/event-handler-webservice/types"
+	"github.com/decisiveai/event-hub-poc/eventing"
+
+	"github.com/prometheus/alertmanager/template"
 
 	"github.com/go-logr/zapr"
 	"go.uber.org/zap"
