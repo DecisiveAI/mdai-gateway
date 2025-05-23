@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  GOPRIVATE: github.com/decisiveai
+  GOPRIVATE: github.com/decisiveai/*
   TOKEN: ${{ secrets.TOKEN_OPERATOR }}
 
 jobs:
