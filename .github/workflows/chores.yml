@@ -20,7 +20,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Configure git for private modules
-        run: git config --global url."https://user:${TOKEN}@github.com".insteadOf "https://github.com"
+        run: |
+          git config --global url."https://user:${TOKEN}@github.com".insteadOf "https://github.com"
 
       - name: Clone the code
         uses: actions/checkout@v4
@@ -29,6 +30,9 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+
+      - name: Download dependencies
+        run: go mod download
 
       - name: Run linter
         uses: golangci/golangci-lint-action@v7
