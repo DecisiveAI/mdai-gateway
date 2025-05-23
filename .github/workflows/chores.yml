@@ -28,17 +28,13 @@ jobs:
       - name: Test GitHub API access
         run: |
           echo "Testing basic API access..."
-          curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/user
+          curl -H "Authorization: token ${TOKEN}" https://api.github.com/user
           echo -e "\nTesting org access..."
-          curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/orgs/decisiveai
+          curl -H "Authorization: token ${TOKEN}" https://api.github.com/orgs/decisiveai
 
       - name: Configure git for private modules
         run: |
-          git config --global url."https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "https://github.com/"
-
-      - name: Test git access
-        run: |
-          git ls-remote https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/decisiveai/event-hub-poc.git
+          git config --global url."https://x-access-token:${TOKEN}@github.com/".insteadOf "https://github.com/"
 
       - name: Clone the code
         uses: actions/checkout@v4
