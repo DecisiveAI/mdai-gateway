@@ -47,17 +47,15 @@ func AdaptPrometheusAlertToMdaiEvents(payload template.Data) []eventing.MdaiEven
 			log.Fatal(err)
 		}
 
-		var Id string
-		if alert.Fingerprint != "" {
-			Id = alert.Fingerprint
-		} else {
-			Id = CreateEventUuid()
+		id := alert.Fingerprint
+		if id == "" {
+			id = CreateEventUuid()
 		}
 
 		mdaiEvent := eventing.MdaiEvent{
 			Name:      annotations[AlertName] + "." + status,
 			Source:    Prometheus,
-			Id:        Id,
+			Id:        id,
 			Timestamp: alert.StartsAt,
 			Payload:   string(payloadBytes),
 		}
