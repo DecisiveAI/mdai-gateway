@@ -21,38 +21,13 @@ jobs:
     env:
       GOPRIVATE: github.com/decisiveai
     steps:
-      - name: Generate a token
-        id: generate-token
-        uses: actions/create-github-app-token@v1
-        with:
-          app-id: ${{ vars.PLATFORM_HEALTH_ACCESS_APP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
-      - name: Debug token and access
-        env:
-          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
-        run: |
-          echo "Token starts with: $(echo $GH_TOKEN | cut -c1-10)..."
-          curl -H "Authorization: Bearer $GH_TOKEN" https://api.github.com/user
-          curl -H "Authorization: Bearer $GH_TOKEN" https://api.github.com/repos/decisiveai/event-hub-poc
-
       - name: Configure git for private modules
-        env:
-          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
         run: |
-          git config --global url."https://x-access-token:$GH_TOKEN@github.com/".insteadOf "https://github.com/"
-          git config --global --list | grep url
-
-      - name: Test git access with token
-        env:
-          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
-        run: |
-          git ls-remote https://x-access-token:$GH_TOKEN@github.com/decisiveai/event-hub-poc.git
+          git config --global url."https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "https://github.com/"
 
       - name: Test git access
-        env:
-          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
         run: |
-          git ls-remote https://github.com/decisiveai/event-hub-poc.git
+          git ls-remote https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/decisiveai/event-hub-poc.git
 
       - name: Clone the code
         uses: actions/checkout@v4
