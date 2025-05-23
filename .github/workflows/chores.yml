@@ -26,6 +26,9 @@ jobs:
       GOPRIVATE: github.com/decisiveai/*
       TOKEN: ${{ secrets.TOKEN_OPERATOR }}
     steps:
+      - name: Clone the code
+        uses: actions/checkout@v4
+
       - name: Test GitHub API access
         run: |
           echo "Testing basic API access..."
@@ -36,9 +39,6 @@ jobs:
       - name: Configure git for private modules
         run: |
           git config --global url."https://user:${TOKEN}@github.com/".insteadOf "https://github.com/"
-
-      - name: Clone the code
-        uses: actions/checkout@v4
 
       - name: Setup Go
         uses: actions/setup-go@v5
