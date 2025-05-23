@@ -23,7 +23,7 @@ jobs:
       repository-projects: read
       packages: read
     env:
-      GOPRIVATE: github.com/decisiveai
+      GOPRIVATE: github.com/decisiveai/*
     steps:
       - name: Test GitHub API access
         run: |
