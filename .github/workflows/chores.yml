@@ -32,7 +32,7 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
         run: |
-          git config --global url."https://user:${{ env.GH_TOKEN }}@github.com".insteadOf "https://github.com"
+          git config --global url."https://x-access-token:${{ env.GH_TOKEN }}@github.com/".insteadOf "https://github.com/"
 
       - name: Clone the code
         uses: actions/checkout@v4
