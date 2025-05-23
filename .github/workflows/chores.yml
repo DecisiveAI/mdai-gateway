@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  GOPRIVATE: github.com/decisiveai/opentelemetry-operator
+  GOPRIVATE: github.com/decisiveai/*
   TOKEN: ${{ secrets.TOKEN_OPERATOR }}
 
 jobs:
@@ -21,9 +21,6 @@ jobs:
     steps:
       - name: Configure git for private modules
         run: git config --global url."https://user:${TOKEN}@github.com".insteadOf "https://github.com"
-
-      - name: Set GOPRIVATE
-        run: echo "GOPRIVATE=github.com/decisiveai/*" >> $GITHUB_ENV
 
       - name: Clone the code
         uses: actions/checkout@v4

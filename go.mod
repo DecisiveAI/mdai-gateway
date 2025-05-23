@@ -6,8 +6,8 @@ toolchain go1.24.3
 
 require (
 	github.com/cenkalti/backoff/v5 v5.0.2
-	github.com/decisiveai/event-hub-poc v0.0.0-20250425161403-470dc0c64509
-	github.com/decisiveai/mdai-data-core v0.1.4-0.20250522133232-4aa0a4c57198
+	github.com/decisiveai/event-hub-poc v0.0.0-20250522185157-f691e113b7e4
+	github.com/decisiveai/mdai-data-core v0.1.5-0.20250522172954-93bd52ab8515
 	github.com/go-logr/zapr v1.3.0
 	github.com/google/uuid v1.6.0
 	github.com/prometheus/alertmanager v0.28.1
@@ -56,7 +56,3 @@ require (
 	google.golang.org/protobuf v1.36.6 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-replace github.com/decisiveai/mdai-data-core => github.com/decisiveai/mdai-data-core v.0.0.11-20250523000000-93bd52ab8515
-
-replace github.com/decisiveai/event-hub-poc => github.com/decisiveai/event-hub-poc v.0.0.1-20250523000000-619a9cc98114
