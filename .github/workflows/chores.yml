@@ -22,6 +22,9 @@ jobs:
       - name: Configure git for private modules
         run: git config --global url."https://user:${TOKEN}@github.com".insteadOf "https://github.com"
 
+      - name: Set GOPRIVATE
+        run: echo "GOPRIVATE=github.com/decisiveai/*" >> $GITHUB_ENV
+
       - name: Clone the code
         uses: actions/checkout@v4
 

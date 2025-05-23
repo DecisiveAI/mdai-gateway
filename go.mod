@@ -57,6 +57,6 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/decisiveai/mdai-data-core => github.com/decisiveai/mdai-data-core dj/normalize-events
+replace github.com/decisiveai/mdai-data-core => github.com/decisiveai/mdai-data-core v.0.0.11-20250523000000-93bd52ab8515
 
-replace github.com/decisiveai/event-hub-poc => github.com/decisiveai/event-hub-poc main
+replace github.com/decisiveai/event-hub-poc => github.com/decisiveai/event-hub-poc v.0.0.1-20250523000000-619a9cc98114
