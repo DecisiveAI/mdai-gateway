@@ -12,7 +12,7 @@ concurrency:
 
 env:
   GOPRIVATE: github.com/decisiveai/*
-  TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  TOKEN: ${{ secrets.TOKEN_OPERATOR }}
 
 jobs:
   lint:
@@ -24,7 +24,7 @@ jobs:
       packages: read
     env:
       GOPRIVATE: github.com/decisiveai/*
-      TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TOKEN: ${{ secrets.TOKEN_OPERATOR }}
     steps:
       - name: Test GitHub API access
         run: |
