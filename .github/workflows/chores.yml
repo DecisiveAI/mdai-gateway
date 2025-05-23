@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  GOPRIVATE: github.com/decisiveai/*
+  GOPRIVATE: github.com/decisiveai
   TOKEN: ${{ secrets.TOKEN_OPERATOR }}
 
 jobs:
@@ -29,6 +29,9 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+
+      - name: Download dependencies
+        run: go mod download
 
       - name: Run linter
         uses: golangci/golangci-lint-action@v7
