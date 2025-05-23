@@ -24,6 +24,7 @@ jobs:
       packages: read
     env:
       GOPRIVATE: github.com/decisiveai/*
+      TOKEN: ${{ secrets.TOKEN_OPERATOR }}
     steps:
       - name: Test GitHub API access
         run: |
