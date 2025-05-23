@@ -30,9 +30,6 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Download dependencies
-        run: go mod download
-
       - name: Run linter
         uses: golangci/golangci-lint-action@v7
         with:
