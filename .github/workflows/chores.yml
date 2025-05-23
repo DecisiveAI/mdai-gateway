@@ -21,9 +21,18 @@ jobs:
     env:
       GOPRIVATE: github.com/decisiveai
     steps:
+      - name: Generate a token
+        id: generate-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.PLATFORM_HEALTH_ACCESS_APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
       - name: Configure git for private modules
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
         run: |
-          git config --global url."https://user:${{ secrets.TOKEN_OPERATOR }}@github.com".insteadOf "https://github.com"
+          git config --global url."https://user:${{ env.GH_TOKEN }}@github.com".insteadOf "https://github.com"
 
       - name: Clone the code
         uses: actions/checkout@v4
@@ -134,28 +143,23 @@ jobs:
     needs: [test, check-go-file-changes]
     if: github.event_name == 'pull_request'
     env:
-      # Export variables used by the GitHub CLI application ("gh")
       GH_REPO: ${{ github.repository }}
       GH_TOKEN: ${{ github.token }}
     steps:
-      # Setup Go so we can install the "go-coverage-report" tool in the next step
       - name: Setup Go
         uses: actions/setup-go@v4
         with:
           go-version: ^1.23
 
-      # Install the go-coverage-report binary. It is recommended to pin the used version here.
       - name: Install go-coverage-report
         run: go install github.com/fgrosse/go-coverage-report/cmd/go-coverage-report@v1.2.0
 
-      # Download code coverage results from the "unit_tests" job.
       - name: Download code coverage results from current run
         uses: actions/download-artifact@v4
         with:
           name: code-coverage
           path: .github/outputs
 
-      # Rename the code coverage results file from the current run to "new-coverage.txt"
       - name: Rename code coverage results file from current run
         run: mv .github/outputs/coverage.out .github/outputs/new-coverage.out
 
@@ -225,7 +229,7 @@ jobs:
     needs: [ test ]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
-      - name: Checkout repository  # Ensures README.md is available
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Download coverage artifact
