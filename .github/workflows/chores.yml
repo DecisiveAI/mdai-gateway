@@ -35,7 +35,7 @@ jobs:
 
       - name: Configure git for private modules
         run: |
-          git config --global url."https://user:${TOKEN}@github.com/".insteadOf "https://github.com/"
+          git config --global url."https://${TOKEN}:x-oauth-basic@github.com/".insteadOf "https://github.com/"
 
       - name: Clone the code
         uses: actions/checkout@v4
