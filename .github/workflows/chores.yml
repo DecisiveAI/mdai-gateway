@@ -20,6 +20,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Configure git for private modules
+        env:
+          TOKEN: ${{ secrets.TOKEN_OPERATOR }}
         run: |
           git config --global url."https://user:${TOKEN}@github.com".insteadOf "https://github.com"
 
