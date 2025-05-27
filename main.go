@@ -2,12 +2,20 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strconv"
-	"sync"
 	"time"
 
+	"github.com/decisiveai/event-handler-webservice/types"
+	"github.com/decisiveai/event-hub-poc/eventing"
+
+	"github.com/prometheus/alertmanager/template"
+
+	"github.com/go-logr/zapr"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"k8s.io/client-go/dynamic"
@@ -18,6 +26,8 @@ import (
 
 	"github.com/cenkalti/backoff/v5"
 
+	"github.com/decisiveai/mdai-data-core/audit"
+
 	"github.com/valkey-io/valkey-go"
 )
 
@@ -25,24 +35,20 @@ const (
 	valkeyEndpointEnvVarKey            = "VALKEY_ENDPOINT"
 	valkeyPasswordEnvVarKey            = "VALKEY_PASSWORD"
 	valkeyAuditStreamExpiryMSEnvVarKey = "VALKEY_AUDIT_STREAM_EXPIRY_MS"
-	httpPortEnvVarKey                  = "HTTP_PORT"
-	otelSdkDisabledEnvVar              = "OTEL_SDK_DISABLED"
-	otelExporterOtlpEndpointEnvVar     = "OTEL_EXPORTER_OTLP_ENDPOINT"
 
-	defaultHttpPort = "8081"
+	rabbitmqEndpointEnvVarKey = "RABBITMQ_ENDPOINT"
+	rabbitmqPasswordEnvVarKey = "RABBITMQ_PASSWORD"
+	rabbitmqUserEnvVarKey     = "RABBITMQ_USER"
 
-	firingStatus   = "firing"
-	resolvedStatus = "resolved"
-
-	actionContextAnnotationsKey  = "action_context"
-	relevantLabelsAnnotationsKey = "relevant_labels"
-	HubName                      = "hub_name"
+	httpPortEnvVarKey              = "HTTP_PORT"
+	defaultHttpPort                = "8081"
+	otelSdkDisabledEnvVar          = "OTEL_SDK_DISABLED"
+	otelExporterOtlpEndpointEnvVar = "OTEL_EXPORTER_OTLP_ENDPOINT"
 
 	mdaiHubEventHistoryStreamName = "mdai_hub_event_history"
 )
 
 var (
-	processMutex sync.Mutex
 	// Intended ONLY for use by the OTEL SDK, use logger for all other purposes
 	internalLogger          *zap.Logger
 	logger                  *zap.Logger
@@ -91,11 +97,6 @@ func createK8sClient() (dynamic.Interface, error) {
 }
 
 func main() {
-	var (
-		valkeyClient valkey.Client
-		retryCount   int
-	)
-
 	ctx := context.Background()
 	otelSdkEnabledStr := os.Getenv(otelSdkDisabledEnvVar)
 	otelSdkEnabled := otelSdkEnabledStr != "true"
@@ -128,31 +129,11 @@ func main() {
 
 	}
 
-	operation := func() (string, error) {
-		var err error
-		valkeyClient, err = valkey.NewClient(valkey.ClientOption{
-			InitAddress: []string{getEnvVariableWithDefault(valkeyEndpointEnvVarKey, "")},
-			Password:    getEnvVariableWithDefault(valkeyPasswordEnvVarKey, ""),
-		})
-		if err != nil {
-			retryCount++
-			return "", err
-		}
-		return "", nil
-	}
-	exponentialBackoff := backoff.NewExponentialBackOff()
-	exponentialBackoff.InitialInterval = 5 * time.Second
+	valkeyClient := initValkey(ctx)
+	defer valkeyClient.Close()
 
-	notifyFunc := func(err error, duration time.Duration) {
-		logger.Warn("failed to initialize valkey client. retrying...", zap.Int("retry_count", retryCount), zap.Duration("duration", duration))
-	}
-
-	if _, err := backoff.Retry(ctx, operation,
-		backoff.WithBackOff(backoff.NewExponentialBackOff()),
-		backoff.WithMaxElapsedTime(3*time.Minute),
-		backoff.WithNotify(notifyFunc)); err != nil {
-		logger.Fatal("failed to get valkey client", zap.Error(err))
-	}
+	hub := initRmq(ctx)
+	defer hub.Close()
 
 	k8sClient, err := createK8sClient()
 	if err != nil {
@@ -161,13 +142,82 @@ func main() {
 
 	router := http.NewServeMux()
 
+	router.HandleFunc("/events", handleEventsRoute(ctx, valkeyClient, hub))
 	router.HandleFunc("GET /variables/list/hub/{hubName}/", HandleListVariables(ctx, k8sClient))
 	router.HandleFunc("GET /variables/list/", HandleListVariables(ctx, k8sClient))
 	router.HandleFunc("GET /variables/values/hub/{hubName}/var/{varName}/", HandleGetVariables(ctx, valkeyClient, k8sClient))
 	router.HandleFunc("POST /variables/values/hub/{hubName}/var/{varName}/", HandleSetVariables(ctx, k8sClient))
 
 	logger.Info("Starting server", zap.String("address", ":"+httpPort))
-	logger.Fatal("failed to start server", zap.Error(http.ListenAndServe(":"+httpPort, router)))
+	logger.Fatal("failed to start server", zap.Error(http.ListenAndServe(":"+httpPort, nil)))
+}
+
+func initRmq(ctx context.Context) *eventing.EventHub {
+	retryCount := 0
+	connectToRmq := func() (*eventing.EventHub, error) {
+		rmqEndpoint := getEnvVariableWithDefault(rabbitmqEndpointEnvVarKey, "localhost:5672")
+		rmqPassword := getEnvVariableWithDefault(rabbitmqPasswordEnvVarKey, "")
+		rmqUser := getEnvVariableWithDefault(rabbitmqUserEnvVarKey, "mdai")
+
+		hub, err := eventing.NewEventHub("amqp://"+rmqUser+":"+rmqPassword+"@"+rmqEndpoint+"/", eventing.EventQueueName, logger)
+		if err != nil {
+			retryCount++
+			return nil, err
+		}
+		logger.Info("Successfully created EventHub", zap.String("rmqEndpoint", rmqEndpoint))
+		return hub, nil
+	}
+
+	notifyRmqFunc := func(err error, duration time.Duration) {
+		logger.Warn("failed to initialize rmq. retrying...", zap.Int("retry_count", retryCount), zap.Duration("duration", duration))
+	}
+	hub, err := backoff.Retry(
+		ctx,
+		connectToRmq,
+		backoff.WithBackOff(backoff.NewExponentialBackOff()),
+		backoff.WithMaxElapsedTime(3*time.Minute),
+		backoff.WithNotify(notifyRmqFunc),
+	)
+	if err != nil {
+		logger.Fatal("failed to connect to rmq", zap.Error(err))
+	}
+	return hub
+}
+
+func initValkey(ctx context.Context) valkey.Client {
+	retryCount := 0
+	connectToValkey := func() (valkey.Client, error) {
+		var err error
+		client, err := valkey.NewClient(valkey.ClientOption{
+			InitAddress: []string{getEnvVariableWithDefault(valkeyEndpointEnvVarKey, "mdai-valkey-primary.mdai.svc.cluster.local:6379")},
+			Password:    getEnvVariableWithDefault(valkeyPasswordEnvVarKey, "abc"),
+		})
+		if err != nil {
+			retryCount++
+			return nil, err
+		}
+		return client, nil
+	}
+	exponentialBackoff := backoff.NewExponentialBackOff()
+	exponentialBackoff.InitialInterval = 5 * time.Second
+
+	notifyFunc := func(err error, duration time.Duration) {
+		logger.Warn("failed to initialize valkey client. retrying...", zap.Int("retry_count", retryCount), zap.Duration("duration", duration))
+	}
+
+	valkeyClient, err := backoff.Retry(
+		ctx,
+		connectToValkey,
+		backoff.WithBackOff(backoff.NewExponentialBackOff()),
+		backoff.WithMaxElapsedTime(3*time.Minute),
+		backoff.WithNotify(notifyFunc),
+	)
+
+	if err != nil {
+		logger.Fatal("failed to get valkey client", zap.Error(err))
+	}
+
+	return valkeyClient
 }
 
 func getEnvVariableWithDefault(key, defaultValue string) string {
@@ -175,4 +225,177 @@ func getEnvVariableWithDefault(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+func handleEventsRoute(ctx context.Context, valkeyClient valkey.Client, hub *eventing.EventHub) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		logger.Info("handling request ", zap.Any("request", r))
+		if r.Method == http.MethodGet {
+			eventsMap, err := audit.NewAuditAdapter(zapr.NewLogger(logger), valkeyClient, valkeyAuditStreamExpiry).HandleEventsGet(ctx)
+			if err != nil {
+				logger.Error("failed to get events", zap.Error(err))
+				http.Error(w, "Unable to fetch history from Valkey", http.StatusInternalServerError)
+				return
+			}
+
+			resultMapJson, err := json.Marshal(eventsMap)
+			if err != nil {
+				logger.Error("failed to marshal events map to json", zap.Error(err))
+				http.Error(w, "Unable to fetch history from Valkey", http.StatusInternalServerError)
+				return
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			if _, err := w.Write(resultMapJson); err != nil {
+				logger.Error("Failed to write response body", zap.Error(err))
+			}
+			return
+		}
+
+		if r.Method == http.MethodPost {
+			bodyBytes, err := io.ReadAll(r.Body)
+			if err != nil {
+				logger.Error("Failed to read request body", zap.Error(err))
+				http.Error(w, "Failed to read request body: "+err.Error(), http.StatusBadRequest)
+				return
+			}
+
+			logger.Debug("Received POST request body", zap.ByteString("bodyBytes", bodyBytes))
+
+			// Try to determine the payload type by checking for key fields
+			var rawJson map[string]interface{}
+			if err := json.Unmarshal(bodyBytes, &rawJson); err != nil {
+				logger.Error("Failed to parse JSON", zap.Error(err))
+				http.Error(w, "Invalid JSON in request body", http.StatusBadRequest)
+				return
+			}
+
+			// Check if it looks like a Prometheus alert
+			if _, hasReceiver := rawJson["receiver"]; hasReceiver {
+				if _, hasAlerts := rawJson["alerts"]; hasAlerts {
+					handlePrometheusAlert(w, bodyBytes, hub, logger)
+					return
+				}
+			}
+
+			// Check if it looks like an MdaiEvent
+			if _, hasName := rawJson["name"]; hasName {
+				if _, hasPayload := rawJson["payload"]; hasPayload {
+					handleMdaiEvent(w, bodyBytes, hub, logger)
+					return
+				}
+			}
+
+			// If we got here, we couldn't identify the payload format
+			logger.Warn("Unrecognized payload format", zap.Any("rawJson", rawJson))
+			http.Error(w, "Invalid request body format", http.StatusBadRequest)
+			return
+		}
+
+		// Handle any other HTTP methods
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// Handle Prometheus Alertmanager alerts
+func handlePrometheusAlert(w http.ResponseWriter, bodyBytes []byte, hub *eventing.EventHub, logger *zap.Logger) {
+	var alertData template.Data
+	if err := json.Unmarshal(bodyBytes, &alertData); err != nil {
+		logger.Error("Failed to unmarshal Prometheus alert", zap.Error(err))
+		http.Error(w, "Invalid Prometheus alert format: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	logger.Info("Processing Prometheus alert",
+		zap.String("receiver", alertData.Receiver),
+		zap.String("status", alertData.Status),
+		zap.Int("alertCount", len(alertData.Alerts)))
+
+	events := types.AdaptPrometheusAlertToMdaiEvents(alertData)
+
+	successCount := 0
+	for _, event := range events {
+		if err := hub.PublishMessage(event); err != nil {
+			logger.Warn("Failed to publish event",
+				zap.String("event_name", event.Name),
+				zap.Error(err))
+		} else {
+			successCount++
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+
+	response := map[string]interface{}{
+		"message":    "Processed Prometheus alerts",
+		"total":      len(events),
+		"successful": successCount,
+	}
+
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		logger.Error("Failed to write response", zap.Error(err))
+	}
+}
+
+// Handle direct MdaiEvent submissions
+func handleMdaiEvent(w http.ResponseWriter, bodyBytes []byte, hub *eventing.EventHub, logger *zap.Logger) {
+	var event eventing.MdaiEvent
+	if err := json.Unmarshal(bodyBytes, &event); err != nil {
+		logger.Error("Failed to unmarshal MdaiEvent", zap.Error(err))
+		http.Error(w, "Invalid MdaiEvent format: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Validate required fields
+	if event.Name == "" {
+		logger.Warn("Missing required field: name")
+		http.Error(w, "Missing required field: name", http.StatusBadRequest)
+		return
+	}
+
+	if event.HubName == "" {
+		logger.Warn("Missing required field: hubName")
+		http.Error(w, "Missing required field: hubName", http.StatusBadRequest)
+		return
+	}
+
+	if event.Payload == "" {
+		logger.Warn("Missing required field: payload")
+		http.Error(w, "Missing required field: payload", http.StatusBadRequest)
+		return
+	}
+
+	// Generate ID if not provided
+	if event.Id == "" {
+		event.Id = types.CreateEventUuid()
+	}
+
+	// Set timestamp if not provided
+	if event.Timestamp.IsZero() {
+		event.Timestamp = time.Now()
+	}
+
+	logger.Info("Processing MdaiEvent",
+		zap.String("id", event.Id),
+		zap.String("name", event.Name),
+		zap.String("source", event.Source))
+
+	if err := hub.PublishMessage(event); err != nil {
+		logger.Error("Failed to publish MdaiEvent", zap.Error(err))
+		http.Error(w, fmt.Sprintf("Failed to publish event: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+
+	response := map[string]interface{}{
+		"message": "Event received successfully",
+		"id":      event.Id,
+	}
+
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		logger.Error("Failed to write response", zap.Error(err))
+	}
 }
