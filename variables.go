@@ -22,14 +22,6 @@ import (
 
 const manualEnvConfigMapNamePostfix = "-manual-variables"
 
-//type VariableType string
-//
-//const SET = VariableType("set")
-//const MAP = VariableType("map")
-//const STRING = VariableType("string")
-//const INT = VariableType("int")
-//const BOOL = VariableType("boolean")
-
 // getConfiguredManualVariables  returns a map of Hub names to their corresponding ManualVariables:Types
 func getConfiguredManualVariables(ctx context.Context, k8sClient dynamic.Interface) (map[string]any, error) {
 	// TODO: make ConfiMap fetcher async

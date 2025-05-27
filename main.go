@@ -18,6 +18,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
 	"go.opentelemetry.io/contrib/bridges/otelzap"
@@ -80,6 +81,24 @@ func init() {
 	// don't really care about failing of defer that is the last thing run before the program exists
 	//nolint:all
 	defer logger.Sync() // Flush logs before exiting
+}
+
+func createK8sClient() (dynamic.Interface, error) {
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		kubeconfig, err := os.UserHomeDir()
+		if err != nil {
+			logger.Error("Failed to load k8s config", zap.Error(err))
+			return nil, err
+		}
+
+		config, err = clientcmd.BuildConfigFromFlags("", kubeconfig+"/.kube/config")
+		if err != nil {
+			logger.Error("Failed to build k8s config", zap.Error(err))
+			return nil, err
+		}
+	}
+	return dynamic.NewForConfig(config)
 }
 
 func main() {
@@ -148,20 +167,10 @@ func main() {
 
 	auditAdapter := audit.NewAuditAdapter(zapr.NewLogger(logger), valkeyClient, valkeyAuditStreamExpiry)
 
-	// create k8s client
-	//config, err := rest.InClusterConfig()
-	kubeconfig, err := os.UserHomeDir()
+	k8sClient, err := createK8sClient()
 	if err != nil {
-		logger.Error("Failed to load k8s config", zap.Error(err))
-		return
+		logger.Fatal("failed to create k8s client", zap.Error(err))
 	}
-
-	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig+"/.kube/config")
-	if err != nil {
-		logger.Error("Failed to build k8s config", zap.Error(err))
-		return
-	}
-	k8sClient, err := dynamic.NewForConfig(config)
 
 	router := http.NewServeMux()
 
