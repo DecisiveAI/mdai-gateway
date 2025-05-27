@@ -28,13 +28,28 @@ spec:
           value: "{{ .Values.otelExporterOtlpEndpoint }}"
         - name: OTEL_SDK_DISABLED
           value: "{{ .Values.otelSdkDisabled }}"
-        - name: VALKEY_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: valkey-secret
-              key: VALKEY_PASSWORD
         - name: VALKEY_ENDPOINT
           valueFrom:
             secretKeyRef:
-              name: valkey-secret
               key: VALKEY_ENDPOINT
+              name: valkey-secret
+        - name: VALKEY_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: VALKEY_PASSWORD
+              name: valkey-secret
+        - name: RABBITMQ_ENDPOINT
+          valueFrom:
+            secretKeyRef:
+              name: rabbitmq-secret
+              key: RABBITMQ_ENDPOINT
+        - name: RABBITMQ_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: rabbitmq-secret
+              key: RABBITMQ_PASSWORD
+        - name: RABBITMQ_USER
+          valueFrom:
+            secretKeyRef:
+              name: rabbitmq-secret
+              key: RABBITMQ_USER

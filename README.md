@@ -15,3 +15,7 @@ helm upgrade --install --create-namespace --namespace mdai event-handler-webserv
 ```sh
 curl -X POST -H "Content-Type: application/json" -d@testdata/alert_post_body_1.json http://localhost:8081/alerts
 ```
+
+```sh
+curl -X POST -H "Content-Type: application/json" -d@testdata/event.json http://localhost:8081/events
+```

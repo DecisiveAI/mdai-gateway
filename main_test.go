@@ -11,7 +11,9 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/decisiveai/event-hub-poc/eventing"
 	"github.com/valkey-io/valkey-go"
+	"go.uber.org/zap"
 
 	"github.com/stretchr/testify/require"
 	"github.com/valkey-io/valkey-go/mock"
@@ -64,7 +66,8 @@ func TestUpdateValkeyHandler(t *testing.T) {
 	require.NoError(t, err)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/alerts", handleAlertsPost(ctx, valkeyClient))
+	hub, _ := eventing.NewEventHub("test-connection-string", "test-queue", zap.NewExample()) // TODO mock the eventing.EventHub struct
+	mux.HandleFunc("/events", handleEventsRoute(ctx, valkeyClient, hub))
 
 	valkeyClient.EXPECT().Do(ctx,
 		XaddMatcher{labelValue: "service-a"},
@@ -88,7 +91,7 @@ func TestUpdateValkeyHandler(t *testing.T) {
 		XaddMatcher{operation: "mdai/set", labelValue: "service-c"},
 	).Return([]valkey.ValkeyResult{mock.Result(mock.ValkeyInt64(1)), mock.Result(mock.ValkeyString(""))}).Times(1)
 
-	req := httptest.NewRequest(http.MethodPost, "/alerts", bytes.NewBuffer(alertPostBody1))
+	req := httptest.NewRequest(http.MethodPost, "/events", bytes.NewBuffer(alertPostBody1))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
@@ -98,7 +101,7 @@ func TestUpdateValkeyHandler(t *testing.T) {
 
 	// one more time with different payload
 	mux = http.NewServeMux()
-	mux.HandleFunc("/alerts", handleAlertsPost(ctx, valkeyClient))
+	mux.HandleFunc("/events", handleEventsRoute(ctx, valkeyClient, hub))
 
 	valkeyClient.EXPECT().Do(ctx,
 		XaddMatcher{labelValue: "service-a"},
@@ -122,7 +125,7 @@ func TestUpdateValkeyHandler(t *testing.T) {
 		XaddMatcher{operation: "mdai/remove_element", labelValue: "service-c"},
 	).Return([]valkey.ValkeyResult{mock.Result(mock.ValkeyInt64(1)), mock.Result(mock.ValkeyString(""))}).Times(1)
 
-	req = httptest.NewRequest(http.MethodPost, "/alerts", bytes.NewBuffer(alertPostBody2))
+	req = httptest.NewRequest(http.MethodPost, "/events", bytes.NewBuffer(alertPostBody2))
 	req.Header.Set("Content-Type", "application/json")
 	rec = httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
@@ -132,7 +135,7 @@ func TestUpdateValkeyHandler(t *testing.T) {
 
 	// one more time to emulate a scenario when alert was re-created or renamed
 	mux = http.NewServeMux()
-	mux.HandleFunc("/alerts", handleAlertsPost(ctx, valkeyClient))
+	mux.HandleFunc("/events", handleEventsRoute(ctx, valkeyClient, hub))
 
 	valkeyClient.EXPECT().Do(ctx,
 		XaddMatcher{labelValue: "service-a"},
@@ -149,7 +152,7 @@ func TestUpdateValkeyHandler(t *testing.T) {
 		XaddMatcher{operation: "mdai/remove_element", labelValue: "service-a"},
 	).Return([]valkey.ValkeyResult{mock.Result(mock.ValkeyInt64(1)), mock.Result(mock.ValkeyString(""))}).Times(1)
 
-	req = httptest.NewRequest(http.MethodPost, "/alerts", bytes.NewBuffer(alertPostBody3))
+	req = httptest.NewRequest(http.MethodPost, "/events", bytes.NewBuffer(alertPostBody3))
 	req.Header.Set("Content-Type", "application/json")
 	rec = httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
