@@ -35,9 +35,10 @@ var (
 )
 
 func newAdapterWithMock(t *testing.T) (*ValkeyAdapter.ValkeyAdapter, *vmock.Client, context.Context, *gomock.Controller) {
+	t.Helper()
 	ctrl := gomock.NewController(t)
 	client := vmock.NewClient(ctrl)
-	adapter := ValkeyAdapter.NewValkeyAdapter(client, logr.Discard(), "mdaihub-sample")
+	adapter := ValkeyAdapter.NewValkeyAdapter(client, logr.Discard())
 	return adapter, client, context.Background(), ctrl
 }
 

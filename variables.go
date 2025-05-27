@@ -17,6 +17,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 
+	"github.com/decisiveai/event-handler-webservice/types"
+	"github.com/decisiveai/event-hub-poc/eventing"
 	datacore "github.com/decisiveai/mdai-data-core/variables"
 )
 
@@ -110,7 +112,7 @@ func HandleGetVariables(ctx context.Context, valkeyClient valkey.Client, k8sClie
 			return
 		}
 
-		valkeyAdapter := datacore.NewValkeyAdapter(valkeyClient, zapr.NewLogger(logger), hubName)
+		valkeyAdapter := datacore.NewValkeyAdapter(valkeyClient, zapr.NewLogger(logger))
 		hub := hubsVariables[hubName]
 		if hub == nil {
 			WriteJSONResponse(w, http.StatusNotFound, "Hub not found")
@@ -126,15 +128,15 @@ func HandleGetVariables(ctx context.Context, valkeyClient valkey.Client, k8sClie
 		switch varType {
 		case "set":
 			{
-				valkeyValue, err = valkeyAdapter.GetSetAsStringSlice(ctx, varName)
+				valkeyValue, err = valkeyAdapter.GetSetAsStringSlice(ctx, varName, hubName)
 			}
 		case "map":
 			{
-				valkeyValue, err = valkeyAdapter.GetMap(ctx, varName)
+				valkeyValue, err = valkeyAdapter.GetMap(ctx, varName, hubName)
 			}
 		case "string", "int", "boolean":
 			{
-				valkeyValue, _, err = valkeyAdapter.GetString(ctx, varName)
+				valkeyValue, _, err = valkeyAdapter.GetString(ctx, varName, hubName)
 			}
 		}
 		if err != nil {
@@ -189,7 +191,7 @@ func HandleSetVariables(ctx context.Context, k8sClient dynamic.Interface) http.H
 		}
 
 		var payload any
-		var eventPayload MdaiEvent
+		var eventPayload eventing.MdaiEvent
 		switch varType {
 		case "set":
 			{
@@ -228,9 +230,9 @@ func HandleSetVariables(ctx context.Context, k8sClient dynamic.Interface) http.H
 	}
 }
 
-func newEventPayload(hubName string, varName string, varType string, action string, payload any) MdaiEvent {
-	return MdaiEvent{
-		Id:        CreateEventUuid(),
+func newEventPayload(hubName string, varName string, varType string, action string, payload any) eventing.MdaiEvent {
+	return eventing.MdaiEvent{
+		Id:        types.CreateEventUuid(),
 		Name:      strings.Join([]string{"static_variable", action, hubName, varName}, "__"),
 		HubName:   hubName,
 		Timestamp: time.Now(),
