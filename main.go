@@ -35,6 +35,7 @@ const (
 
 	rabbitmqEndpointEnvVarKey = "RABBITMQ_ENDPOINT"
 	rabbitmqPasswordEnvVarKey = "RABBITMQ_PASSWORD"
+	rabbitmqUserEnvVarKey     = "RABBITMQ_USER"
 
 	httpPortEnvVarKey              = "HTTP_PORT"
 	defaultHttpPort                = "8081"
@@ -124,8 +125,9 @@ func initRmq(ctx context.Context) *eventing.EventHub {
 	connectToRmq := func() (*eventing.EventHub, error) {
 		rmqEndpoint := getEnvVariableWithDefault(rabbitmqEndpointEnvVarKey, "localhost:5672")
 		rmqPassword := getEnvVariableWithDefault(rabbitmqPasswordEnvVarKey, "")
+		rmqUser := getEnvVariableWithDefault(rabbitmqUserEnvVarKey, "mdai")
 
-		hub, err := eventing.NewEventHub("amqp://mdai:"+rmqPassword+"@"+rmqEndpoint+"/", eventing.EventQueueName, logger)
+		hub, err := eventing.NewEventHub("amqp://"+rmqUser+":"+rmqPassword+"@"+rmqEndpoint+"/", eventing.EventQueueName, logger)
 		if err != nil {
 			retryCount++
 			return nil, err

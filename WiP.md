@@ -11,10 +11,10 @@
          - if we're _not_ keeping eventing, executes handler logic
       6. returns appropriate response
 4. Refactor log structures -- normalized on structured logs via `zap`
-
+5. reconnect for rabbitmq
 
 ## TODOs:
 1. Ensure audit and debug logging is in place as appropriate
-2. reconnect for rabbitmq
+2. ~~reconnect for rabbitmq~~
 3. Version?
 4. fix unit tests
