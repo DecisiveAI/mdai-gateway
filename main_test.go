@@ -105,4 +105,6 @@ func TestUpdateEventsHandler(t *testing.T) {
 
 	require.Equal(t, http.StatusCreated, rec.Code)
 	require.Equal(t, post_3_response, rec.Body.String())
+
+	// TODO: Add tests for GET, POST partial MdaiEvent
 }
