@@ -88,3 +88,5 @@ require (
 )
 
 replace github.com/decisiveai/mdai-data-core => ../mdai-data-core
+
+replace github.com/decisiveai/event-hub-poc => ../event-hub-poc

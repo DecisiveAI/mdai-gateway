@@ -22,7 +22,10 @@ import (
 	datacore "github.com/decisiveai/mdai-data-core/variables"
 )
 
-const manualEnvConfigMapNamePostfix = "-manual-variables"
+const (
+	manualEnvConfigMapNamePostfix = "-manual-variables"
+	staticVariablesEventSource    = "static_variable_api"
+)
 
 // getConfiguredManualVariables  returns a map of Hub names to their corresponding ManualVariables:Types
 func getConfiguredManualVariables(ctx context.Context, k8sClient dynamic.Interface) (map[string]any, error) {
@@ -151,11 +154,11 @@ func HandleGetVariables(ctx context.Context, valkeyClient valkey.Client, k8sClie
 	}
 }
 
-func HandleSetVariables(ctx context.Context, k8sClient dynamic.Interface) http.HandlerFunc {
+func HandleSetVariables(ctx context.Context, k8sClient dynamic.Interface, hub *eventing.EventHub) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var response any
 
-		if !headersOk(r) {
+		if !contentTypeOk(r) {
 			WriteJSONResponse(w, http.StatusBadRequest, "Wrong Content-Type header")
 			return
 		}
@@ -172,15 +175,21 @@ func HandleSetVariables(ctx context.Context, k8sClient dynamic.Interface) http.H
 			return
 		}
 
-		hub := hubsVariables[hubName]
-		if hub == nil {
+		hubFound := hubsVariables[hubName]
+		if hubFound == nil {
 			WriteJSONResponse(w, http.StatusNotFound, "Hub not found")
 			return
 		}
 
-		varType, ok := hub.(map[string]string)[varName]
+		varType, ok := hubFound.(map[string]string)[varName]
 		if !ok {
 			WriteJSONResponse(w, http.StatusNotFound, "Variable not found")
+			return
+		}
+
+		command := r.PathValue("command")
+		if command != "add" && command != "remove" {
+			WriteJSONResponse(w, http.StatusBadRequest, "Unsupported command")
 			return
 		}
 
@@ -201,17 +210,22 @@ func HandleSetVariables(ctx context.Context, k8sClient dynamic.Interface) http.H
 					return
 				}
 				payload = payloadSet
-				eventPayload = newEventPayload(hubName, varName, varType, "set", payload)
+				eventPayload = newEventPayload(hubName, varName, varType, command, payload)
 			}
 		case "map":
 			{
-				var payloadMap map[string]string
+				var payloadMap any
+				if command == "add" {
+					payloadMap = make(map[string]any)
+				} else if command == "remove" {
+					payloadMap = make([]string, 0)
+				}
 				if err := json.Unmarshal(raw["value"], &payloadMap); err != nil {
 					http.Error(w, "Invalid request payload. Map expected", http.StatusBadRequest)
 					return
 				}
 				payload = payloadMap
-				eventPayload = newEventPayload(hubName, varName, varType, "set", payload)
+				eventPayload = newEventPayload(hubName, varName, varType, command, payload)
 			}
 		case "string", "int", "boolean":
 			{
@@ -221,29 +235,45 @@ func HandleSetVariables(ctx context.Context, k8sClient dynamic.Interface) http.H
 					return
 				}
 				payload = payloadString
-				eventPayload = newEventPayload(hubName, varName, varType, "set", payload)
+				eventPayload = newEventPayload(hubName, varName, varType, command, payload)
 			}
 		}
 		logger.Info("POST:", zap.Any("payload", payload))
 		WriteJSONResponse(w, http.StatusOK, eventPayload)
 
+		logger.Info("Processing MdaiEvent",
+			zap.String("id", eventPayload.Id),
+			zap.String("name", eventPayload.Name),
+			zap.String("source", eventPayload.Source))
+
+		if err := hub.PublishMessage(eventPayload); err != nil {
+			logger.Error("Failed to publish MdaiEvent", zap.Error(err))
+			http.Error(w, fmt.Sprintf("Failed to publish event: %v", err), http.StatusInternalServerError)
+			return
+		}
+
 	}
 }
 
 func newEventPayload(hubName string, varName string, varType string, action string, payload any) eventing.MdaiEvent {
+	payloadObj := eventing.StaticVariablesActionPayload{
+		StaticVariablesActionMeta: eventing.StaticVariablesActionMeta{
+			Hub:       hubName,
+			Variable:  varName,
+			Type:      varType,
+			Operation: action,
+		},
+		Value: payload,
+	}
+	// TODO: process error
+	payloadBytes, _ := json.Marshal(payloadObj)
 	return eventing.MdaiEvent{
 		Id:        types.CreateEventUuid(),
 		Name:      strings.Join([]string{"static_variable", action, hubName, varName}, "__"),
 		HubName:   hubName,
 		Timestamp: time.Now(),
-		Source:    "static_variable_api",
-		Payload: fmt.Sprintf(
-			"{hub: %s, variable: %s, type: %s, operation: %s, value: %s}",
-			hubName,
-			varName,
-			varType,
-			action,
-			payload),
+		Source:    staticVariablesEventSource,
+		Payload:   string(payloadBytes),
 	}
 
 }
@@ -255,6 +285,6 @@ func WriteJSONResponse(w http.ResponseWriter, status int, v any) error {
 	return json.NewEncoder(w).Encode(v)
 }
 
-func headersOk(r *http.Request) bool {
+func contentTypeOk(r *http.Request) bool {
 	return r.Header.Get("Content-Type") == "application/json"
 }

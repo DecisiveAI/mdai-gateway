@@ -146,10 +146,10 @@ func main() {
 	router.HandleFunc("GET /variables/list/hub/{hubName}/", HandleListVariables(ctx, k8sClient))
 	router.HandleFunc("GET /variables/list/", HandleListVariables(ctx, k8sClient))
 	router.HandleFunc("GET /variables/values/hub/{hubName}/var/{varName}/", HandleGetVariables(ctx, valkeyClient, k8sClient))
-	router.HandleFunc("POST /variables/values/hub/{hubName}/var/{varName}/", HandleSetVariables(ctx, k8sClient))
+	router.HandleFunc("POST /variables/elements/{command}/hub/{hubName}/var/{varName}/", HandleSetVariables(ctx, k8sClient, hub))
 
 	logger.Info("Starting server", zap.String("address", ":"+httpPort))
-	logger.Fatal("failed to start server", zap.Error(http.ListenAndServe(":"+httpPort, nil)))
+	logger.Fatal("failed to start server", zap.Error(http.ListenAndServe(":"+httpPort, router)))
 }
 
 func initRmq(ctx context.Context) *eventing.EventHub {
