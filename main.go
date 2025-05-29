@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"time"
@@ -35,7 +36,6 @@ const (
 
 	rabbitmqEndpointEnvVarKey = "RABBITMQ_ENDPOINT"
 	rabbitmqPasswordEnvVarKey = "RABBITMQ_PASSWORD"
-	rabbitmqUserEnvVarKey     = "RABBITMQ_USER"
 
 	httpPortEnvVarKey              = "HTTP_PORT"
 	defaultHttpPort                = "8081"
@@ -123,28 +123,37 @@ func main() {
 func initRmq(ctx context.Context) *eventing.EventHub {
 	retryCount := 0
 	connectToRmq := func() (*eventing.EventHub, error) {
-		rmqEndpoint := getEnvVariableWithDefault(rabbitmqEndpointEnvVarKey, "localhost:5672")
 		rmqPassword := getEnvVariableWithDefault(rabbitmqPasswordEnvVarKey, "")
-		rmqUser := getEnvVariableWithDefault(rabbitmqUserEnvVarKey, "mdai")
+		rmqEndpoint := getEnvVariableWithDefault(rabbitmqEndpointEnvVarKey, "localhost:5672")
 
-		hub, err := eventing.NewEventHub("amqp://"+rmqUser+":"+rmqPassword+"@"+rmqEndpoint+"/", eventing.EventQueueName, logger)
+		hubUrl := (&url.URL{
+			Scheme: "amqp",
+			Host:   rmqEndpoint,
+			User:   url.UserPassword("mdai", rmqPassword),
+		}).String()
+
+		hub, err := eventing.NewEventHub(hubUrl, eventing.EventQueueName, logger)
 		if err != nil {
 			retryCount++
 			return nil, err
 		}
-		logger.Info("Successfully created EventHub", zap.String("rmqEndpoint", rmqEndpoint))
+		logger.Info("Successfully created EventHub", zap.String("hubUrl", hubUrl))
 		return hub, nil
 	}
 
-	notifyRmqFunc := func(err error, duration time.Duration) {
-		logger.Warn("failed to initialize rmq. retrying...", zap.Int("retry_count", retryCount), zap.Duration("duration", duration))
+	notifyFunc := func(err error, duration time.Duration) {
+		logger.Warn("failed to initialize rmq. retrying...",
+			zap.Error(err),
+			zap.Int("retry_count", retryCount),
+			zap.Duration("duration", duration))
 	}
+
 	hub, err := backoff.Retry(
 		ctx,
 		connectToRmq,
 		backoff.WithBackOff(backoff.NewExponentialBackOff()),
 		backoff.WithMaxElapsedTime(3*time.Minute),
-		backoff.WithNotify(notifyRmqFunc),
+		backoff.WithNotify(notifyFunc),
 	)
 	if err != nil {
 		logger.Fatal("failed to connect to rmq", zap.Error(err))
@@ -170,7 +179,10 @@ func initValkey(ctx context.Context) valkey.Client {
 	exponentialBackoff.InitialInterval = 5 * time.Second
 
 	notifyFunc := func(err error, duration time.Duration) {
-		logger.Warn("failed to initialize valkey client. retrying...", zap.Int("retry_count", retryCount), zap.Duration("duration", duration))
+		logger.Warn("failed to initialize valkey. retrying...",
+			zap.Error(err),
+			zap.Int("retry_count", retryCount),
+			zap.Duration("duration", duration))
 	}
 
 	valkeyClient, err := backoff.Retry(
