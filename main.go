@@ -141,15 +141,19 @@ func initRmq(ctx context.Context) *eventing.EventHub {
 		return hub, nil
 	}
 
-	notifyRmqFunc := func(err error, duration time.Duration) {
-		logger.Warn("failed to initialize rmq. retrying...", zap.Int("retry_count", retryCount), zap.Duration("duration", duration))
+	notifyFunc := func(err error, duration time.Duration) {
+		logger.Warn("failed to initialize rmq. retrying...",
+			zap.Error(err),
+			zap.Int("retry_count", retryCount),
+			zap.Duration("duration", duration))
 	}
+
 	hub, err := backoff.Retry(
 		ctx,
 		connectToRmq,
 		backoff.WithBackOff(backoff.NewExponentialBackOff()),
 		backoff.WithMaxElapsedTime(3*time.Minute),
-		backoff.WithNotify(notifyRmqFunc),
+		backoff.WithNotify(notifyFunc),
 	)
 	if err != nil {
 		logger.Fatal("failed to connect to rmq", zap.Error(err))
@@ -175,7 +179,10 @@ func initValkey(ctx context.Context) valkey.Client {
 	exponentialBackoff.InitialInterval = 5 * time.Second
 
 	notifyFunc := func(err error, duration time.Duration) {
-		logger.Warn("failed to initialize valkey client. retrying...", zap.Int("retry_count", retryCount), zap.Duration("duration", duration))
+		logger.Warn("failed to initialize valkey. retrying...",
+			zap.Error(err),
+			zap.Int("retry_count", retryCount),
+			zap.Duration("duration", duration))
 	}
 
 	valkeyClient, err := backoff.Retry(
