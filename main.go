@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	txtTemplate "text/template"
 	"time"
 
 	"github.com/decisiveai/event-handler-webservice/types"
@@ -120,19 +122,38 @@ func main() {
 	logger.Fatal("failed to start server", zap.Error(http.ListenAndServe(":"+httpPort, nil)))
 }
 
+func createHubUrl() (string, error) {
+	tmpl := txtTemplate.Must(txtTemplate.New("amqp").Parse("amqp://{{.User}}:{{.Password}}@{{.Endpoint}}/"))
+
+	var buf bytes.Buffer
+	data := map[string]string{
+		"User":     getEnvVariableWithDefault(rabbitmqUserEnvVarKey, "mdai"),
+		"Password": getEnvVariableWithDefault(rabbitmqPasswordEnvVarKey, ""),
+		"Endpoint": getEnvVariableWithDefault(rabbitmqEndpointEnvVarKey, "localhost:5672"),
+	}
+	err := tmpl.Execute(&buf, data)
+	if err != nil {
+		return "", err
+	}
+	return buf.String(), nil
+}
+
 func initRmq(ctx context.Context) *eventing.EventHub {
 	retryCount := 0
 	connectToRmq := func() (*eventing.EventHub, error) {
-		rmqEndpoint := getEnvVariableWithDefault(rabbitmqEndpointEnvVarKey, "localhost:5672")
-		rmqPassword := getEnvVariableWithDefault(rabbitmqPasswordEnvVarKey, "")
-		rmqUser := getEnvVariableWithDefault(rabbitmqUserEnvVarKey, "mdai")
 
-		hub, err := eventing.NewEventHub("amqp://"+rmqUser+":"+rmqPassword+"@"+rmqEndpoint+"/", eventing.EventQueueName, logger)
+		hubUrl, err := createHubUrl()
 		if err != nil {
 			retryCount++
 			return nil, err
 		}
-		logger.Info("Successfully created EventHub", zap.String("rmqEndpoint", rmqEndpoint))
+
+		hub, err := eventing.NewEventHub(hubUrl, eventing.EventQueueName, logger)
+		if err != nil {
+			retryCount++
+			return nil, err
+		}
+		logger.Info("Successfully created EventHub", zap.String("hubUrl", hubUrl))
 		return hub, nil
 	}
 
