@@ -12,10 +12,8 @@ import (
 	"testing"
 
 	"github.com/decisiveai/event-hub-poc/eventing"
-	"github.com/valkey-io/valkey-go"
-	"go.uber.org/zap"
-
 	"github.com/stretchr/testify/require"
+	"github.com/valkey-io/valkey-go"
 	"github.com/valkey-io/valkey-go/mock"
 	"go.uber.org/mock/gomock"
 )
@@ -71,7 +69,7 @@ func TestUpdateEventsHandler(t *testing.T) {
 	require.NoError(t, err)
 
 	mux := http.NewServeMux()
-	hub, _ := eventing.NewEventHub("amqp://guest:guest@localhost:5672/", "test-queue", zap.NewExample()) // TODO mock the eventing.EventHub struct
+	hub := eventing.NewMockEventHub()
 	mux.HandleFunc("/events", handleEventsRoute(ctx, valkeyClient, hub))
 
 	req := httptest.NewRequest(http.MethodPost, "/events", bytes.NewBuffer(alertPostBody1))
