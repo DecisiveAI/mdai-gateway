@@ -137,7 +137,7 @@ func initRmq(ctx context.Context) eventing.EventHubInterface {
 			retryCount++
 			return nil, err
 		}
-		logger.Info("Successfully created EventHub", zap.String("hubUrl", hubUrl))
+		logger.Info("Successfully created EventHub", zap.String("Endpoint", rmqEndpoint))
 		return hub, nil
 	}
 
