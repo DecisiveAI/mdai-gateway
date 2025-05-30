@@ -8,10 +8,10 @@ github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UF
 github.com/cespare/xxhash/v2 v2.3.0/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc h1:U9qPSI2PIWSS1VwoXQT9A3Wy9MM3WgvqSxFWenqJduM=
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
-github.com/decisiveai/event-hub-poc v0.0.0-20250522185157-f691e113b7e4 h1:c7XplibrywEEfOmEbarTWhbsMAL/XZovfWuh7xiFTVc=
-github.com/decisiveai/event-hub-poc v0.0.0-20250522185157-f691e113b7e4/go.mod h1:p9NPy6YfjuSHBve7psPCi1OJim5YTcp0/KQxECCGgVA=
-github.com/decisiveai/mdai-data-core v0.1.5-0.20250522172954-93bd52ab8515 h1:OaBsgZyC52hq8p4mOz0EsPEhz3pX3rs79JCTfODUWo4=
-github.com/decisiveai/mdai-data-core v0.1.5-0.20250522172954-93bd52ab8515/go.mod h1:s12LgzdghHutv/p3DA3tqk18YLGxk9T+T480e6vC/4I=
+github.com/decisiveai/event-hub-poc v0.0.2 h1:4MtfcLVkuqK5lIxF50Z7guybOgSumGg13rWc77bLMEE=
+github.com/decisiveai/event-hub-poc v0.0.2/go.mod h1:/vqnUE/aH42jqAUMLtx2eHoWraxiwZPlJfBiT+zazJ8=
+github.com/decisiveai/mdai-data-core v0.1.5 h1:frYORRtenFxrCATnUFoLtCzqWilV0X3fbh6W1qMSZqY=
+github.com/decisiveai/mdai-data-core v0.1.5/go.mod h1:s12LgzdghHutv/p3DA3tqk18YLGxk9T+T480e6vC/4I=
 github.com/go-logr/logr v1.2.2/go.mod h1:jdQByPbusPIv2/zmleS9BjJVeZ6kBagPoEUsqbVz/1A=
 github.com/go-logr/logr v1.4.2 h1:6pFjapn8bFcIbiKo3XT4j/BhANplGihG6tvd+8rYgrY=
 github.com/go-logr/logr v1.4.2/go.mod h1:9T104GzyrTigFIr8wt5mBrctHMim0Nb2HLGrmQ40KvY=
@@ -87,8 +87,8 @@ go.opentelemetry.io/proto/otlp v1.5.0 h1:xJvq7gMzB31/d406fB8U5CBdyQGw4P399D1aQWU
 go.opentelemetry.io/proto/otlp v1.5.0/go.mod h1:keN8WnHxOy8PG0rQZjJJ5A2ebUoafqWp0eVQ4yIXvJ4=
 go.uber.org/goleak v1.3.0 h1:2K3zAYmnTNqV73imy9J1T3WC+gmCePx2hEGkimedGto=
 go.uber.org/goleak v1.3.0/go.mod h1:CoHD4mav9JJNrW/WLlf7HGZPjdw8EucARQHekz1X6bE=
-go.uber.org/mock v0.5.1 h1:ASgazW/qBmR+A32MYFDB6E2POoTgOwT509VP0CT/fjs=
-go.uber.org/mock v0.5.1/go.mod h1:ge71pBPLYDk7QIi1LupWxdAykm7KIEFchiOqd6z7qMM=
+go.uber.org/mock v0.5.2 h1:LbtPTcP8A5k9WPXj54PPPbjcI4Y6lhyOZXn+VS7wNko=
+go.uber.org/mock v0.5.2/go.mod h1:wLlUxC2vVTPTaE3UD51E0BGOAElKrILxhVSDYQLld5o=
 go.uber.org/multierr v1.11.0 h1:blXXJkSxSSfBVBlC76pxqeO+LN3aDfLQo+309xJstO0=
 go.uber.org/multierr v1.11.0/go.mod h1:20+QtiLqy0Nd6FdQB9TLXag12DsQkrbs3htMFfDN80Y=
 go.uber.org/zap v1.27.0 h1:aJMhYGrd5QSmlpLMr2MftRKl7t8J8PTZPA732ud/XR8=
