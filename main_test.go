@@ -11,7 +11,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/decisiveai/event-hub-poc/eventing"
+	"github.com/decisiveai/mdai-event-hub/eventing"
 	"github.com/stretchr/testify/require"
 	"github.com/valkey-io/valkey-go"
 	"github.com/valkey-io/valkey-go/mock"

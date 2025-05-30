@@ -5,7 +5,7 @@ import (
 	"log"
 	"sort"
 
-	"github.com/decisiveai/event-hub-poc/eventing"
+	"github.com/decisiveai/mdai-event-hub/eventing"
 	"github.com/google/uuid"
 	"github.com/prometheus/alertmanager/template"
 )

@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/decisiveai/event-hub-poc/eventing"
+	"github.com/decisiveai/mdai-event-hub/eventing"
 	"github.com/decisiveai/mdai-gateway/types"
 
 	"github.com/prometheus/alertmanager/template"
