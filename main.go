@@ -120,9 +120,9 @@ func main() {
 	logger.Fatal("failed to start server", zap.Error(http.ListenAndServe(":"+httpPort, nil)))
 }
 
-func initRmq(ctx context.Context) *eventing.EventHub {
+func initRmq(ctx context.Context) eventing.EventHubInterface {
 	retryCount := 0
-	connectToRmq := func() (*eventing.EventHub, error) {
+	connectToRmq := func() (eventing.EventHubInterface, error) {
 		rmqPassword := getEnvVariableWithDefault(rabbitmqPasswordEnvVarKey, "")
 		rmqEndpoint := getEnvVariableWithDefault(rabbitmqEndpointEnvVarKey, "localhost:5672")
 
@@ -137,7 +137,7 @@ func initRmq(ctx context.Context) *eventing.EventHub {
 			retryCount++
 			return nil, err
 		}
-		logger.Info("Successfully created EventHub", zap.String("hubUrl", hubUrl))
+		logger.Info("Successfully created EventHub", zap.String("Endpoint", rmqEndpoint))
 		return hub, nil
 	}
 
@@ -206,7 +206,7 @@ func getEnvVariableWithDefault(key, defaultValue string) string {
 	}
 	return defaultValue
 }
-func handleEventsRoute(ctx context.Context, valkeyClient valkey.Client, hub *eventing.EventHub) http.HandlerFunc {
+func handleEventsRoute(ctx context.Context, valkeyClient valkey.Client, hub eventing.EventHubInterface) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		logger.Info("handling request ", zap.Any("request", r))
 		if r.Method == http.MethodGet {
@@ -278,7 +278,7 @@ func handleEventsRoute(ctx context.Context, valkeyClient valkey.Client, hub *eve
 }
 
 // Handle Prometheus Alertmanager alerts
-func handlePrometheusAlert(w http.ResponseWriter, bodyBytes []byte, hub *eventing.EventHub, logger *zap.Logger) {
+func handlePrometheusAlert(w http.ResponseWriter, bodyBytes []byte, hub eventing.EventHubInterface, logger *zap.Logger) {
 	var alertData template.Data
 	if err := json.Unmarshal(bodyBytes, &alertData); err != nil {
 		logger.Error("Failed to unmarshal Prometheus alert", zap.Error(err))
@@ -319,7 +319,7 @@ func handlePrometheusAlert(w http.ResponseWriter, bodyBytes []byte, hub *eventin
 }
 
 // Handle direct MdaiEvent submissions
-func handleMdaiEvent(w http.ResponseWriter, bodyBytes []byte, hub *eventing.EventHub, logger *zap.Logger) {
+func handleMdaiEvent(w http.ResponseWriter, bodyBytes []byte, hub eventing.EventHubInterface, logger *zap.Logger) {
 	var event eventing.MdaiEvent
 	if err := json.Unmarshal(bodyBytes, &event); err != nil {
 		logger.Error("Failed to unmarshal MdaiEvent", zap.Error(err))

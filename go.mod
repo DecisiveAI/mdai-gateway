@@ -6,8 +6,8 @@ toolchain go1.24.3
 
 require (
 	github.com/cenkalti/backoff/v5 v5.0.2
-	github.com/decisiveai/event-hub-poc v0.0.0-20250522185157-f691e113b7e4
-	github.com/decisiveai/mdai-data-core v0.1.5-0.20250522172954-93bd52ab8515
+	github.com/decisiveai/event-hub-poc v0.0.2
+	github.com/decisiveai/mdai-data-core v0.1.5
 	github.com/go-logr/zapr v1.3.0
 	github.com/google/uuid v1.6.0
 	github.com/prometheus/alertmanager v0.28.1
@@ -20,7 +20,7 @@ require (
 	go.opentelemetry.io/otel/log v0.11.0
 	go.opentelemetry.io/otel/sdk v1.35.0
 	go.opentelemetry.io/otel/sdk/log v0.11.0
-	go.uber.org/mock v0.5.1
+	go.uber.org/mock v0.5.2
 	go.uber.org/zap v1.27.0
 )
 
