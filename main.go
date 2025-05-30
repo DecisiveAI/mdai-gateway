@@ -11,8 +11,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/decisiveai/event-handler-webservice/types"
 	"github.com/decisiveai/event-hub-poc/eventing"
+	"github.com/decisiveai/mdai-gateway/types"
 
 	"github.com/prometheus/alertmanager/template"
 
@@ -67,7 +67,7 @@ func init() {
 	// don't really care about failing of defer that is the last thing run before the program exists
 	//nolint:all
 	defer internalLogger.Sync() // Flush logs before exiting
-	otelCore := otelzap.NewCore("github.com/decisiveai/event-handler-webservice")
+	otelCore := otelzap.NewCore("github.com/decisiveai/mdai-gateway")
 	multiCore := zapcore.NewTee(core, otelCore)
 	logger = zap.New(multiCore, zap.AddCaller())
 	// don't really care about failing of defer that is the last thing run before the program exists

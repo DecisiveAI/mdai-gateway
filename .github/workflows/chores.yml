@@ -311,7 +311,7 @@ jobs:
       - name: Capture coverage in health repo
         run: |
           go install github.com/axw/gocov/gocov@latest
-          gocov convert coverage.out | gocov report > coverage-event-handler-webservice.txt
+          gocov convert coverage.out | gocov report > coverage-mdai-gateway.txt
 
       - name: Generate a token
         id: generate-token
@@ -337,10 +337,10 @@ jobs:
           git config --global user.name "GitHub Action"
           
           # Copy the new coverage file
-          cp ../coverage-event-handler-webservice.txt .
+          cp ../coverage-mdai-gateway.txt .
           
           # Commit and push changes
-          git add coverage-event-handler-webservice.txt
+          git add coverage-mdai-gateway.txt
           if git diff --cached --quiet; then
             echo "✅ No changes to commit."
             exit 0

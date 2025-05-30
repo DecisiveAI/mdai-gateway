@@ -7,7 +7,7 @@ on:
       - 'v*'
 
 env:
-  IMAGE_NAME: event-handler-webservice
+  IMAGE_NAME: mdai-gateway
   TOKEN: ${{ secrets.TOKEN_OPERATOR }}
   GOPRIVATE: github.com/decisiveai/mdai-operator
 

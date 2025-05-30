@@ -1,4 +1,4 @@
-module github.com/decisiveai/event-handler-webservice
+module github.com/decisiveai/mdai-gateway
 
 go 1.24.0
 
