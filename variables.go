@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -26,6 +25,13 @@ const (
 	manualEnvConfigMapNamePostfix = "-manual-variables"
 	staticVariablesEventSource    = "static_variable_api"
 )
+
+type QueryMeta struct {
+	HubName      string `json:"hubName"`
+	VariableName string `json:"variableName"`
+	VariableType string `json:"variableTame"`
+	Command      string `json:"command"`
+}
 
 // getConfiguredManualVariables  returns a map of Hub names to their corresponding ManualVariables:Types
 func getConfiguredManualVariables(ctx context.Context, k8sClient dynamic.Interface) (map[string]any, error) {
@@ -63,9 +69,6 @@ func getConfiguredManualVariables(ctx context.Context, k8sClient dynamic.Interfa
 			}
 		}
 	}
-	if len(hubMap) == 0 {
-		return hubMap, errors.New("no manual variables found")
-	}
 	return hubMap, nil
 }
 
@@ -75,8 +78,12 @@ func HandleListVariables(ctx context.Context, k8sClient dynamic.Interface) http.
 		var httpStatus = http.StatusOK
 
 		hubsVariables, err := getConfiguredManualVariables(ctx, k8sClient)
-		if err != nil && hubsVariables == nil {
+		if err != nil {
 			httpStatus = http.StatusInternalServerError
+			WriteJSONResponse(w, httpStatus, response)
+			return
+		} else if len(hubsVariables) == 0 {
+			httpStatus = http.StatusNotFound
 			WriteJSONResponse(w, httpStatus, response)
 			return
 		}
@@ -102,44 +109,27 @@ func HandleGetVariables(ctx context.Context, valkeyClient valkey.Client, k8sClie
 	return func(w http.ResponseWriter, r *http.Request) {
 		var response any
 
-		hubsVariables, err := getConfiguredManualVariables(ctx, k8sClient)
-		if err != nil && hubsVariables == nil {
-			WriteJSONResponse(w, http.StatusInternalServerError, response)
-			return
-		}
-		hubName := r.PathValue("hubName")
-		varName := r.PathValue("varName")
-		// TODO: implement all variables handling (?)
-		if hubName == "" || varName == "" {
-			WriteJSONResponse(w, http.StatusBadRequest, "Missing hub or variable name")
+		queryMeta, httpStatus, err := parseHeaders(ctx, w, r, k8sClient, "GET")
+		if err != nil {
+			WriteJSONResponse(w, httpStatus, err.Error())
 			return
 		}
 
 		valkeyAdapter := datacore.NewValkeyAdapter(valkeyClient, zapr.NewLogger(logger))
-		hub := hubsVariables[hubName]
-		if hub == nil {
-			WriteJSONResponse(w, http.StatusNotFound, "Hub not found")
-			return
-		}
-		varType, ok := hub.(map[string]string)[varName]
-		if !ok {
-			WriteJSONResponse(w, http.StatusNotFound, "Variable not found")
-			return
-		}
 		var valkeyValue any
 
-		switch varType {
+		switch queryMeta.VariableType {
 		case "set":
 			{
-				valkeyValue, err = valkeyAdapter.GetSetAsStringSlice(ctx, varName, hubName)
+				valkeyValue, err = valkeyAdapter.GetSetAsStringSlice(ctx, queryMeta.VariableName, queryMeta.HubName)
 			}
 		case "map":
 			{
-				valkeyValue, err = valkeyAdapter.GetMap(ctx, varName, hubName)
+				valkeyValue, err = valkeyAdapter.GetMap(ctx, queryMeta.VariableName, queryMeta.HubName)
 			}
 		case "string", "int", "boolean":
 			{
-				valkeyValue, _, err = valkeyAdapter.GetString(ctx, varName, hubName)
+				valkeyValue, _, err = valkeyAdapter.GetString(ctx, queryMeta.VariableName, queryMeta.HubName)
 			}
 		}
 		if err != nil {
@@ -147,7 +137,7 @@ func HandleGetVariables(ctx context.Context, valkeyClient valkey.Client, k8sClie
 			return
 		}
 		response = map[string]any{
-			varName: valkeyValue,
+			queryMeta.VariableName: valkeyValue,
 		}
 		WriteJSONResponse(w, http.StatusOK, response)
 
@@ -156,40 +146,11 @@ func HandleGetVariables(ctx context.Context, valkeyClient valkey.Client, k8sClie
 
 func HandleSetVariables(ctx context.Context, k8sClient dynamic.Interface, hub *eventing.EventHub) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var response any
+		var httpStatus = http.StatusOK
 
-		if !contentTypeOk(r) {
-			WriteJSONResponse(w, http.StatusBadRequest, "Wrong Content-Type header")
-			return
-		}
-
-		hubsVariables, err := getConfiguredManualVariables(ctx, k8sClient)
-		if err != nil && hubsVariables == nil {
-			WriteJSONResponse(w, http.StatusInternalServerError, response)
-			return
-		}
-		hubName := r.PathValue("hubName")
-		varName := r.PathValue("varName")
-		if hubName == "" || varName == "" {
-			WriteJSONResponse(w, http.StatusBadRequest, "Missing hub or variable name")
-			return
-		}
-
-		hubFound := hubsVariables[hubName]
-		if hubFound == nil {
-			WriteJSONResponse(w, http.StatusNotFound, "Hub not found")
-			return
-		}
-
-		varType, ok := hubFound.(map[string]string)[varName]
-		if !ok {
-			WriteJSONResponse(w, http.StatusNotFound, "Variable not found")
-			return
-		}
-
-		command := r.PathValue("command")
-		if command != "add" && command != "remove" {
-			WriteJSONResponse(w, http.StatusBadRequest, "Unsupported command")
+		queryMeta, httpStatus, err := parseHeaders(ctx, w, r, k8sClient, "GET")
+		if err != nil {
+			WriteJSONResponse(w, httpStatus, err.Error())
 			return
 		}
 
@@ -201,41 +162,41 @@ func HandleSetVariables(ctx context.Context, k8sClient dynamic.Interface, hub *e
 
 		var payload any
 		var eventPayload eventing.MdaiEvent
-		switch varType {
+		switch queryMeta.VariableType {
 		case "set":
 			{
 				var payloadSet []string
-				if err := json.Unmarshal(raw["value"], &payloadSet); err != nil {
+				if err := json.Unmarshal(raw["data"], &payloadSet); err != nil {
 					http.Error(w, "Invalid request payload. String list expected", http.StatusBadRequest)
 					return
 				}
 				payload = payloadSet
-				eventPayload = newEventPayload(hubName, varName, varType, command, payload)
+				eventPayload = newEventPayload(queryMeta.HubName, queryMeta.VariableName, queryMeta.VariableType, queryMeta.Command, payload)
 			}
 		case "map":
 			{
 				var payloadMap any
-				if command == "add" {
+				if queryMeta.Command == "add" {
 					payloadMap = make(map[string]any)
-				} else if command == "remove" {
+				} else if queryMeta.Command == "remove" {
 					payloadMap = make([]string, 0)
 				}
-				if err := json.Unmarshal(raw["value"], &payloadMap); err != nil {
+				if err := json.Unmarshal(raw["data"], &payloadMap); err != nil {
 					http.Error(w, "Invalid request payload. Map expected", http.StatusBadRequest)
 					return
 				}
 				payload = payloadMap
-				eventPayload = newEventPayload(hubName, varName, varType, command, payload)
+				eventPayload = newEventPayload(queryMeta.HubName, queryMeta.VariableName, queryMeta.VariableType, queryMeta.Command, payload)
 			}
 		case "string", "int", "boolean":
 			{
 				var payloadString string
-				if err := json.Unmarshal(raw["value"], &payloadString); err != nil {
+				if err := json.Unmarshal(raw["data"], &payloadString); err != nil {
 					http.Error(w, "Invalid request payload. String expected", http.StatusBadRequest)
 					return
 				}
 				payload = payloadString
-				eventPayload = newEventPayload(hubName, varName, varType, command, payload)
+				eventPayload = newEventPayload(queryMeta.HubName, queryMeta.VariableName, queryMeta.VariableType, queryMeta.Command, payload)
 			}
 		}
 		logger.Info("POST:", zap.Any("payload", payload))
@@ -257,13 +218,11 @@ func HandleSetVariables(ctx context.Context, k8sClient dynamic.Interface, hub *e
 
 func newEventPayload(hubName string, varName string, varType string, action string, payload any) eventing.MdaiEvent {
 	payloadObj := eventing.StaticVariablesActionPayload{
-		StaticVariablesActionMeta: eventing.StaticVariablesActionMeta{
-			Hub:       hubName,
-			Variable:  varName,
-			Type:      varType,
-			Operation: action,
-		},
-		Value: payload,
+		Hub:       hubName,
+		Variable:  varName,
+		Type:      varType,
+		Operation: action,
+		Data:      payload,
 	}
 	// TODO: process error
 	payloadBytes, _ := json.Marshal(payloadObj)
@@ -287,4 +246,52 @@ func WriteJSONResponse(w http.ResponseWriter, status int, v any) error {
 
 func contentTypeOk(r *http.Request) bool {
 	return r.Header.Get("Content-Type") == "application/json"
+}
+
+func parseHeaders(ctx context.Context, w http.ResponseWriter, r *http.Request, k8sClient dynamic.Interface, queryType string) (QueryMeta, int, error) {
+	var result = QueryMeta{}
+
+	if queryType == "POST" {
+		if !contentTypeOk(r) {
+			return result, http.StatusBadRequest, fmt.Errorf("wrong Content-Type header")
+		}
+	}
+
+	hubsVariables, err := getConfiguredManualVariables(ctx, k8sClient)
+	if err != nil {
+		return result, http.StatusInternalServerError, err
+	} else if len(hubsVariables) == 0 {
+		return result, http.StatusNotFound, fmt.Errorf("no hubs with manual variables found")
+	}
+
+	hubName := r.PathValue("hubName")
+	varName := r.PathValue("varName")
+	if hubName == "" || varName == "" {
+		return result, http.StatusBadRequest, fmt.Errorf("missing hub or variable name")
+	}
+
+	hubFound := hubsVariables[hubName]
+	if hubFound == nil {
+		return result, http.StatusNotFound, fmt.Errorf("hub not found")
+	}
+
+	varType, ok := hubFound.(map[string]string)[varName]
+	if !ok {
+		return result, http.StatusNotFound, fmt.Errorf("variable not found")
+	}
+	var command string
+	if queryType == "POST" {
+		command := r.PathValue("command")
+		if command != "add" && command != "remove" {
+			return result, http.StatusBadRequest, fmt.Errorf("unsupported command")
+		}
+	}
+
+	return QueryMeta{
+		HubName:      hubName,
+		VariableName: varName,
+		VariableType: varType,
+		Command:      command,
+	}, http.StatusOK, nil
+
 }
