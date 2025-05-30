@@ -6,8 +6,8 @@ toolchain go1.24.3
 
 require (
 	github.com/cenkalti/backoff/v5 v5.0.2
-	github.com/decisiveai/event-hub-poc v0.0.2
 	github.com/decisiveai/mdai-data-core v0.1.5
+	github.com/decisiveai/mdai-event-hub v0.0.3
 	github.com/go-logr/zapr v1.3.0
 	github.com/google/uuid v1.6.0
 	github.com/prometheus/alertmanager v0.28.1
