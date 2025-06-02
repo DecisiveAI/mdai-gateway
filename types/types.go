@@ -39,6 +39,7 @@ func AdaptPrometheusAlertToMdaiEvents(payload template.Data) []eventing.MdaiEven
 			unMarshalledPayload[key] = value
 		}
 		unMarshalledPayload["value"] = annotations[CurrentValue]
+		unMarshalledPayload["status"] = status
 
 		payloadBytes, err := json.Marshal(unMarshalledPayload)
 		if err != nil {
