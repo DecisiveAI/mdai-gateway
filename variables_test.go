@@ -726,7 +726,7 @@ func TestHandleGetVariables_NonExistentHub(t *testing.T) {
 	mux.ServeHTTP(rr, req)
 
 	assert.Equal(t, http.StatusNotFound, rr.Code)
-	assert.Contains(t, rr.Body.String(), "Hub not found")
+	assert.Contains(t, rr.Body.String(), "hub not found")
 
 }
 
@@ -777,7 +777,7 @@ func TestHandleGetVariables_NonExistentVariable(t *testing.T) {
 	mux.ServeHTTP(rr, req)
 
 	assert.Equal(t, http.StatusNotFound, rr.Code)
-	assert.Contains(t, rr.Body.String(), "Variable not found")
+	assert.Contains(t, rr.Body.String(), "variable not found")
 
 }
 func TestHandleGetVariables_String_NoValue(t *testing.T) {
