@@ -1,5 +1,5 @@
 DOCKER_TAG ?= latest
-LATEST_TAG := $(shell git describe --tags --abbrev=0 $(git rev-parse --abbrev-ref HEAD) | sed 's/^v//')
+LATEST_TAG := $(shell git tag --sort=-v:refname | head -n1 | sed 's/^v//')
 CHART_VERSION ?= $(LATEST_TAG)
 CHART_DIR := ./deployment
 CHART_NAME := mdai-gateway
@@ -9,34 +9,60 @@ BASE_BRANCH := gh-pages
 TARGET_BRANCH := $(CHART_NAME)-v$(CHART_VERSION)
 CLONE_DIR := $(shell mktemp -d /tmp/mdai-helm-charts.XXXXXX)
 REPO_DIR := $(shell pwd)
+ECR_REPO := public.ecr.aws/p3k6k6h3
+
+TEST_PKGS := $(shell go list -f '{{if .TestGoFiles}}{{.ImportPath}}{{end}}' ./...)
+GO_TEST_FLAGS := -mod=vendor -count=1
+GO_BENCH_FLAGS := -mod=vendor -bench=. -benchmem
+GOLANGCI_LINT_FLAGS :=
 
 .PHONY: docker-login
 docker-login:
-	aws ecr-public get-login-password | docker login --username AWS --password-stdin public.ecr.aws/p3k6k6h3
+	aws ecr-public get-login-password | docker login --username AWS --password-stdin $(ECR_REPO)
 
 .PHONY: docker-build
 docker-build: tidy vendor
-	docker buildx build --platform linux/arm64,linux/amd64 -t public.ecr.aws/p3k6k6h3/mdai-gateway:$(DOCKER_TAG) . --load
+	docker buildx build --platform linux/arm64,linux/amd64 -t $(ECR_REPO)/mdai-gateway:$(DOCKER_TAG) . --load
 
 .PHONY: docker-push
 docker-push: tidy vendor docker-login
-	docker buildx build --platform linux/arm64,linux/amd64 -t public.ecr.aws/p3k6k6h3/mdai-gateway:$(DOCKER_TAG) . --push
+	docker buildx build --platform linux/arm64,linux/amd64 -t $(ECR_REPO)/mdai-gateway:$(DOCKER_TAG) . --push
 
 .PHONY: build
 build: tidy vendor
-	CGO_ENABLED=0 go build -mod=vendor -ldflags="-w -s" -o mdai-gateway .
+	@CGO_ENABLED=0 go build -mod=vendor -ldflags="-w -s" -o mdai-gateway ./cmd/mdai-gateway
 
 .PHONY: test
 test: tidy vendor
-	CGO_ENABLED=0 go test -mod=vendor -v -count=1 ./...
+	@CGO_ENABLED=0 go test $(GO_TEST_FLAGS) $(TEST_PKGS)
+
+.PHONY: testv
+testv: GO_TEST_FLAGS += -v
+testv: test
+
+.PHONY: bench
+bench: tidy vendor
+	@CGO_ENABLED=0 go test $(GO_BENCH_FLAGS) $(TEST_PKGS)
+
+.PHONY: benchv
+benchv: GO_BENCH_FLAGS += -v
+benchv: bench
 
 .PHONY: tidy
 tidy:
-	go mod tidy
+	@go mod tidy
 
 .PHONY: vendor
 vendor:
-	go mod vendor
+	@go mod vendor
+
+.PHONY: lint
+lint: tidy vendor
+	@golangci-lint run $(GOLANGCI_LINT_FLAGS)
+
+.PHONY: lintv
+lintv: GOLANGCI_LINT_FLAGS += -v
+lintv: lint
 
 .PHONY: helm
 helm:

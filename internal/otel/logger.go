@@ -1,8 +1,10 @@
-package main
+package otel
 
 import (
 	"context"
 	"errors"
+	"fmt"
+
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
@@ -22,19 +24,19 @@ func (errorHandler ZapErrorHandler) Handle(err error) {
 	}
 }
 
-type shutdownFunc func(context.Context) error
+type ShutdownFunc func(context.Context) error
 
 // setupOTelSDK bootstraps the OpenTelemetry pipeline.
 // If it does not return an error, make sure to call shutdown for proper cleanup.
-func setupOTelSDK(ctx context.Context, internalLogger *zap.Logger, enabled bool) (shutdown shutdownFunc, err error) {
-	var shutdownFuncs []shutdownFunc
+func setupOTelSDK(ctx context.Context, internalLogger *zap.Logger) (ShutdownFunc, error) {
+	var shutdownFuncs []ShutdownFunc
 
 	otel.SetErrorHandler(&ZapErrorHandler{logger: internalLogger})
 
 	// shutdown calls cleanup functions registered via shutdownFuncs.
 	// The errors from the calls are joined.
 	// Each registered cleanup will be invoked once.
-	shutdown = func(ctx context.Context) error {
+	shutdown := func(ctx context.Context) error {
 		var err error
 		for _, fn := range shutdownFuncs {
 			err = errors.Join(err, fn(ctx))
@@ -43,44 +45,29 @@ func setupOTelSDK(ctx context.Context, internalLogger *zap.Logger, enabled bool)
 		return err
 	}
 
-	if !enabled {
-		internalLogger.Info("OTEL SDK has been disabled with " + otelSdkDisabledEnvVar + " environment variable")
-		return shutdown, nil
-	}
-
-	// handleErr calls shutdown for cleanup and makes sure that all errors are returned.
-	handleErr := func(inErr error) {
-		err = errors.Join(inErr, shutdown(ctx))
-	}
-
-	resourceWAttributes, err := resource.New(ctx, resource.WithAttributes(
-		attribute.String("mdai-logstream", "hub"),
-	))
-	if err != nil {
-		panic(err)
-	}
-
-	eventHandlerResource, err := resource.Merge(
-		resource.Default(),
-		resourceWAttributes,
+	baseResource, err := resource.New(ctx,
+		resource.WithAttributes(attribute.String("mdai-logstream", "hub")),
 	)
 	if err != nil {
-		panic(err)
+		return shutdown, fmt.Errorf("failed to create OTEL resource: %w", err)
 	}
 
-	// Set up logger provider.
-	loggerProvider, err := newLoggerProvider(ctx, eventHandlerResource)
+	mergedResource, err := resource.Merge(resource.Default(), baseResource)
 	if err != nil {
-		handleErr(err)
-		return
+		return shutdown, fmt.Errorf("failed to merge OTEL resources: %w", err)
+	}
+
+	loggerProvider, err := newLoggerProvider(ctx, mergedResource)
+	if err != nil {
+		return shutdown, fmt.Errorf("failed to create logger provider: %w", err)
 	}
 	shutdownFuncs = append(shutdownFuncs, loggerProvider.Shutdown)
 	global.SetLoggerProvider(loggerProvider)
 
-	return
+	return shutdown, nil
 }
 
-func newLoggerProvider(ctx context.Context, resource *resource.Resource) (*log.LoggerProvider, error) {
+func newLoggerProvider(ctx context.Context, res *resource.Resource) (*log.LoggerProvider, error) {
 	logExporter, err := otlploghttp.New(ctx)
 	if err != nil {
 		return nil, err
@@ -88,7 +75,7 @@ func newLoggerProvider(ctx context.Context, resource *resource.Resource) (*log.L
 
 	loggerProvider := log.NewLoggerProvider(
 		log.WithProcessor(log.NewBatchProcessor(logExporter)),
-		log.WithResource(resource),
+		log.WithResource(res),
 	)
 	return loggerProvider, nil
 }
