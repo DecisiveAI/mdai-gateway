@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -74,6 +75,8 @@ func getConfiguredManualVariables(ctx context.Context, k8sClient dynamic.Interfa
 
 func HandleListVariables(ctx context.Context, k8sClient dynamic.Interface) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+
 		var response any
 		var httpStatus = http.StatusOK
 
@@ -107,6 +110,8 @@ func HandleListVariables(ctx context.Context, k8sClient dynamic.Interface) http.
 
 func HandleGetVariables(ctx context.Context, valkeyClient valkey.Client, k8sClient dynamic.Interface) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+
 		var response any
 
 		queryMeta, httpStatus, err := parseHeaders(ctx, w, r, k8sClient, "GET")
@@ -146,59 +151,134 @@ func HandleGetVariables(ctx context.Context, valkeyClient valkey.Client, k8sClie
 
 func HandleSetVariables(ctx context.Context, k8sClient dynamic.Interface, hub *eventing.EventHub) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+
 		var httpStatus = http.StatusOK
 
-		queryMeta, httpStatus, err := parseHeaders(ctx, w, r, k8sClient, "GET")
+		queryMeta, httpStatus, err := parseHeaders(ctx, w, r, k8sClient, "POST")
 		if err != nil {
 			WriteJSONResponse(w, httpStatus, err.Error())
 			return
 		}
 
 		var raw map[string]json.RawMessage
-		if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
-			http.Error(w, "Invalid request payload. Not map[string]json.RawMessage", http.StatusBadRequest)
+		if err := json.NewDecoder(r.Body).Decode(&raw); err != nil && raw["data"] == nil {
+			http.Error(w, "Invalid request payload. Expect {\"data\": any}", http.StatusBadRequest)
 			return
 		}
+		var data = raw["data"]
 
 		var payload any
-		var eventPayload eventing.MdaiEvent
+		var payloadTmp any
+		if err := json.Unmarshal(data, &payloadTmp); err != nil {
+			http.Error(w, "Invalid request payload. A slice of strings expected", http.StatusBadRequest)
+			return
+		}
 		switch queryMeta.VariableType {
 		case "set":
 			{
-				var payloadSet []string
-				if err := json.Unmarshal(raw["data"], &payloadSet); err != nil {
-					http.Error(w, "Invalid request payload. String list expected", http.StatusBadRequest)
+				switch payloadTmp.(type) {
+				case []interface{}:
+					var payloadList []string
+					if err := json.Unmarshal(data, &payloadList); err != nil {
+						http.Error(w, "Invalid request payload. List expected", http.StatusBadRequest)
+						return
+					}
+					payload = payloadList
+				default:
+					http.Error(w, "Invalid request payload. List expected", http.StatusBadRequest)
 					return
 				}
-				payload = payloadSet
-				eventPayload = newEventPayload(queryMeta.HubName, queryMeta.VariableName, queryMeta.VariableType, queryMeta.Command, payload)
 			}
 		case "map":
 			{
-				var payloadMap any
-				if queryMeta.Command == "add" {
-					payloadMap = make(map[string]any)
-				} else if queryMeta.Command == "remove" {
-					payloadMap = make([]string, 0)
+				switch queryMeta.Command {
+				case "add":
+					{
+						switch payloadTmp.(type) {
+						case map[string]interface{}:
+							var payloadMap map[string]string
+							if err := json.Unmarshal(data, &payloadMap); err != nil {
+								http.Error(w, "Invalid request payload. Map expected", http.StatusBadRequest)
+								return
+							}
+							payload = payloadMap
+						default:
+							http.Error(w, "Invalid request payload. Map expected", http.StatusBadRequest)
+							return
+						}
+					}
+				case "remove":
+					{
+						switch payloadTmp.(type) {
+						case []interface{}:
+							var payloadList []string
+							if err := json.Unmarshal(data, &payloadList); err != nil {
+								http.Error(w, "Invalid request payload. List expected", http.StatusBadRequest)
+								return
+							}
+							payload = payloadList
+						default:
+							http.Error(w, "Invalid request payload. List expected", http.StatusBadRequest)
+							return
+						}
+					}
+				default:
+					{
+						http.Error(w, "Invalid command", http.StatusBadRequest)
+						return
+					}
 				}
-				if err := json.Unmarshal(raw["data"], &payloadMap); err != nil {
-					http.Error(w, "Invalid request payload. Map expected", http.StatusBadRequest)
-					return
-				}
-				payload = payloadMap
-				eventPayload = newEventPayload(queryMeta.HubName, queryMeta.VariableName, queryMeta.VariableType, queryMeta.Command, payload)
 			}
-		case "string", "int", "boolean":
+		case "string":
 			{
-				var payloadString string
-				if err := json.Unmarshal(raw["data"], &payloadString); err != nil {
+				switch payloadTmp.(type) {
+				case string:
+					var payloadString string
+					if err := json.Unmarshal(data, &payloadString); err != nil {
+						http.Error(w, "Invalid request payload. String expected", http.StatusBadRequest)
+						return
+					}
+					payload = payloadString
+				default:
 					http.Error(w, "Invalid request payload. String expected", http.StatusBadRequest)
 					return
 				}
-				payload = payloadString
-				eventPayload = newEventPayload(queryMeta.HubName, queryMeta.VariableName, queryMeta.VariableType, queryMeta.Command, payload)
+			}
+		case "int":
+			{
+				switch payloadTmp.(type) {
+				case float64: // that's how all int numbers types appear
+					var payloadInt int
+					if err := json.Unmarshal(data, &payloadInt); err != nil {
+						http.Error(w, "Invalid request payload. Int expected", http.StatusBadRequest)
+						return
+					}
+					payload = strconv.Itoa(payloadInt)
+				default:
+					http.Error(w, "Invalid request payload. Int expected", http.StatusBadRequest)
+					return
+				}
+			}
+		case "boolean":
+			{
+				switch payloadTmp.(type) {
+				case bool:
+					var payloadBool bool
+					if err := json.Unmarshal(data, &payloadBool); err != nil {
+						http.Error(w, "Invalid request payload. Bool expected", http.StatusBadRequest)
+						return
+					}
+					payload = strconv.FormatBool(payloadBool)
+				default:
+					http.Error(w, "Invalid request payload. Bool expected", http.StatusBadRequest)
+					return
+				}
 			}
 		}
+
+		eventPayload := newEventPayload(queryMeta.HubName, queryMeta.VariableName, queryMeta.VariableType, queryMeta.Command, payload)
+
 		logger.Info("POST:", zap.Any("payload", payload))
 		WriteJSONResponse(w, http.StatusOK, eventPayload)
 
@@ -279,9 +359,9 @@ func parseHeaders(ctx context.Context, w http.ResponseWriter, r *http.Request, k
 	if !ok {
 		return result, http.StatusNotFound, fmt.Errorf("variable not found")
 	}
-	var command string
+
+	command := r.PathValue("command")
 	if queryType == "POST" {
-		command := r.PathValue("command")
 		if command != "add" && command != "remove" {
 			return result, http.StatusBadRequest, fmt.Errorf("unsupported command")
 		}
