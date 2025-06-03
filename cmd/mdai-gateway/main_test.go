@@ -2,9 +2,6 @@ package main
 
 import (
 	"bytes"
-	"context"
-	"io"
-	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -12,20 +9,13 @@ import (
 	"testing"
 
 	"github.com/decisiveai/mdai-event-hub/eventing"
+	"github.com/decisiveai/mdai-gateway/internal/gateway"
 	"github.com/stretchr/testify/require"
 	"github.com/valkey-io/valkey-go"
 	"github.com/valkey-io/valkey-go/mock"
 	"go.uber.org/mock/gomock"
+	"go.uber.org/zap/zaptest"
 )
-
-func TestMain(m *testing.M) {
-	if os.Getenv("SHOW_LOGS") == "1" {
-		log.SetOutput(os.Stderr)
-	} else {
-		log.SetOutput(io.Discard)
-	}
-	m.Run()
-}
 
 type XaddMatcher struct {
 	operation  string
@@ -35,7 +25,10 @@ type XaddMatcher struct {
 func (xadd XaddMatcher) Matches(x any) bool {
 	if cmd, ok := x.(valkey.Completed); ok {
 		commands := cmd.Commands()
-		return slices.Contains(commands, "XADD") && slices.Contains(commands, "mdai_hub_event_history") && (xadd.operation == "" || slices.Contains(commands, xadd.operation)) && slices.Contains(commands, xadd.labelValue)
+		return slices.Contains(commands, "XADD") &&
+			slices.Contains(commands, "mdai_hub_event_history") &&
+			(xadd.operation == "" || slices.Contains(commands, xadd.operation)) &&
+			slices.Contains(commands, xadd.labelValue)
 	}
 	return false
 }
@@ -46,63 +39,64 @@ func (xadd XaddMatcher) String() string {
 
 func TestUpdateEventsHandler(t *testing.T) {
 	const (
-		post_1_response = `{"message":"Processed Prometheus alerts","successful":6,"total":6}
+		post1Response = `{"message":"Processed Prometheus alerts","successful":6,"total":6}
 `
-		post_2_response = `{"message":"Processed Prometheus alerts","successful":3,"total":3}
+		post2Response = `{"message":"Processed Prometheus alerts","successful":3,"total":3}
 `
-		post_3_response = `{"message":"Processed Prometheus alerts","successful":2,"total":2}
+		post3Response = `{"message":"Processed Prometheus alerts","successful":2,"total":2}
 `
 	)
 
-	ctx := context.TODO()
+	ctx := t.Context()
+	logger := zaptest.NewLogger(t)
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	valkeyClient := mock.NewClient(ctrl)
 
-	alertPostBody1, err := os.ReadFile("testdata/alert_post_body_1.json")
+	alertPostBody1, err := os.ReadFile("../../testdata/alert_post_body_1.json")
 	require.NoError(t, err)
-	alertPostBody2, err := os.ReadFile("testdata/alert_post_body_2.json")
+	alertPostBody2, err := os.ReadFile("../../testdata/alert_post_body_2.json")
 	require.NoError(t, err)
-	alertPostBody3, err := os.ReadFile("testdata/alert_post_body_3.json")
+	alertPostBody3, err := os.ReadFile("../../testdata/alert_post_body_3.json")
 	require.NoError(t, err)
 
 	mux := http.NewServeMux()
 	hub := eventing.NewMockEventHub()
-	mux.HandleFunc("/events", handleEventsRoute(ctx, valkeyClient, hub))
+	mux.HandleFunc(eventsEndpoint, gateway.HandleEventsRoute(ctx, valkeyClient, hub, logger))
 
-	req := httptest.NewRequest(http.MethodPost, "/events", bytes.NewBuffer(alertPostBody1))
+	req := httptest.NewRequest(http.MethodPost, eventsEndpoint, bytes.NewBuffer(alertPostBody1))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusCreated, rec.Code)
-	require.Equal(t, post_1_response, rec.Body.String())
+	require.JSONEq(t, post1Response, rec.Body.String())
 
 	// one more time with different payload
 	mux = http.NewServeMux()
-	mux.HandleFunc("/events", handleEventsRoute(ctx, valkeyClient, hub))
+	mux.HandleFunc(eventsEndpoint, gateway.HandleEventsRoute(ctx, valkeyClient, hub, logger))
 
-	req = httptest.NewRequest(http.MethodPost, "/events", bytes.NewBuffer(alertPostBody2))
+	req = httptest.NewRequest(http.MethodPost, eventsEndpoint, bytes.NewBuffer(alertPostBody2))
 	req.Header.Set("Content-Type", "application/json")
 	rec = httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusCreated, rec.Code)
-	require.Equal(t, post_2_response, rec.Body.String())
+	require.JSONEq(t, post2Response, rec.Body.String())
 
 	// one more time to emulate a scenario when alert was re-created or renamed
 	mux = http.NewServeMux()
-	mux.HandleFunc("/events", handleEventsRoute(ctx, valkeyClient, hub))
+	mux.HandleFunc(eventsEndpoint, gateway.HandleEventsRoute(ctx, valkeyClient, hub, logger))
 
-	req = httptest.NewRequest(http.MethodPost, "/events", bytes.NewBuffer(alertPostBody3))
+	req = httptest.NewRequest(http.MethodPost, eventsEndpoint, bytes.NewBuffer(alertPostBody3))
 	req.Header.Set("Content-Type", "application/json")
 	rec = httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusCreated, rec.Code)
-	require.Equal(t, post_3_response, rec.Body.String())
+	require.JSONEq(t, post3Response, rec.Body.String())
 
 	// TODO: Add tests for GET, POST partial MdaiEvent
 }
