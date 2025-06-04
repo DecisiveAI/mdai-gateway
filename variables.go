@@ -17,9 +17,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 
-	"github.com/decisiveai/event-handler-webservice/types"
 	datacore "github.com/decisiveai/mdai-data-core/variables"
 	"github.com/decisiveai/mdai-event-hub/eventing"
+	"github.com/decisiveai/mdai-gateway/types"
 )
 
 const (
@@ -75,7 +75,7 @@ func getConfiguredManualVariables(ctx context.Context, k8sClient dynamic.Interfa
 func HandleListVariables(ctx context.Context, k8sClient dynamic.Interface) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
-		
+
 		if r.Method != http.MethodGet {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
