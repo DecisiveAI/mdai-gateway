@@ -6,8 +6,8 @@ toolchain go1.24.3
 
 require (
 	github.com/cenkalti/backoff/v5 v5.0.2
-	github.com/decisiveai/event-hub-poc v0.0.0-20250522185157-f691e113b7e4
-	github.com/decisiveai/mdai-data-core v0.1.5-0.20250522172954-93bd52ab8515
+	github.com/decisiveai/mdai-data-core v0.1.6
+	github.com/decisiveai/mdai-event-hub v0.0.4
 	github.com/go-logr/logr v1.4.2
 	github.com/go-logr/zapr v1.3.0
 	github.com/google/uuid v1.6.0
@@ -21,7 +21,7 @@ require (
 	go.opentelemetry.io/otel/log v0.11.0
 	go.opentelemetry.io/otel/sdk v1.35.0
 	go.opentelemetry.io/otel/sdk/log v0.11.0
-	go.uber.org/mock v0.5.1
+	go.uber.org/mock v0.5.2
 	go.uber.org/zap v1.27.0
 	k8s.io/apimachinery v0.33.1
 	k8s.io/client-go v0.33.1
@@ -86,7 +86,3 @@ require (
 	sigs.k8s.io/structured-merge-diff/v4 v4.6.0 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect
 )
-
-replace github.com/decisiveai/mdai-data-core => ../mdai-data-core
-
-replace github.com/decisiveai/event-hub-poc => ../event-hub-poc

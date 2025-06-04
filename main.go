@@ -6,12 +6,13 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"time"
 
 	"github.com/decisiveai/event-handler-webservice/types"
-	"github.com/decisiveai/event-hub-poc/eventing"
+	"github.com/decisiveai/mdai-event-hub/eventing"
 
 	"github.com/prometheus/alertmanager/template"
 
@@ -143,40 +144,49 @@ func main() {
 	router := http.NewServeMux()
 
 	router.HandleFunc("/events", handleEventsRoute(ctx, valkeyClient, hub))
-	router.HandleFunc("GET /variables/list/hub/{hubName}/", HandleListVariables(ctx, k8sClient))
-	router.HandleFunc("GET /variables/list/", HandleListVariables(ctx, k8sClient))
-	router.HandleFunc("GET /variables/values/hub/{hubName}/var/{varName}/", HandleGetVariables(ctx, valkeyClient, k8sClient))
-	router.HandleFunc("POST /variables/elements/{command}/hub/{hubName}/var/{varName}/", HandleSetVariables(ctx, k8sClient, hub))
+	router.HandleFunc("/variables/list/hub/{hubName}/", HandleListVariables(ctx, k8sClient))
+	router.HandleFunc("/variables/list/", HandleListVariables(ctx, k8sClient))
+	router.HandleFunc("/variables/values/hub/{hubName}/var/{varName}/", HandleGetVariables(ctx, valkeyClient, k8sClient))
+	router.HandleFunc("/variables/hub/{hubName}/var/{varName}/", HandleSetDeleteVariables(ctx, k8sClient, hub))
 
 	logger.Info("Starting server", zap.String("address", ":"+httpPort))
 	logger.Fatal("failed to start server", zap.Error(http.ListenAndServe(":"+httpPort, router)))
 }
 
-func initRmq(ctx context.Context) *eventing.EventHub {
+func initRmq(ctx context.Context) eventing.EventHubInterface {
 	retryCount := 0
-	connectToRmq := func() (*eventing.EventHub, error) {
-		rmqEndpoint := getEnvVariableWithDefault(rabbitmqEndpointEnvVarKey, "localhost:5672")
+	connectToRmq := func() (eventing.EventHubInterface, error) {
 		rmqPassword := getEnvVariableWithDefault(rabbitmqPasswordEnvVarKey, "")
-		rmqUser := getEnvVariableWithDefault(rabbitmqUserEnvVarKey, "mdai")
+		rmqEndpoint := getEnvVariableWithDefault(rabbitmqEndpointEnvVarKey, "localhost:5672")
 
-		hub, err := eventing.NewEventHub("amqp://"+rmqUser+":"+rmqPassword+"@"+rmqEndpoint+"/", eventing.EventQueueName, logger)
+		hubUrl := (&url.URL{
+			Scheme: "amqp",
+			Host:   rmqEndpoint,
+			User:   url.UserPassword("mdai", rmqPassword),
+		}).String()
+
+		hub, err := eventing.NewEventHub(hubUrl, eventing.EventQueueName, logger)
 		if err != nil {
 			retryCount++
 			return nil, err
 		}
-		logger.Info("Successfully created EventHub", zap.String("rmqEndpoint", rmqEndpoint))
+		logger.Info("Successfully created EventHub", zap.String("Endpoint", rmqEndpoint))
 		return hub, nil
 	}
 
-	notifyRmqFunc := func(err error, duration time.Duration) {
-		logger.Warn("failed to initialize rmq. retrying...", zap.Int("retry_count", retryCount), zap.Duration("duration", duration))
+	notifyFunc := func(err error, duration time.Duration) {
+		logger.Warn("failed to initialize rmq. retrying...",
+			zap.Error(err),
+			zap.Int("retry_count", retryCount),
+			zap.Duration("duration", duration))
 	}
+
 	hub, err := backoff.Retry(
 		ctx,
 		connectToRmq,
 		backoff.WithBackOff(backoff.NewExponentialBackOff()),
 		backoff.WithMaxElapsedTime(3*time.Minute),
-		backoff.WithNotify(notifyRmqFunc),
+		backoff.WithNotify(notifyFunc),
 	)
 	if err != nil {
 		logger.Fatal("failed to connect to rmq", zap.Error(err))
@@ -226,7 +236,7 @@ func getEnvVariableWithDefault(key, defaultValue string) string {
 	}
 	return defaultValue
 }
-func handleEventsRoute(ctx context.Context, valkeyClient valkey.Client, hub *eventing.EventHub) http.HandlerFunc {
+func handleEventsRoute(ctx context.Context, valkeyClient valkey.Client, hub eventing.EventHubInterface) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		logger.Info("handling request ", zap.Any("request", r))
 		if r.Method == http.MethodGet {
@@ -298,7 +308,7 @@ func handleEventsRoute(ctx context.Context, valkeyClient valkey.Client, hub *eve
 }
 
 // Handle Prometheus Alertmanager alerts
-func handlePrometheusAlert(w http.ResponseWriter, bodyBytes []byte, hub *eventing.EventHub, logger *zap.Logger) {
+func handlePrometheusAlert(w http.ResponseWriter, bodyBytes []byte, hub eventing.EventHubInterface, logger *zap.Logger) {
 	var alertData template.Data
 	if err := json.Unmarshal(bodyBytes, &alertData); err != nil {
 		logger.Error("Failed to unmarshal Prometheus alert", zap.Error(err))
@@ -339,7 +349,7 @@ func handlePrometheusAlert(w http.ResponseWriter, bodyBytes []byte, hub *eventin
 }
 
 // Handle direct MdaiEvent submissions
-func handleMdaiEvent(w http.ResponseWriter, bodyBytes []byte, hub *eventing.EventHub, logger *zap.Logger) {
+func handleMdaiEvent(w http.ResponseWriter, bodyBytes []byte, hub eventing.EventHubInterface, logger *zap.Logger) {
 	var event eventing.MdaiEvent
 	if err := json.Unmarshal(bodyBytes, &event); err != nil {
 		logger.Error("Failed to unmarshal MdaiEvent", zap.Error(err))

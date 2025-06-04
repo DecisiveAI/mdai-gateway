@@ -18,19 +18,18 @@ import (
 	"k8s.io/client-go/dynamic"
 
 	"github.com/decisiveai/event-handler-webservice/types"
-	"github.com/decisiveai/event-hub-poc/eventing"
 	datacore "github.com/decisiveai/mdai-data-core/variables"
+	"github.com/decisiveai/mdai-event-hub/eventing"
 )
 
 const (
 	manualEnvConfigMapNamePostfix = "-manual-variables"
-	staticVariablesEventSource    = "static_variable_api"
 )
 
 type QueryMeta struct {
 	HubName      string `json:"hubName"`
-	VariableName string `json:"variableName"`
-	VariableType string `json:"variableTame"`
+	VariableRef  string `json:"variableRef"`
+	VariableType string `json:"variableType"`
 	Command      string `json:"command"`
 }
 
@@ -76,6 +75,10 @@ func getConfiguredManualVariables(ctx context.Context, k8sClient dynamic.Interfa
 func HandleListVariables(ctx context.Context, k8sClient dynamic.Interface) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
+		
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
 
 		var response any
 		var httpStatus = http.StatusOK
@@ -112,9 +115,13 @@ func HandleGetVariables(ctx context.Context, valkeyClient valkey.Client, k8sClie
 	return func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
 
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+
 		var response any
 
-		queryMeta, httpStatus, err := parseHeaders(ctx, w, r, k8sClient, "GET")
+		queryMeta, httpStatus, err := parseHeaders(ctx, r, k8sClient, http.MethodGet)
 		if err != nil {
 			WriteJSONResponse(w, httpStatus, err.Error())
 			return
@@ -126,15 +133,15 @@ func HandleGetVariables(ctx context.Context, valkeyClient valkey.Client, k8sClie
 		switch queryMeta.VariableType {
 		case "set":
 			{
-				valkeyValue, err = valkeyAdapter.GetSetAsStringSlice(ctx, queryMeta.VariableName, queryMeta.HubName)
+				valkeyValue, err = valkeyAdapter.GetSetAsStringSlice(ctx, queryMeta.VariableRef, queryMeta.HubName)
 			}
 		case "map":
 			{
-				valkeyValue, err = valkeyAdapter.GetMap(ctx, queryMeta.VariableName, queryMeta.HubName)
+				valkeyValue, err = valkeyAdapter.GetMap(ctx, queryMeta.VariableRef, queryMeta.HubName)
 			}
 		case "string", "int", "boolean":
 			{
-				valkeyValue, _, err = valkeyAdapter.GetString(ctx, queryMeta.VariableName, queryMeta.HubName)
+				valkeyValue, _, err = valkeyAdapter.GetString(ctx, queryMeta.VariableRef, queryMeta.HubName)
 			}
 		}
 		if err != nil {
@@ -142,20 +149,24 @@ func HandleGetVariables(ctx context.Context, valkeyClient valkey.Client, k8sClie
 			return
 		}
 		response = map[string]any{
-			queryMeta.VariableName: valkeyValue,
+			queryMeta.VariableRef: valkeyValue,
 		}
 		WriteJSONResponse(w, http.StatusOK, response)
 
 	}
 }
 
-func HandleSetVariables(ctx context.Context, k8sClient dynamic.Interface, hub *eventing.EventHub) http.HandlerFunc {
+func HandleSetDeleteVariables(ctx context.Context, k8sClient dynamic.Interface, hub eventing.EventHubInterface) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
 
+		if r.Method != http.MethodPost && r.Method != http.MethodDelete {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+
 		var httpStatus = http.StatusOK
 
-		queryMeta, httpStatus, err := parseHeaders(ctx, w, r, k8sClient, "POST")
+		queryMeta, httpStatus, err := parseHeaders(ctx, r, k8sClient, r.Method)
 		if err != nil {
 			WriteJSONResponse(w, httpStatus, err.Error())
 			return
@@ -277,7 +288,7 @@ func HandleSetVariables(ctx context.Context, k8sClient dynamic.Interface, hub *e
 			}
 		}
 
-		eventPayload := newEventPayload(queryMeta.HubName, queryMeta.VariableName, queryMeta.VariableType, queryMeta.Command, payload)
+		eventPayload := newEventPayload(queryMeta.HubName, queryMeta.VariableRef, queryMeta.VariableType, queryMeta.Command, payload)
 
 		logger.Info("POST:", zap.Any("payload", payload))
 		WriteJSONResponse(w, http.StatusOK, eventPayload)
@@ -297,21 +308,21 @@ func HandleSetVariables(ctx context.Context, k8sClient dynamic.Interface, hub *e
 }
 
 func newEventPayload(hubName string, varName string, varType string, action string, payload any) eventing.MdaiEvent {
-	payloadObj := eventing.StaticVariablesActionPayload{
-		Hub:       hubName,
-		Variable:  varName,
-		Type:      varType,
-		Operation: action,
-		Data:      payload,
+	payloadObj := eventing.ManualVariablesActionPayload{
+		HubName:     hubName,
+		VariableRef: varName,
+		DataType:    varType,
+		Operation:   action,
+		Data:        payload,
 	}
 	// TODO: process error
 	payloadBytes, _ := json.Marshal(payloadObj)
 	return eventing.MdaiEvent{
 		Id:        types.CreateEventUuid(),
-		Name:      strings.Join([]string{"static_variable", action, hubName, varName}, "__"),
+		Name:      strings.Join([]string{"manual_variable", action, hubName, varName}, "__"),
 		HubName:   hubName,
 		Timestamp: time.Now(),
-		Source:    staticVariablesEventSource,
+		Source:    eventing.ManualVariablesEventSource,
 		Payload:   string(payloadBytes),
 	}
 
@@ -328,10 +339,10 @@ func contentTypeOk(r *http.Request) bool {
 	return r.Header.Get("Content-Type") == "application/json"
 }
 
-func parseHeaders(ctx context.Context, w http.ResponseWriter, r *http.Request, k8sClient dynamic.Interface, queryType string) (QueryMeta, int, error) {
+func parseHeaders(ctx context.Context, r *http.Request, k8sClient dynamic.Interface, queryType string) (QueryMeta, int, error) {
 	var result = QueryMeta{}
 
-	if queryType == "POST" {
+	if queryType == http.MethodPost || queryType == http.MethodDelete {
 		if !contentTypeOk(r) {
 			return result, http.StatusBadRequest, fmt.Errorf("wrong Content-Type header")
 		}
@@ -360,16 +371,16 @@ func parseHeaders(ctx context.Context, w http.ResponseWriter, r *http.Request, k
 		return result, http.StatusNotFound, fmt.Errorf("variable not found")
 	}
 
-	command := r.PathValue("command")
-	if queryType == "POST" {
-		if command != "add" && command != "remove" {
-			return result, http.StatusBadRequest, fmt.Errorf("unsupported command")
-		}
+	var command string
+	if queryType == http.MethodPost {
+		command = "add"
+	} else if queryType == http.MethodDelete {
+		command = "remove"
 	}
 
 	return QueryMeta{
 		HubName:      hubName,
-		VariableName: varName,
+		VariableRef:  varName,
 		VariableType: varType,
 		Command:      command,
 	}, http.StatusOK, nil
