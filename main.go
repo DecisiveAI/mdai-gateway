@@ -39,7 +39,6 @@ const (
 
 	rabbitmqEndpointEnvVarKey = "RABBITMQ_ENDPOINT"
 	rabbitmqPasswordEnvVarKey = "RABBITMQ_PASSWORD"
-	rabbitmqUserEnvVarKey     = "RABBITMQ_USER"
 
 	httpPortEnvVarKey              = "HTTP_PORT"
 	defaultHttpPort                = "8081"
