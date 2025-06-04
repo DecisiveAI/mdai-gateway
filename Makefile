@@ -2,7 +2,7 @@ DOCKER_TAG ?= latest
 LATEST_TAG := $(shell git describe --tags --abbrev=0 $(git rev-parse --abbrev-ref HEAD) | sed 's/^v//')
 CHART_VERSION ?= $(LATEST_TAG)
 CHART_DIR := ./deployment
-CHART_NAME := event-handler-webservice
+CHART_NAME := mdai-gateway
 CHART_PACKAGE := $(CHART_NAME)-$(CHART_VERSION).tgz
 CHART_REPO := git@github.com:DecisiveAI/mdai-helm-charts.git
 BASE_BRANCH := gh-pages
@@ -16,15 +16,15 @@ docker-login:
 
 .PHONY: docker-build
 docker-build: tidy vendor
-	docker buildx build --platform linux/arm64,linux/amd64 -t public.ecr.aws/p3k6k6h3/event-handler-webservice:$(DOCKER_TAG) . --load
+	docker buildx build --platform linux/arm64,linux/amd64 -t public.ecr.aws/p3k6k6h3/mdai-gateway:$(DOCKER_TAG) . --load
 
 .PHONY: docker-push
 docker-push: tidy vendor docker-login
-	docker buildx build --platform linux/arm64,linux/amd64 -t public.ecr.aws/p3k6k6h3/event-handler-webservice:$(DOCKER_TAG) . --push
+	docker buildx build --platform linux/arm64,linux/amd64 -t public.ecr.aws/p3k6k6h3/mdai-gateway:$(DOCKER_TAG) . --push
 
 .PHONY: build
 build: tidy vendor
-	CGO_ENABLED=0 go build -mod=vendor -ldflags="-w -s" -o event-handler-webservice .
+	CGO_ENABLED=0 go build -mod=vendor -ldflags="-w -s" -o mdai-gateway .
 
 .PHONY: test
 test: tidy vendor

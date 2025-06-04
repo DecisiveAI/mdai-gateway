@@ -11,8 +11,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/decisiveai/event-handler-webservice/types"
 	"github.com/decisiveai/mdai-event-hub/eventing"
+	"github.com/decisiveai/mdai-gateway/types"
 
 	"github.com/prometheus/alertmanager/template"
 
@@ -71,7 +71,7 @@ func init() {
 	// don't really care about failing of defer that is the last thing run before the program exists
 	//nolint:all
 	defer internalLogger.Sync() // Flush logs before exiting
-	otelCore := otelzap.NewCore("github.com/decisiveai/event-handler-webservice")
+	otelCore := otelzap.NewCore("github.com/decisiveai/mdai-gateway")
 	multiCore := zapcore.NewTee(core, otelCore)
 	logger = zap.New(multiCore, zap.AddCaller())
 	// don't really care about failing of defer that is the last thing run before the program exists
@@ -212,7 +212,10 @@ func initValkey(ctx context.Context) valkey.Client {
 	exponentialBackoff.InitialInterval = 5 * time.Second
 
 	notifyFunc := func(err error, duration time.Duration) {
-		logger.Warn("failed to initialize valkey client. retrying...", zap.Int("retry_count", retryCount), zap.Duration("duration", duration))
+		logger.Warn("failed to initialize valkey. retrying...",
+			zap.Error(err),
+			zap.Int("retry_count", retryCount),
+			zap.Duration("duration", duration))
 	}
 
 	valkeyClient, err := backoff.Retry(

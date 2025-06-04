@@ -39,7 +39,7 @@ func AdaptPrometheusAlertToMdaiEvents(payload template.Data) []eventing.MdaiEven
 			unMarshalledPayload[key] = value
 		}
 		unMarshalledPayload["value"] = annotations[CurrentValue]
-		unMarshalledPayload["hubName"] = annotations[HubName]
+		unMarshalledPayload["status"] = status
 
 		payloadBytes, err := json.Marshal(unMarshalledPayload)
 		if err != nil {
@@ -57,6 +57,7 @@ func AdaptPrometheusAlertToMdaiEvents(payload template.Data) []eventing.MdaiEven
 			Source:    Prometheus,
 			Id:        id,
 			Timestamp: alert.StartsAt,
+			HubName:   annotations[HubName],
 			Payload:   string(payloadBytes),
 		}
 

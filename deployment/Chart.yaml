@@ -1,6 +1,6 @@
 apiVersion: v2
-name: event-handler-webservice
-description: MyDecisive Event Handler Webservice helm charts
+name: mdai-gateway
+description: MyDecisive Gateway helm charts
 
 # A chart can be either an 'application' or a 'library' chart.
 #

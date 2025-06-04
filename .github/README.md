@@ -4,4 +4,4 @@
 
 ## Install via Helm
 ```sh
-helm install event-handler oci://ghcr.io/decisiveai/event-handler-webservice
+helm install mdai-gateway oci://ghcr.io/decisiveai/mdai-gateway
