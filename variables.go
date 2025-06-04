@@ -74,7 +74,11 @@ func getConfiguredManualVariables(ctx context.Context, k8sClient dynamic.Interfa
 
 func HandleListVariables(ctx context.Context, k8sClient dynamic.Interface) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		defer r.Body.Close()
+		defer func() {
+			if err := r.Body.Close(); err != nil {
+				logger.Error("failed to close request body: %v", zap.Error(err))
+			}
+		}()
 
 		if r.Method != http.MethodGet {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -86,11 +90,15 @@ func HandleListVariables(ctx context.Context, k8sClient dynamic.Interface) http.
 		hubsVariables, err := getConfiguredManualVariables(ctx, k8sClient)
 		if err != nil {
 			httpStatus = http.StatusInternalServerError
-			WriteJSONResponse(w, httpStatus, response)
+			if err := WriteJSONResponse(w, httpStatus, response); err != nil {
+				logger.Error("failed to write response body: %v", zap.Error(err))
+			}
 			return
 		} else if len(hubsVariables) == 0 {
 			httpStatus = http.StatusNotFound
-			WriteJSONResponse(w, httpStatus, response)
+			if err := WriteJSONResponse(w, httpStatus, response); err != nil {
+				logger.Error("failed to write response body: %v", zap.Error(err))
+			}
 			return
 		}
 
@@ -105,7 +113,9 @@ func HandleListVariables(ctx context.Context, k8sClient dynamic.Interface) http.
 				httpStatus = http.StatusNotFound
 			}
 		}
-		WriteJSONResponse(w, httpStatus, response)
+		if err := WriteJSONResponse(w, httpStatus, response); err != nil {
+			logger.Error("failed to write response body: %v", zap.Error(err))
+		}
 
 	}
 
@@ -113,7 +123,11 @@ func HandleListVariables(ctx context.Context, k8sClient dynamic.Interface) http.
 
 func HandleGetVariables(ctx context.Context, valkeyClient valkey.Client, k8sClient dynamic.Interface) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		defer r.Body.Close()
+		defer func() {
+			if err := r.Body.Close(); err != nil {
+				logger.Error("failed to close request body: %v", zap.Error(err))
+			}
+		}()
 
 		if r.Method != http.MethodGet {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -123,7 +137,9 @@ func HandleGetVariables(ctx context.Context, valkeyClient valkey.Client, k8sClie
 
 		queryMeta, httpStatus, err := parseHeaders(ctx, r, k8sClient, http.MethodGet)
 		if err != nil {
-			WriteJSONResponse(w, httpStatus, err.Error())
+			if err := WriteJSONResponse(w, httpStatus, err.Error()); err != nil {
+				logger.Error("failed to write response body: %v", zap.Error(err))
+			}
 			return
 		}
 
@@ -145,30 +161,38 @@ func HandleGetVariables(ctx context.Context, valkeyClient valkey.Client, k8sClie
 			}
 		}
 		if err != nil {
-			WriteJSONResponse(w, http.StatusInternalServerError, err.Error())
+			if err := WriteJSONResponse(w, http.StatusInternalServerError, err.Error()); err != nil {
+				logger.Error("failed to write response body: %v", zap.Error(err))
+			}
 			return
 		}
 		response = map[string]any{
 			queryMeta.VariableRef: valkeyValue,
 		}
-		WriteJSONResponse(w, http.StatusOK, response)
+		if err := WriteJSONResponse(w, http.StatusOK, response); err != nil {
+			logger.Error("failed to write response body: %v", zap.Error(err))
+		}
 
 	}
 }
 
 func HandleSetDeleteVariables(ctx context.Context, k8sClient dynamic.Interface, hub eventing.EventHubInterface) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		defer r.Body.Close()
+		defer func() {
+			if err := r.Body.Close(); err != nil {
+				logger.Error("failed to close request body: %v", zap.Error(err))
+			}
+		}()
 
 		if r.Method != http.MethodPost && r.Method != http.MethodDelete {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
 
-		var httpStatus = http.StatusOK
-
 		queryMeta, httpStatus, err := parseHeaders(ctx, r, k8sClient, r.Method)
 		if err != nil {
-			WriteJSONResponse(w, httpStatus, err.Error())
+			if err := WriteJSONResponse(w, httpStatus, err.Error()); err != nil {
+				logger.Error("failed to write response body: %v", zap.Error(err))
+			}
 			return
 		}
 
@@ -291,7 +315,9 @@ func HandleSetDeleteVariables(ctx context.Context, k8sClient dynamic.Interface, 
 		eventPayload := newEventPayload(queryMeta.HubName, queryMeta.VariableRef, queryMeta.VariableType, queryMeta.Command, payload)
 
 		logger.Info("POST:", zap.Any("payload", payload))
-		WriteJSONResponse(w, http.StatusOK, eventPayload)
+		if err := WriteJSONResponse(w, http.StatusOK, eventPayload); err != nil {
+			logger.Error("failed to write response body: %v", zap.Error(err))
+		}
 
 		logger.Info("Processing MdaiEvent",
 			zap.String("id", eventPayload.Id),
@@ -372,9 +398,10 @@ func parseHeaders(ctx context.Context, r *http.Request, k8sClient dynamic.Interf
 	}
 
 	var command string
-	if queryType == http.MethodPost {
+	switch queryType {
+	case http.MethodPost:
 		command = "add"
-	} else if queryType == http.MethodDelete {
+	case http.MethodDelete:
 		command = "remove"
 	}
 

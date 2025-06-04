@@ -310,7 +310,6 @@ func TestHandleListVariables_ListHub_NonExistent(t *testing.T) {
 }
 
 func TestHandleGetVariables_Int(t *testing.T) {
-	ctx := context.TODO()
 	mdaiHub := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "hub.mydecisive.ai/v1",
@@ -382,7 +381,6 @@ func TestHandleGetVariables_Int(t *testing.T) {
 }
 
 func TestHandleGetVariables_Bool(t *testing.T) {
-	ctx := context.TODO()
 	mdaiHub := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "hub.mydecisive.ai/v1",
@@ -454,7 +452,6 @@ func TestHandleGetVariables_Bool(t *testing.T) {
 }
 
 func TestHandleGetVariables_String(t *testing.T) {
-	ctx := context.TODO()
 	mdaiHub := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "hub.mydecisive.ai/v1",
@@ -525,7 +522,6 @@ func TestHandleGetVariables_String(t *testing.T) {
 }
 
 func TestHandleGetVariables_Set(t *testing.T) {
-	ctx := context.TODO()
 	mdaiHub := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "hub.mydecisive.ai/v1",
@@ -603,7 +599,6 @@ func TestHandleGetVariables_Set(t *testing.T) {
 }
 
 func TestHandleGetVariables_Map(t *testing.T) {
-	ctx := context.TODO()
 	mdaiHub := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "hub.mydecisive.ai/v1",
@@ -680,7 +675,6 @@ func TestHandleGetVariables_Map(t *testing.T) {
 }
 
 func TestHandleGetVariables_NonExistentHub(t *testing.T) {
-	ctx := context.TODO()
 	mdaiHub := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "hub.mydecisive.ai/v1",
@@ -731,7 +725,6 @@ func TestHandleGetVariables_NonExistentHub(t *testing.T) {
 }
 
 func TestHandleGetVariables_NonExistentVariable(t *testing.T) {
-	ctx := context.TODO()
 	mdaiHub := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "hub.mydecisive.ai/v1",
@@ -781,7 +774,6 @@ func TestHandleGetVariables_NonExistentVariable(t *testing.T) {
 
 }
 func TestHandleGetVariables_String_NoValue(t *testing.T) {
-	ctx := context.TODO()
 	mdaiHub := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "hub.mydecisive.ai/v1",
