@@ -12,10 +12,8 @@ import (
 	"testing"
 
 	"github.com/decisiveai/mdai-event-hub/eventing"
-	"github.com/valkey-io/valkey-go"
-	"go.uber.org/zap"
-
 	"github.com/stretchr/testify/require"
+	"github.com/valkey-io/valkey-go"
 	"github.com/valkey-io/valkey-go/mock"
 	"go.uber.org/mock/gomock"
 )
@@ -46,9 +44,14 @@ func (xadd XaddMatcher) String() string {
 	return "Wanted XADD to mdai_hub_event_history command with " + xadd.operation + " and " + xadd.labelValue
 }
 
-func TestUpdateValkeyHandler(t *testing.T) {
+func TestUpdateEventsHandler(t *testing.T) {
 	const (
-		successResponse = `{"success": "variable(s) updated"}`
+		post_1_response = `{"message":"Processed Prometheus alerts","successful":6,"total":6}
+`
+		post_2_response = `{"message":"Processed Prometheus alerts","successful":3,"total":3}
+`
+		post_3_response = `{"message":"Processed Prometheus alerts","successful":2,"total":2}
+`
 	)
 
 	ctx := context.TODO()
@@ -66,98 +69,40 @@ func TestUpdateValkeyHandler(t *testing.T) {
 	require.NoError(t, err)
 
 	mux := http.NewServeMux()
-	//hub, _ := eventing.NewEventHub("test-connection-string", "test-queue", zap.NewExample()) // TODO mock the eventing.EventHub struct
-	hub, _ := eventing.NewEventHub("amqp://mdai:mdai@localhost:5672", "mdai-events", zap.NewExample()) // TODO mock the eventing.EventHub struct
+	hub := eventing.NewMockEventHub()
 	mux.HandleFunc("/events", handleEventsRoute(ctx, valkeyClient, hub))
-
-	valkeyClient.EXPECT().Do(ctx,
-		XaddMatcher{labelValue: "service-a"},
-	).Return(mock.Result(mock.ValkeyString(""))).Times(1)
-	valkeyClient.EXPECT().DoMulti(ctx,
-		mock.Match("SADD", "variable/mdaihub-sample/service_list", "service-a"),
-		XaddMatcher{operation: "mdai/add_element", labelValue: "service-a"},
-	).Return([]valkey.ValkeyResult{mock.Result(mock.ValkeyInt64(1)), mock.Result(mock.ValkeyString(""))}).Times(1)
-	valkeyClient.EXPECT().Do(ctx,
-		XaddMatcher{labelValue: "service-b"},
-	).Return(mock.Result(mock.ValkeyString(""))).Times(1)
-	valkeyClient.EXPECT().DoMulti(ctx,
-		mock.Match("SREM", "variable/mdaihub-sample/service_list", "service-b"),
-		XaddMatcher{operation: "mdai/remove_element", labelValue: "service-b"},
-	).Return([]valkey.ValkeyResult{mock.Result(mock.ValkeyInt64(1)), mock.Result(mock.ValkeyString(""))}).Times(1)
-	valkeyClient.EXPECT().Do(ctx,
-		XaddMatcher{labelValue: "service-c"},
-	).Return(mock.Result(mock.ValkeyString(""))).Times(1)
-	valkeyClient.EXPECT().DoMulti(ctx,
-		mock.Match("SET", "variable/mdaihub-sample/service_list", "service-c"),
-		XaddMatcher{operation: "mdai/set", labelValue: "service-c"},
-	).Return([]valkey.ValkeyResult{mock.Result(mock.ValkeyInt64(1)), mock.Result(mock.ValkeyString(""))}).Times(1)
 
 	req := httptest.NewRequest(http.MethodPost, "/events", bytes.NewBuffer(alertPostBody1))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 
-	//require.Equal(t, http.StatusOK, rec.Code)
-	require.Equal(t, successResponse, rec.Body.String())
+	require.Equal(t, http.StatusCreated, rec.Code)
+	require.Equal(t, post_1_response, rec.Body.String())
 
 	// one more time with different payload
 	mux = http.NewServeMux()
 	mux.HandleFunc("/events", handleEventsRoute(ctx, valkeyClient, hub))
-
-	valkeyClient.EXPECT().Do(ctx,
-		XaddMatcher{labelValue: "service-a"},
-	).Return(mock.Result(mock.ValkeyString(""))).Times(1)
-	valkeyClient.EXPECT().DoMulti(ctx,
-		mock.Match("SREM", "variable/mdaihub-sample/service_list", "service-a"),
-		XaddMatcher{operation: "mdai/remove_element", labelValue: "service-a"},
-	).Return([]valkey.ValkeyResult{mock.Result(mock.ValkeyInt64(1)), mock.Result(mock.ValkeyString(""))}).Times(1)
-	valkeyClient.EXPECT().Do(ctx,
-		XaddMatcher{labelValue: "service-b"},
-	).Return(mock.Result(mock.ValkeyString(""))).Times(1)
-	valkeyClient.EXPECT().DoMulti(ctx,
-		mock.Match("SREM", "variable/mdaihub-sample/service_list", "service-b"),
-		XaddMatcher{operation: "mdai/remove_element", labelValue: "service-b"},
-	).Return([]valkey.ValkeyResult{mock.Result(mock.ValkeyInt64(1)), mock.Result(mock.ValkeyString(""))}).Times(1)
-	valkeyClient.EXPECT().Do(ctx,
-		XaddMatcher{labelValue: "service-c"},
-	).Return(mock.Result(mock.ValkeyString(""))).Times(1)
-	valkeyClient.EXPECT().DoMulti(ctx,
-		mock.Match("SREM", "variable/mdaihub-sample/service_list", "service-c"),
-		XaddMatcher{operation: "mdai/remove_element", labelValue: "service-c"},
-	).Return([]valkey.ValkeyResult{mock.Result(mock.ValkeyInt64(1)), mock.Result(mock.ValkeyString(""))}).Times(1)
 
 	req = httptest.NewRequest(http.MethodPost, "/events", bytes.NewBuffer(alertPostBody2))
 	req.Header.Set("Content-Type", "application/json")
 	rec = httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 
-	require.Equal(t, http.StatusOK, rec.Code)
-	require.Equal(t, successResponse, rec.Body.String())
+	require.Equal(t, http.StatusCreated, rec.Code)
+	require.Equal(t, post_2_response, rec.Body.String())
 
 	// one more time to emulate a scenario when alert was re-created or renamed
 	mux = http.NewServeMux()
 	mux.HandleFunc("/events", handleEventsRoute(ctx, valkeyClient, hub))
-
-	valkeyClient.EXPECT().Do(ctx,
-		XaddMatcher{labelValue: "service-a"},
-	).Return(mock.Result(mock.ValkeyString(""))).Times(1)
-	valkeyClient.EXPECT().DoMulti(ctx,
-		mock.Match("SADD", "variable/mdaihub-sample/service_list", "service-a"),
-		XaddMatcher{operation: "mdai/add_element", labelValue: "service-a"},
-	).Return([]valkey.ValkeyResult{mock.Result(mock.ValkeyInt64(1)), mock.Result(mock.ValkeyString(""))}).Times(1)
-	valkeyClient.EXPECT().Do(ctx,
-		XaddMatcher{labelValue: "service-a"},
-	).Return(mock.Result(mock.ValkeyString(""))).Times(1)
-	valkeyClient.EXPECT().DoMulti(ctx,
-		mock.Match("SREM", "variable/mdaihub-sample/service_list", "service-a"),
-		XaddMatcher{operation: "mdai/remove_element", labelValue: "service-a"},
-	).Return([]valkey.ValkeyResult{mock.Result(mock.ValkeyInt64(1)), mock.Result(mock.ValkeyString(""))}).Times(1)
 
 	req = httptest.NewRequest(http.MethodPost, "/events", bytes.NewBuffer(alertPostBody3))
 	req.Header.Set("Content-Type", "application/json")
 	rec = httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 
-	require.Equal(t, http.StatusOK, rec.Code)
-	require.Equal(t, successResponse, rec.Body.String())
+	require.Equal(t, http.StatusCreated, rec.Code)
+	require.Equal(t, post_3_response, rec.Body.String())
+
+	// TODO: Add tests for GET, POST partial MdaiEvent
 }
