@@ -148,6 +148,11 @@ func HandleGetVariables(ctx context.Context, valkeyClient valkey.Client, k8sClie
 			{
 				valkeyValue, _, err = valkeyAdapter.GetString(ctx, queryMeta.VariableRef, queryMeta.HubName)
 			}
+		default:
+			{
+				err := fmt.Errorf("unsupported variable type %v", queryMeta.VariableType)
+				logger.Error("event payload parsing error: %s", zap.Error(err))
+			}
 		}
 		if err != nil {
 			WriteJSONResponse(w, http.StatusInternalServerError, err.Error())
