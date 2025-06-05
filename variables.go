@@ -320,7 +320,6 @@ func HandleSetDeleteVariables(ctx context.Context, k8sClient dynamic.Interface, 
 
 func newEventPayload(hubName string, varName string, varType string, action string, payload any) eventing.MdaiEvent {
 	payloadObj := eventing.ManualVariablesActionPayload{
-		HubName:     hubName,
 		VariableRef: varName,
 		DataType:    varType,
 		Operation:   action,
@@ -390,6 +389,11 @@ func parseHeaders(ctx context.Context, r *http.Request, k8sClient dynamic.Interf
 		command = "add"
 	case http.MethodDelete:
 		command = "remove"
+	case http.MethodGet:
+	default:
+		{
+			return result, http.StatusBadRequest, fmt.Errorf("unsupported HTTP method")
+		}
 	}
 
 	return queryMeta{

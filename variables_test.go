@@ -820,7 +820,7 @@ func TestHandleGetVariables_String_NoValue(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /variables/values/hub/{hubName}/var/{varName}/", handler)
+	mux.HandleFunc("/variables/values/hub/{hubName}/var/{varName}/", handler)
 
 	mux.ServeHTTP(rr, req)
 
