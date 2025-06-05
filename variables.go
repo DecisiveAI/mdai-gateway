@@ -26,16 +26,16 @@ const (
 	manualEnvConfigMapNamePostfix = "-manual-variables"
 )
 
-type QueryMeta struct {
-	HubName      string `json:"hubName"`
-	VariableRef  string `json:"variableRef"`
-	VariableType string `json:"variableType"`
-	Command      string `json:"command"`
+type queryMeta struct {
+	hubName      string
+	variableRef  string
+	variableType string
+	command      string
 }
 
 // getConfiguredManualVariables  returns a map of Hub names to their corresponding ManualVariables:Types
 func getConfiguredManualVariables(ctx context.Context, k8sClient dynamic.Interface) (map[string]any, error) {
-	// TODO: make ConfiMap fetcher async
+	// TODO: make ConfiMap fetcher async; Change ConfigMap creation login in mdai-operator. It creates mutliple ConfigMaps (if multiple collectors run)
 	gvrCR := schema.GroupVersionResource{
 		Group:    "hub.mydecisive.ai",
 		Version:  "v1",
@@ -43,7 +43,8 @@ func getConfiguredManualVariables(ctx context.Context, k8sClient dynamic.Interfa
 	}
 	hubs, err := k8sClient.Resource(gvrCR).List(ctx, v1.ListOptions{})
 	if err != nil {
-		panic(err)
+		logger.Error("Failed to list MDAI Hubs", zap.Error(err))
+		return nil, err
 	}
 	gvrConfigMap := schema.GroupVersionResource{
 		Group:    "",
@@ -126,7 +127,7 @@ func HandleGetVariables(ctx context.Context, valkeyClient valkey.Client, k8sClie
 
 		var response any
 
-		queryMeta, httpStatus, err := parseHeaders(ctx, r, k8sClient, http.MethodGet)
+		qryMeta, httpStatus, err := parseHeaders(ctx, r, k8sClient, http.MethodGet)
 		if err != nil {
 			WriteJSONResponse(w, httpStatus, err.Error())
 			return
@@ -135,22 +136,22 @@ func HandleGetVariables(ctx context.Context, valkeyClient valkey.Client, k8sClie
 		valkeyAdapter := datacore.NewValkeyAdapter(valkeyClient, zapr.NewLogger(logger))
 		var valkeyValue any
 
-		switch queryMeta.VariableType {
+		switch qryMeta.variableType {
 		case "set":
 			{
-				valkeyValue, err = valkeyAdapter.GetSetAsStringSlice(ctx, queryMeta.VariableRef, queryMeta.HubName)
+				valkeyValue, err = valkeyAdapter.GetSetAsStringSlice(ctx, qryMeta.variableRef, qryMeta.hubName)
 			}
 		case "map":
 			{
-				valkeyValue, err = valkeyAdapter.GetMap(ctx, queryMeta.VariableRef, queryMeta.HubName)
+				valkeyValue, err = valkeyAdapter.GetMap(ctx, qryMeta.variableRef, qryMeta.hubName)
 			}
 		case "string", "int", "boolean":
 			{
-				valkeyValue, _, err = valkeyAdapter.GetString(ctx, queryMeta.VariableRef, queryMeta.HubName)
+				valkeyValue, _, err = valkeyAdapter.GetString(ctx, qryMeta.variableRef, qryMeta.hubName)
 			}
 		default:
 			{
-				err := fmt.Errorf("unsupported variable type %v", queryMeta.VariableType)
+				err := fmt.Errorf("unsupported variable type %v", qryMeta.variableType)
 				logger.Error("event payload parsing error: %s", zap.Error(err))
 			}
 		}
@@ -159,7 +160,7 @@ func HandleGetVariables(ctx context.Context, valkeyClient valkey.Client, k8sClie
 			return
 		}
 		response = map[string]any{
-			queryMeta.VariableRef: valkeyValue,
+			qryMeta.variableRef: valkeyValue,
 		}
 		WriteJSONResponse(w, http.StatusOK, response)
 	}
@@ -177,7 +178,7 @@ func HandleSetDeleteVariables(ctx context.Context, k8sClient dynamic.Interface, 
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
 
-		queryMeta, httpStatus, err := parseHeaders(ctx, r, k8sClient, r.Method)
+		qryMeta, httpStatus, err := parseHeaders(ctx, r, k8sClient, r.Method)
 		if err != nil {
 			WriteJSONResponse(w, httpStatus, err.Error())
 			return
@@ -196,7 +197,7 @@ func HandleSetDeleteVariables(ctx context.Context, k8sClient dynamic.Interface, 
 			http.Error(w, "Invalid request payload. A slice of strings expected", http.StatusBadRequest)
 			return
 		}
-		switch queryMeta.VariableType {
+		switch qryMeta.variableType {
 		case "set":
 			{
 				switch payloadTmp.(type) {
@@ -214,7 +215,7 @@ func HandleSetDeleteVariables(ctx context.Context, k8sClient dynamic.Interface, 
 			}
 		case "map":
 			{
-				switch queryMeta.Command {
+				switch qryMeta.command {
 				case "add":
 					{
 						switch payloadTmp.(type) {
@@ -299,7 +300,7 @@ func HandleSetDeleteVariables(ctx context.Context, k8sClient dynamic.Interface, 
 			}
 		}
 
-		eventPayload := newEventPayload(queryMeta.HubName, queryMeta.VariableRef, queryMeta.VariableType, queryMeta.Command, payload)
+		eventPayload := newEventPayload(qryMeta.hubName, qryMeta.variableRef, qryMeta.variableType, qryMeta.command, payload)
 
 		WriteJSONResponse(w, http.StatusOK, eventPayload)
 
@@ -351,8 +352,8 @@ func contentTypeOk(r *http.Request) bool {
 	return r.Header.Get("Content-Type") == "application/json"
 }
 
-func parseHeaders(ctx context.Context, r *http.Request, k8sClient dynamic.Interface, queryType string) (QueryMeta, int, error) {
-	var result = QueryMeta{}
+func parseHeaders(ctx context.Context, r *http.Request, k8sClient dynamic.Interface, queryType string) (queryMeta, int, error) {
+	var result = queryMeta{}
 
 	if queryType == http.MethodPost || queryType == http.MethodDelete {
 		if !contentTypeOk(r) {
@@ -391,11 +392,11 @@ func parseHeaders(ctx context.Context, r *http.Request, k8sClient dynamic.Interf
 		command = "remove"
 	}
 
-	return QueryMeta{
-		HubName:      hubName,
-		VariableRef:  varName,
-		VariableType: varType,
-		Command:      command,
+	return queryMeta{
+		hubName:      hubName,
+		variableRef:  varName,
+		variableType: varType,
+		command:      command,
 	}, http.StatusOK, nil
 
 }
