@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-logr/zapr"
 	"github.com/valkey-io/valkey-go"
 	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -133,7 +132,7 @@ func HandleGetVariables(ctx context.Context, valkeyClient valkey.Client, k8sClie
 			return
 		}
 
-		valkeyAdapter := datacore.NewValkeyAdapter(valkeyClient, zapr.NewLogger(logger))
+		valkeyAdapter := datacore.NewValkeyAdapter(valkeyClient, logger)
 		var valkeyValue any
 
 		switch qryMeta.variableType {

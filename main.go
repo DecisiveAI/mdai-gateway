@@ -16,7 +16,6 @@ import (
 
 	"github.com/prometheus/alertmanager/template"
 
-	"github.com/go-logr/zapr"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"k8s.io/client-go/dynamic"
@@ -242,7 +241,7 @@ func handleEventsRoute(ctx context.Context, valkeyClient valkey.Client, hub even
 	return func(w http.ResponseWriter, r *http.Request) {
 		logger.Info("handling request ", zap.Any("request", r))
 		if r.Method == http.MethodGet {
-			eventsMap, err := audit.NewAuditAdapter(zapr.NewLogger(logger), valkeyClient, valkeyAuditStreamExpiry).HandleEventsGet(ctx)
+			eventsMap, err := audit.NewAuditAdapter(logger, valkeyClient, valkeyAuditStreamExpiry).HandleEventsGet(ctx)
 			if err != nil {
 				logger.Error("failed to get events", zap.Error(err))
 				http.Error(w, "Unable to fetch history from Valkey", http.StatusInternalServerError)

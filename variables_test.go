@@ -3,12 +3,12 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"go.uber.org/zap"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/decisiveai/mdai-data-core/variables"
-	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"github.com/valkey-io/valkey-go"
 	vmock "github.com/valkey-io/valkey-go/mock"
@@ -38,7 +38,7 @@ func newAdapterWithMock(t *testing.T) (*ValkeyAdapter.ValkeyAdapter, *vmock.Clie
 	t.Helper()
 	ctrl := gomock.NewController(t)
 	client := vmock.NewClient(ctrl)
-	adapter := ValkeyAdapter.NewValkeyAdapter(client, logr.Discard())
+	adapter := ValkeyAdapter.NewValkeyAdapter(client, zap.NewNop())
 	return adapter, client, context.Background(), ctrl
 }
 
