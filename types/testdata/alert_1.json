@@ -1,0 +1,46 @@
+{
+  "receiver": "webhook",
+  "status": "firing",
+  "alerts": [
+    {
+      "status": "resolved",
+      "labels": {
+        "alertname": "logBytesOutTooHighBySvc",
+        "dc": "eu-west-1",
+        "instance": "localhost:9090",
+        "job": "prometheus24"
+      },
+      "annotations": {
+        "alert_name": "logBytesOutTooHighBySvc",
+        "hub_name": "mdaihub-second",
+        "description": "some description",
+        "service_name": "service-a"
+      },
+      "startsAt": "2018-08-03T09:52:26.739266876+02:00",
+      "endsAt": "2018-08-03T09:54:26.739266877+02:00",
+      "generatorURL": "http://example.com:9090/graph?g0.expr=go_memstats_alloc_bytes+%3E+0\u0026g0.tab=1"
+    }
+  ],
+  "groupLabels": {
+    "alertname": "logBytesOutTooHighBySvc",
+    "job": "prometheus24",
+    "service_name": "service-a"
+  },
+  "commonLabels": {
+    "alertname": "foo",
+    "dc": "eu-west-1",
+    "instance": "localhost:9090",
+    "job": "prometheus24"
+  },
+  "commonAnnotations": {
+    "description": "some description",
+    "filter_name": "mute-noisy-services",
+    "hub_name": "mdaihub-second",
+    "action_context": "{\"firing\":{\"variableUpdate\":{\"variableRef\":\"service_list\",\"operation\":\"mdai/add_element\"}},\"resolved\":{\"variableUpdate\":{\"variableRef\":\"service_list\",\"operation\":\"mdai/remove_element\"}}}",
+    "alert_name": "logBytesOutTooHighBySvc",
+    "relevant_labels": "[\"service_name\"]"
+  },
+  "externalURL": "http://example.com:9093",
+  "version": "4",
+  "groupKey": "{}:{alertname=\"Test\", job=\"prometheus24\"}"
+}
