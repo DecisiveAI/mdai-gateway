@@ -1,5 +1,4 @@
-[![Tests](https://github.com/DecisiveAI/mdai-gateway/actions/workflows/test.yml/badge.svg)](https://github.com/DecisiveAI/mdai-gateway/actions/workflows/test.yml)
-![Coverage](https://img.shields.io/badge/Coverage-0-red)
+[![Chores](https://github.com/DecisiveAI/mdai-gateway/actions/workflows/chores.yml/badge.svg)](https://github.com/DecisiveAI/mdai-gateway/actions/workflows/chores.yml) [![codecov](https://codecov.io/gh/DecisiveAI/mdai-gateway/graph/badge.svg?token=UPHRBSXOON)](https://codecov.io/gh/DecisiveAI/mdai-gateway)
 # Event Handler Webservice
 ### NOTE: this requires the 0.6.x helm installation
 
