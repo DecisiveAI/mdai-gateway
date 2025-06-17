@@ -132,10 +132,9 @@ jobs:
         run: |
           go mod vendor
           go mod tidy
-          CGO_ENABLED=0 go test -coverprofile=coverage.out -mod=vendor -v -count=1 ./...
+          CGO_ENABLED=0 go test -coverprofile=coverage.txt -mod=vendor -v -count=1 ./...
 
-      - name: Archive code coverage results
-        uses: actions/upload-artifact@v4
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5
         with:
-          name: code-coverage
-          path: coverage.out
+          token: ${{ secrets.CODECOV_TOKEN }}
