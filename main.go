@@ -273,7 +273,6 @@ func handleEventsRoute(ctx context.Context, valkeyClient valkey.Client, hub even
 
 			logger.Debug("Received POST request body", zap.ByteString("bodyBytes", bodyBytes))
 
-			// Try to determine the payload type by checking for key fields
 			var rawJson map[string]interface{}
 			if err := json.Unmarshal(bodyBytes, &rawJson); err != nil {
 				logger.Error("Failed to parse JSON", zap.Error(err))
@@ -303,7 +302,6 @@ func handleEventsRoute(ctx context.Context, valkeyClient valkey.Client, hub even
 			return
 		}
 
-		// Handle any other HTTP methods
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
 }
