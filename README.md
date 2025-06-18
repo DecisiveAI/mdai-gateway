@@ -1,6 +1,8 @@
-[![Chores](https://github.com/DecisiveAI/mdai-gateway/actions/workflows/chores.yml/badge.svg)](https://github.com/DecisiveAI/mdai-gateway/actions/workflows/chores.yml) [![codecov](https://codecov.io/gh/DecisiveAI/mdai-gateway/graph/badge.svg?token=UPHRBSXOON)](https://codecov.io/gh/DecisiveAI/mdai-gateway)
-# Event Handler Webservice
-### NOTE: this requires the 0.6.x helm installation
+[![Chores](https://github.com/DecisiveAI/mdai-gateway/actions/workflows/chores.yml/badge.svg)](https://github.com/DecisiveAI/mdai-gateway/actions/workflows/chores.yml)
+[![codecov](https://codecov.io/gh/DecisiveAI/mdai-gateway/graph/badge.svg?token=UPHRBSXOON)](https://codecov.io/gh/DecisiveAI/mdai-gateway)
+[![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/mdai-gateway)](https://artifacthub.io/packages/search?repo=mdai-gateway)
+
+# MDAI Gateway
 
 # INSTALL
 ```sh
