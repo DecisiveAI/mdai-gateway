@@ -3,8 +3,16 @@ name: Chores
 on:
   push:
     branches: [ "main" ]
+    paths:
+      - '**/*.go'
+      - 'go.mod'
+      - 'go.sum'
   pull_request:
     branches: [ "main" ]
+    paths:
+      - '**/*.go'
+      - 'go.mod'
+      - 'go.sum'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
@@ -15,38 +23,38 @@ env:
   TOKEN: ${{ secrets.TOKEN_OPERATOR }}
 
 jobs:
-  lint:
-    name: Lint on Ubuntu
+  lint-and-test:
+    name: Lint & Test on Ubuntu
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      repository-projects: read
-      packages: read
-    env:
-      GOPRIVATE: github.com/decisiveai/*
-      TOKEN: ${{ secrets.TOKEN_OPERATOR }}
     steps:
       - name: Clone the code
         uses: actions/checkout@v4
 
-      - name: Test GitHub API access
-        run: |
-          echo "Testing basic API access..."
-          curl -H "Authorization: token ${TOKEN}" https://api.github.com/user
-          echo -e "\nTesting org access..."
-          curl -H "Authorization: token ${TOKEN}" https://api.github.com/orgs/decisiveai
-
-      - name: Configure git for private modules
-        run: |
-          git config --global url."https://user:${TOKEN}@github.com/".insteadOf "https://github.com/"
-
       - name: Setup Go
+        id: setup-go
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          cache: false
+
+      - name: Cache Go mod and build cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ steps.setup-go.outputs.go-version }}-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-${{ steps.setup-go.outputs.go-version }}-
+            ${{ runner.os }}-go-
 
       - name: Download dependencies
-        run: go mod download
+        run: |
+          go mod download
+
+      - name: Check module tidiness
+        run: |
+          make tidy-check
 
       - name: Run linter
         uses: golangci/golangci-lint-action@v8
@@ -54,85 +62,9 @@ jobs:
           install-mode: "binary"
           version: "latest"
 
-  check-go-file-changes:
-    name: Check if Go files changed
-    runs-on: ubuntu-latest
-    needs: lint
-    outputs:
-      go_files_changed: ${{ steps.check.outputs.go_files_changed }}
-    steps:
-      - name: Configure git for private modules
-        run: git config --global url."https://user:${TOKEN}@github.com".insteadOf "https://github.com"
-
-      - name: Clone the code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0 # Fetch full history to compare commits
-
-      - name: Determine base commit
-        id: base
-        run: |
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            BASE_COMMIT="${{ github.event.pull_request.base.sha }}"
-          else
-            BASE_COMMIT=$(git rev-parse HEAD~1)  # Previous commit on main
-          fi
-          echo "BASE_COMMIT=$BASE_COMMIT"
-          echo "BASE_COMMIT=$BASE_COMMIT" >> "$GITHUB_ENV"
-
-      - name: Check for Go-related file changes
-        id: check
-        run: |
-          # Fetch latest main branch
-          git fetch origin main
-
-          # Find changed Go files (excluding _test.go and vendor/)
-          CHANGED_FILES=$(git diff --name-only "$BASE_COMMIT" HEAD -- '**/*.go' 'go.mod' 'go.sum' '*.go' | grep -vE '^vendor/' || true)
-
-          # Define output file path
-          OUTPUT_FILE=".github/outputs/all_changed_files.json"
-          mkdir -p .github/outputs  # Ensure the directory exists
-
-          if [[ -z "$CHANGED_FILES" ]]; then
-            echo "No relevant Go file changes detected."
-            echo "go_files_changed=false" >> "$GITHUB_OUTPUT"
-            echo "[]" > "$OUTPUT_FILE"  # Save empty JSON array
-          else
-            echo "Relevant Go file changes detected."
-            echo "go_files_changed=true" >> "$GITHUB_OUTPUT"
-
-            # Convert to JSON format and save to file
-            echo "$CHANGED_FILES" | jq -R . | jq -s . > "$OUTPUT_FILE"
-          fi
-
-      - name: Upload changed files record
-        uses: actions/upload-artifact@v4
-        with:
-          name: changed-files
-          path: .github/outputs/all_changed_files.json
-
-  test:
-    name: Test on Ubuntu
-    runs-on: ubuntu-latest
-    needs: [lint, check-go-file-changes]
-    if: needs.check-go-file-changes.outputs.go_files_changed == 'true'
-    steps:
-      - name: Configure git for private modules
-        run: git config --global url."https://user:${TOKEN}@github.com".insteadOf "https://github.com"
-
-      - name: Clone the code
-        uses: actions/checkout@v4
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-
       - name: Running Tests
         run: |
-          go mod vendor
-          go mod tidy
-          CGO_ENABLED=0 go test -coverprofile=coverage.txt -mod=vendor -v -count=1 ./...
+          CGO_ENABLED=0 go test -cover -coverprofile=coverage.txt -v -count=1 ./...
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v5
