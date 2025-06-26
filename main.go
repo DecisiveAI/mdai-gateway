@@ -13,16 +13,12 @@ import (
 
 	"github.com/decisiveai/mdai-event-hub/eventing"
 	"github.com/decisiveai/mdai-gateway/types"
-
 	"github.com/prometheus/alertmanager/template"
 
+	"go.opentelemetry.io/contrib/bridges/otelzap"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
-
-	"go.opentelemetry.io/contrib/bridges/otelzap"
+	"k8s.io/api/core/v1"
 
 	"github.com/cenkalti/backoff/v5"
 
@@ -77,24 +73,6 @@ func init() {
 	defer logger.Sync() // Flush logs before exiting
 }
 
-func createK8sClient() (dynamic.Interface, error) {
-	config, err := rest.InClusterConfig()
-	if err != nil {
-		kubeconfig, err := os.UserHomeDir()
-		if err != nil {
-			logger.Error("Failed to load k8s config", zap.Error(err))
-			return nil, err
-		}
-
-		config, err = clientcmd.BuildConfigFromFlags("", kubeconfig+"/.kube/config")
-		if err != nil {
-			logger.Error("Failed to build k8s config", zap.Error(err))
-			return nil, err
-		}
-	}
-	return dynamic.NewForConfig(config)
-}
-
 func main() {
 	ctx := context.Background()
 	otelSdkEnabledStr := os.Getenv(otelSdkDisabledEnvVar)
@@ -134,18 +112,25 @@ func main() {
 	hub := initRmq(ctx)
 	defer hub.Close()
 
-	k8sClient, err := createK8sClient()
+	cmController, err := NewConfigMapController(manualEnvConfigMapType, v1.NamespaceAll)
 	if err != nil {
-		logger.Fatal("failed to create k8s client", zap.Error(err))
+		logger.Fatal("failed to create ConfigMap controller", zap.Error(err))
+	}
+
+	stop := make(chan struct{})
+	defer close(stop)
+	err = cmController.Run(stop)
+	if err != nil {
+		logger.Fatal("failed to run ConfigMap controller", zap.Error(err))
 	}
 
 	router := http.NewServeMux()
 
 	router.HandleFunc("/events", handleEventsRoute(ctx, valkeyClient, hub))
-	router.HandleFunc("/variables/list/hub/{hubName}/", HandleListVariables(ctx, k8sClient))
-	router.HandleFunc("/variables/list/", HandleListVariables(ctx, k8sClient))
-	router.HandleFunc("/variables/values/hub/{hubName}/var/{varName}/", HandleGetVariables(ctx, valkeyClient, k8sClient))
-	router.HandleFunc("/variables/hub/{hubName}/var/{varName}/", HandleSetDeleteVariables(ctx, k8sClient, hub))
+	router.HandleFunc("/variables/list/hub/{hubName}/", HandleListVariables(ctx, cmController))
+	router.HandleFunc("/variables/list/", HandleListVariables(ctx, cmController))
+	router.HandleFunc("/variables/values/hub/{hubName}/var/{varName}/", HandleGetVariables(ctx, valkeyClient, cmController))
+	router.HandleFunc("/variables/hub/{hubName}/var/{varName}/", HandleSetDeleteVariables(ctx, cmController, hub))
 
 	logger.Info("Starting server", zap.String("address", ":"+httpPort))
 	logger.Fatal("failed to start server", zap.Error(http.ListenAndServe(":"+httpPort, router)))
