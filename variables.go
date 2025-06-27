@@ -118,7 +118,7 @@ func HandleGetVariables(ctx context.Context, valkeyClient valkey.Client, cmContr
 
 		var response any
 
-		qryMeta, httpStatus, err := parseHeaders(ctx, r, cmController, http.MethodGet)
+		qryMeta, httpStatus, err := parseHeaders(r, cmController, http.MethodGet)
 		if err != nil {
 			WriteJSONResponse(w, httpStatus, err.Error())
 			return
@@ -169,7 +169,7 @@ func HandleSetDeleteVariables(ctx context.Context, cmController *ConfigMapContro
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
 
-		qryMeta, httpStatus, err := parseHeaders(ctx, r, cmController, r.Method)
+		qryMeta, httpStatus, err := parseHeaders(r, cmController, r.Method)
 		if err != nil {
 			WriteJSONResponse(w, httpStatus, err.Error())
 			return
@@ -342,7 +342,7 @@ func contentTypeOk(r *http.Request) bool {
 	return r.Header.Get("Content-Type") == "application/json"
 }
 
-func parseHeaders(ctx context.Context, r *http.Request, cmController *ConfigMapController, queryType string) (queryMeta, int, error) {
+func parseHeaders(r *http.Request, cmController *ConfigMapController, queryType string) (queryMeta, int, error) {
 	var result = queryMeta{}
 
 	if queryType == http.MethodPost || queryType == http.MethodDelete {
