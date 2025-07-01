@@ -16,27 +16,14 @@ import (
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/tools/cache"
 
+	dcoreKube "github.com/decisiveai/mdai-data-core/kube"
 	"github.com/decisiveai/mdai-data-core/variables"
 	"github.com/stretchr/testify/assert"
 	vmock "github.com/valkey-io/valkey-go/mock"
 	"go.uber.org/mock/gomock"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes/fake"
-)
-
-var (
-	mdaiHubGVR = schema.GroupVersionResource{
-		Group:    "hub.mydecisive.ai",
-		Version:  "v1",
-		Resource: "mdaihubs",
-	}
-	configMapGVR = schema.GroupVersionResource{
-		Group:    "",
-		Version:  "v1",
-		Resource: "configmaps",
-	}
 )
 
 func newAdapterWithMock(t *testing.T) (*ValkeyAdapter.ValkeyAdapter, *vmock.Client, context.Context, *gomock.Controller) {
@@ -47,7 +34,7 @@ func newAdapterWithMock(t *testing.T) (*ValkeyAdapter.ValkeyAdapter, *vmock.Clie
 	return adapter, client, context.Background(), ctrl
 }
 
-func newFakeConfigMapController(clientset *fake.Clientset, namespace string) (*ConfigMapController, error) {
+func newFakeConfigMapController(clientset *fake.Clientset, namespace string) (*dcoreKube.ConfigMapController, error) {
 	defaultResyncTime := time.Hour * 24
 
 	informerFactory := informers.NewSharedInformerFactoryWithOptions(
@@ -55,7 +42,7 @@ func newFakeConfigMapController(clientset *fake.Clientset, namespace string) (*C
 		defaultResyncTime,
 		informers.WithNamespace(namespace),
 		informers.WithTweakListOptions(func(opts *metav1.ListOptions) {
-			opts.LabelSelector = fmt.Sprintf("%s=%s", configMapTypeLabel, manualEnvConfigMapType)
+			opts.LabelSelector = fmt.Sprintf("%s=%s", dcoreKube.ConfigMapTypeLabel, dcoreKube.ManualEnvConfigMapType)
 		},
 		),
 	)
@@ -68,7 +55,7 @@ func newFakeConfigMapController(clientset *fake.Clientset, namespace string) (*C
 		},
 	})
 	if err := cmInformer.Informer().AddIndexers(map[string]cache.IndexFunc{
-		ByHub: func(obj interface{}) ([]string, error) {
+		dcoreKube.ByHub: func(obj interface{}) ([]string, error) {
 			var hubNames []string
 			hubName := "mdaihub-sample"
 			hubNames = append(hubNames, hubName)
@@ -79,12 +66,12 @@ func newFakeConfigMapController(clientset *fake.Clientset, namespace string) (*C
 		return nil, err
 	}
 
-	c := &ConfigMapController{
-		namespace:       namespace,
-		configMapType:   manualEnvConfigMapType,
-		informerFactory: informerFactory,
-		cmInformer:      cmInformer,
-		logger:          log.New(os.Stdout, "[ConfigMapManager] ", log.LstdFlags),
+	c := &dcoreKube.ConfigMapController{
+		Namespace:       namespace,
+		ConfigMapType:   dcoreKube.ManualEnvConfigMapType,
+		InformerFactory: informerFactory,
+		CmInformer:      cmInformer,
+		Logger:          log.New(os.Stdout, "[ConfigMapManager] ", log.LstdFlags),
 	}
 
 	return c, nil
@@ -99,8 +86,8 @@ func TestGetConfiguredManualVariables(t *testing.T) {
 			Name:      "mdaihub-sample-manual-variables",
 			Namespace: "mdai",
 			Labels: map[string]string{
-				configMapTypeLabel: manualEnvConfigMapType,
-				LabelMdaiHubName:   "mdaihub-sample",
+				dcoreKube.ConfigMapTypeLabel: dcoreKube.ManualEnvConfigMapType,
+				dcoreKube.LabelMdaiHubName:   "mdaihub-sample",
 			},
 		},
 		Data: map[string]string{
@@ -140,7 +127,7 @@ func TestGetConfiguredManualVariables(t *testing.T) {
 		t.Errorf("Expected 1 ConfigMap, got %d", len(configMaps.Items))
 	}
 
-	hubMap, err := getAllConfiguredManualVariables(cmController)
+	hubMap, err := getAllHubsToDataMap(cmController)
 	assert.Nil(t, err)
 	assert.Equal(t, 1, len(hubMap))
 	// go through variables
@@ -160,8 +147,8 @@ func TestHandleListVariables_List(t *testing.T) {
 			Name:      "mdaihub-sample-manual-variables",
 			Namespace: "mdai",
 			Labels: map[string]string{
-				configMapTypeLabel: manualEnvConfigMapType,
-				LabelMdaiHubName:   "mdaihub-sample",
+				dcoreKube.ConfigMapTypeLabel: dcoreKube.ManualEnvConfigMapType,
+				dcoreKube.LabelMdaiHubName:   "mdaihub-sample",
 			},
 		},
 		Data: map[string]string{
@@ -237,8 +224,8 @@ func TestHandleListVariables_ListHub(t *testing.T) {
 			Name:      "mdaihub-sample-manual-variables",
 			Namespace: "mdai",
 			Labels: map[string]string{
-				configMapTypeLabel: manualEnvConfigMapType,
-				LabelMdaiHubName:   "mdaihub-sample",
+				dcoreKube.ConfigMapTypeLabel: dcoreKube.ManualEnvConfigMapType,
+				dcoreKube.LabelMdaiHubName:   "mdaihub-sample",
 			},
 		},
 		Data: map[string]string{
@@ -318,8 +305,8 @@ func TestHandleListVariables_ListHub_NonExistent(t *testing.T) {
 			Name:      "mdaihub-sample-manual-variables",
 			Namespace: "mdai",
 			Labels: map[string]string{
-				configMapTypeLabel: manualEnvConfigMapType,
-				LabelMdaiHubName:   "mdaihub-sample",
+				dcoreKube.ConfigMapTypeLabel: dcoreKube.ManualEnvConfigMapType,
+				dcoreKube.LabelMdaiHubName:   "mdaihub-sample",
 			},
 		},
 		Data: map[string]string{
@@ -382,8 +369,8 @@ func TestHandleGetVariables_Int(t *testing.T) {
 			Name:      "mdaihub-sample-manual-variables",
 			Namespace: "mdai",
 			Labels: map[string]string{
-				configMapTypeLabel: manualEnvConfigMapType,
-				LabelMdaiHubName:   "mdaihub-sample",
+				dcoreKube.ConfigMapTypeLabel: dcoreKube.ManualEnvConfigMapType,
+				dcoreKube.LabelMdaiHubName:   "mdaihub-sample",
 			},
 		},
 		Data: map[string]string{
@@ -467,8 +454,8 @@ func TestHandleGetVariables_Bool(t *testing.T) {
 			Name:      "mdaihub-sample-manual-variables",
 			Namespace: "mdai",
 			Labels: map[string]string{
-				configMapTypeLabel: manualEnvConfigMapType,
-				LabelMdaiHubName:   "mdaihub-sample",
+				dcoreKube.ConfigMapTypeLabel: dcoreKube.ManualEnvConfigMapType,
+				dcoreKube.LabelMdaiHubName:   "mdaihub-sample",
 			},
 		},
 		Data: map[string]string{
@@ -552,8 +539,8 @@ func TestHandleGetVariables_String(t *testing.T) {
 			Name:      "mdaihub-sample-manual-variables",
 			Namespace: "mdai",
 			Labels: map[string]string{
-				configMapTypeLabel: manualEnvConfigMapType,
-				LabelMdaiHubName:   "mdaihub-sample",
+				dcoreKube.ConfigMapTypeLabel: dcoreKube.ManualEnvConfigMapType,
+				dcoreKube.LabelMdaiHubName:   "mdaihub-sample",
 			},
 		},
 		Data: map[string]string{
@@ -636,8 +623,8 @@ func TestHandleGetVariables_Set(t *testing.T) {
 			Name:      "mdaihub-sample-manual-variables",
 			Namespace: "mdai",
 			Labels: map[string]string{
-				configMapTypeLabel: manualEnvConfigMapType,
-				LabelMdaiHubName:   "mdaihub-sample",
+				dcoreKube.ConfigMapTypeLabel: dcoreKube.ManualEnvConfigMapType,
+				dcoreKube.LabelMdaiHubName:   "mdaihub-sample",
 			},
 		},
 		Data: map[string]string{
@@ -727,8 +714,8 @@ func TestHandleGetVariables_Map(t *testing.T) {
 			Name:      "mdaihub-sample-manual-variables",
 			Namespace: "mdai",
 			Labels: map[string]string{
-				configMapTypeLabel: manualEnvConfigMapType,
-				LabelMdaiHubName:   "mdaihub-sample",
+				dcoreKube.ConfigMapTypeLabel: dcoreKube.ManualEnvConfigMapType,
+				dcoreKube.LabelMdaiHubName:   "mdaihub-sample",
 			},
 		},
 		Data: map[string]string{
@@ -817,8 +804,8 @@ func TestHandleGetVariables_NonExistentHub(t *testing.T) {
 			Name:      "mdaihub-sample-manual-variables",
 			Namespace: "mdai",
 			Labels: map[string]string{
-				configMapTypeLabel: manualEnvConfigMapType,
-				LabelMdaiHubName:   "mdaihub-sample",
+				dcoreKube.ConfigMapTypeLabel: dcoreKube.ManualEnvConfigMapType,
+				dcoreKube.LabelMdaiHubName:   "mdaihub-sample",
 			},
 		},
 		Data: map[string]string{
@@ -881,8 +868,8 @@ func TestHandleGetVariables_NonExistentVariable(t *testing.T) {
 			Name:      "mdaihub-sample-manual-variables",
 			Namespace: "mdai",
 			Labels: map[string]string{
-				configMapTypeLabel: manualEnvConfigMapType,
-				LabelMdaiHubName:   "mdaihub-sample",
+				dcoreKube.ConfigMapTypeLabel: dcoreKube.ManualEnvConfigMapType,
+				dcoreKube.LabelMdaiHubName:   "mdaihub-sample",
 			},
 		},
 		Data: map[string]string{
@@ -945,8 +932,8 @@ func TestHandleGetVariables_String_NoValue(t *testing.T) {
 			Name:      "mdaihub-sample-manual-variables",
 			Namespace: "mdai",
 			Labels: map[string]string{
-				configMapTypeLabel: manualEnvConfigMapType,
-				LabelMdaiHubName:   "mdaihub-sample",
+				dcoreKube.ConfigMapTypeLabel: dcoreKube.ManualEnvConfigMapType,
+				dcoreKube.LabelMdaiHubName:   "mdaihub-sample",
 			},
 		},
 		Data: map[string]string{

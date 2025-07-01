@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"time"
 
+	dcoreKube "github.com/decisiveai/mdai-data-core/kube"
 	"github.com/decisiveai/mdai-event-hub/eventing"
 	"github.com/decisiveai/mdai-gateway/types"
 	"github.com/prometheus/alertmanager/template"
@@ -112,7 +113,13 @@ func main() {
 	hub := initRmq(ctx)
 	defer hub.Close()
 
-	cmController, err := NewConfigMapController(manualEnvConfigMapType, v1.NamespaceAll)
+	clientset, err := dcoreKube.NewK8sClient(logger)
+	if err != nil {
+		logger.Fatal("Failed to create k8s client", zap.Error(err))
+		return
+	}
+
+	cmController, err := dcoreKube.NewConfigMapController(dcoreKube.ManualEnvConfigMapType, v1.NamespaceAll, clientset, logger)
 	if err != nil {
 		logger.Fatal("failed to create ConfigMap controller", zap.Error(err))
 	}

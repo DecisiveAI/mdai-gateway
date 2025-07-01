@@ -9,16 +9,13 @@ import (
 	"strings"
 	"time"
 
+	dcoreKube "github.com/decisiveai/mdai-data-core/kube"
 	datacore "github.com/decisiveai/mdai-data-core/variables"
 	"github.com/decisiveai/mdai-event-hub/eventing"
 	"github.com/decisiveai/mdai-gateway/types"
 	"github.com/valkey-io/valkey-go"
 	"go.uber.org/zap"
 	"k8s.io/api/core/v1"
-)
-
-const (
-	manualEnvConfigMapNamePostfix = "-manual-variables"
 )
 
 type queryMeta struct {
@@ -29,16 +26,16 @@ type queryMeta struct {
 }
 
 // getConfiguredManualVariables  returns a map of Hub names to their corresponding ManualVariables:Types
-func getAllConfiguredManualVariables(cmController *ConfigMapController) (map[string]any, error) {
-	cmController.lock.RLock()
-	defer cmController.lock.RUnlock()
+func getAllHubsToDataMap(cmController *dcoreKube.ConfigMapController) (map[string]any, error) {
+	cmController.Lock.RLock()
+	defer cmController.Lock.RUnlock()
 
 	hubMap := make(map[string]any)
 
-	indexer := cmController.cmInformer.Informer().GetIndexer()
-	hubNames := indexer.ListIndexFuncValues(ByHub)
+	indexer := cmController.CmInformer.Informer().GetIndexer()
+	hubNames := indexer.ListIndexFuncValues(dcoreKube.ByHub)
 	for _, hubName := range hubNames {
-		objs, err := indexer.ByIndex(ByHub, hubName)
+		objs, err := indexer.ByIndex(dcoreKube.ByHub, hubName)
 		if err != nil {
 			continue
 		}
@@ -50,11 +47,11 @@ func getAllConfiguredManualVariables(cmController *ConfigMapController) (map[str
 	return hubMap, nil
 }
 
-func getHubConfiguredManualVariables(cmController *ConfigMapController, hubName string) ([]any, error) {
-	cmController.lock.RLock()
-	defer cmController.lock.RUnlock()
+func getHubToDataMap(cmController *dcoreKube.ConfigMapController, hubName string) ([]any, error) {
+	cmController.Lock.RLock()
+	defer cmController.Lock.RUnlock()
 
-	items, _ := cmController.cmInformer.Informer().GetIndexer().ByIndex(ByHub, hubName)
+	items, _ := cmController.CmInformer.Informer().GetIndexer().ByIndex(dcoreKube.ByHub, hubName)
 
 	variables := make([]any, 0)
 	for _, item := range items {
@@ -64,7 +61,7 @@ func getHubConfiguredManualVariables(cmController *ConfigMapController, hubName 
 	return variables, nil
 }
 
-func HandleListVariables(ctx context.Context, cmController *ConfigMapController) http.HandlerFunc {
+func HandleListVariables(ctx context.Context, cmController *dcoreKube.ConfigMapController) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if err := r.Body.Close(); err != nil {
@@ -79,7 +76,7 @@ func HandleListVariables(ctx context.Context, cmController *ConfigMapController)
 		var response any
 		var httpStatus = http.StatusOK
 
-		hubsVariables, err := getAllConfiguredManualVariables(cmController)
+		hubsVariables, err := getAllHubsToDataMap(cmController)
 		if err != nil {
 			WriteJSONResponse(w, http.StatusInternalServerError, response)
 			return
@@ -104,7 +101,7 @@ func HandleListVariables(ctx context.Context, cmController *ConfigMapController)
 
 }
 
-func HandleGetVariables(ctx context.Context, valkeyClient valkey.Client, cmController *ConfigMapController) http.HandlerFunc {
+func HandleGetVariables(ctx context.Context, valkeyClient valkey.Client, cmController *dcoreKube.ConfigMapController) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if err := r.Body.Close(); err != nil {
@@ -157,7 +154,7 @@ func HandleGetVariables(ctx context.Context, valkeyClient valkey.Client, cmContr
 	}
 }
 
-func HandleSetDeleteVariables(ctx context.Context, cmController *ConfigMapController, hub eventing.EventHubInterface) http.HandlerFunc {
+func HandleSetDeleteVariables(ctx context.Context, cmController *dcoreKube.ConfigMapController, hub eventing.EventHubInterface) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if err := r.Body.Close(); err != nil {
@@ -342,7 +339,7 @@ func contentTypeOk(r *http.Request) bool {
 	return r.Header.Get("Content-Type") == "application/json"
 }
 
-func parseHeaders(r *http.Request, cmController *ConfigMapController, queryType string) (queryMeta, int, error) {
+func parseHeaders(r *http.Request, cmController *dcoreKube.ConfigMapController, queryType string) (queryMeta, int, error) {
 	var result = queryMeta{}
 
 	if queryType == http.MethodPost || queryType == http.MethodDelete {
@@ -351,7 +348,7 @@ func parseHeaders(r *http.Request, cmController *ConfigMapController, queryType 
 		}
 	}
 
-	hubsVariables, err := getAllConfiguredManualVariables(cmController)
+	hubsVariables, err := getAllHubsToDataMap(cmController)
 	if err != nil {
 		return result, http.StatusInternalServerError, err
 	} else if len(hubsVariables) == 0 {
