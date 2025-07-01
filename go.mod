@@ -6,7 +6,7 @@ toolchain go1.24.3
 
 require (
 	github.com/cenkalti/backoff/v5 v5.0.2
-	github.com/decisiveai/mdai-data-core v0.1.7
+	github.com/decisiveai/mdai-data-core v0.1.8
 	github.com/decisiveai/mdai-event-hub v0.0.6
 	github.com/google/uuid v1.6.0
 	github.com/prometheus/alertmanager v0.28.1
@@ -87,5 +87,3 @@ require (
 	sigs.k8s.io/structured-merge-diff/v4 v4.6.0 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect
 )
-
-replace github.com/decisiveai/mdai-data-core => ../mdai-data-core
