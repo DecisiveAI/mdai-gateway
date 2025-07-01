@@ -4,10 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 	"time"
 
@@ -48,12 +46,14 @@ func newFakeConfigMapController(clientset *fake.Clientset, namespace string) (*d
 	)
 	cmInformer := informerFactory.Core().V1().ConfigMaps()
 
-	cmInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+	if _, err := cmInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			cm := obj.(*corev1.ConfigMap)
 			fmt.Println("ConfigMap added:", cm.Name)
 		},
-	})
+	}); err != nil {
+		return nil, err
+	}
 	if err := cmInformer.Informer().AddIndexers(map[string]cache.IndexFunc{
 		dcoreKube.ByHub: func(obj interface{}) ([]string, error) {
 			var hubNames []string
@@ -71,7 +71,7 @@ func newFakeConfigMapController(clientset *fake.Clientset, namespace string) (*d
 		ConfigMapType:   dcoreKube.ManualEnvConfigMapType,
 		InformerFactory: informerFactory,
 		CmInformer:      cmInformer,
-		Logger:          log.New(os.Stdout, "[ConfigMapManager] ", log.LstdFlags),
+		Logger:          zap.NewNop(),
 	}
 
 	return c, nil

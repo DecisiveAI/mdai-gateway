@@ -47,20 +47,6 @@ func getAllHubsToDataMap(cmController *dcoreKube.ConfigMapController) (map[strin
 	return hubMap, nil
 }
 
-func getHubToDataMap(cmController *dcoreKube.ConfigMapController, hubName string) ([]any, error) {
-	cmController.Lock.RLock()
-	defer cmController.Lock.RUnlock()
-
-	items, _ := cmController.CmInformer.Informer().GetIndexer().ByIndex(dcoreKube.ByHub, hubName)
-
-	variables := make([]any, 0)
-	for _, item := range items {
-		cm := item.(*v1.ConfigMap)
-		variables = append(variables, cm.Data)
-	}
-	return variables, nil
-}
-
 func HandleListVariables(ctx context.Context, cmController *dcoreKube.ConfigMapController) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
