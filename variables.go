@@ -9,20 +9,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/valkey-io/valkey-go"
-	"go.uber.org/zap"
-	"k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/dynamic"
-
+	dcoreKube "github.com/decisiveai/mdai-data-core/kube"
 	datacore "github.com/decisiveai/mdai-data-core/variables"
 	"github.com/decisiveai/mdai-event-hub/eventing"
 	"github.com/decisiveai/mdai-gateway/types"
-)
-
-const (
-	manualEnvConfigMapNamePostfix = "-manual-variables"
+	"github.com/valkey-io/valkey-go"
+	"go.uber.org/zap"
+	"k8s.io/api/core/v1"
 )
 
 type queryMeta struct {
@@ -33,46 +26,28 @@ type queryMeta struct {
 }
 
 // getConfiguredManualVariables  returns a map of Hub names to their corresponding ManualVariables:Types
-func getConfiguredManualVariables(ctx context.Context, k8sClient dynamic.Interface) (map[string]any, error) {
-	// TODO: make ConfiMap fetcher async; Change ConfigMap creation login in mdai-operator. It creates mutliple ConfigMaps (if multiple collectors run)
-	gvrCR := schema.GroupVersionResource{
-		Group:    "hub.mydecisive.ai",
-		Version:  "v1",
-		Resource: "mdaihubs",
-	}
-	hubs, err := k8sClient.Resource(gvrCR).List(ctx, v1.ListOptions{})
-	if err != nil {
-		logger.Error("Failed to list MDAI Hubs", zap.Error(err))
-		return nil, err
-	}
-	gvrConfigMap := schema.GroupVersionResource{
-		Group:    "",
-		Version:  "v1",
-		Resource: "configmaps",
-	}
-
-	configMaps, err := k8sClient.Resource(gvrConfigMap).List(ctx, v1.ListOptions{})
-	if err != nil {
-		logger.Error("Failed to list ConfigMap", zap.Error(err))
-		return nil, err
-	}
+func getAllHubsToDataMap(cmController *dcoreKube.ConfigMapController) (map[string]any, error) {
+	cmController.Lock.RLock()
+	defer cmController.Lock.RUnlock()
 
 	hubMap := make(map[string]any)
-	for _, hub := range hubs.Items {
-		for _, configMap := range configMaps.Items {
-			if configMap.GetName() == hub.GetName()+manualEnvConfigMapNamePostfix {
-				data, found, err := unstructured.NestedStringMap(configMap.Object, "data")
-				if err != nil || !found {
-					logger.Info("data field missing or invalid", zap.Any("hub", hub.GetName()), zap.Error(err))
-				}
-				hubMap[hub.GetName()] = data
-			}
+
+	indexer := cmController.CmInformer.Informer().GetIndexer()
+	hubNames := indexer.ListIndexFuncValues(dcoreKube.ByHub)
+	for _, hubName := range hubNames {
+		objs, err := indexer.ByIndex(dcoreKube.ByHub, hubName)
+		if err != nil {
+			continue
+		}
+		for _, obj := range objs {
+			cm := obj.(*v1.ConfigMap)
+			hubMap[hubName] = cm.Data
 		}
 	}
 	return hubMap, nil
 }
 
-func HandleListVariables(ctx context.Context, k8sClient dynamic.Interface) http.HandlerFunc {
+func HandleListVariables(ctx context.Context, cmController *dcoreKube.ConfigMapController) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if err := r.Body.Close(); err != nil {
@@ -87,7 +62,7 @@ func HandleListVariables(ctx context.Context, k8sClient dynamic.Interface) http.
 		var response any
 		var httpStatus = http.StatusOK
 
-		hubsVariables, err := getConfiguredManualVariables(ctx, k8sClient)
+		hubsVariables, err := getAllHubsToDataMap(cmController)
 		if err != nil {
 			WriteJSONResponse(w, http.StatusInternalServerError, response)
 			return
@@ -112,7 +87,7 @@ func HandleListVariables(ctx context.Context, k8sClient dynamic.Interface) http.
 
 }
 
-func HandleGetVariables(ctx context.Context, valkeyClient valkey.Client, k8sClient dynamic.Interface) http.HandlerFunc {
+func HandleGetVariables(ctx context.Context, valkeyClient valkey.Client, cmController *dcoreKube.ConfigMapController) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if err := r.Body.Close(); err != nil {
@@ -126,7 +101,7 @@ func HandleGetVariables(ctx context.Context, valkeyClient valkey.Client, k8sClie
 
 		var response any
 
-		qryMeta, httpStatus, err := parseHeaders(ctx, r, k8sClient, http.MethodGet)
+		qryMeta, httpStatus, err := parseHeaders(r, cmController, http.MethodGet)
 		if err != nil {
 			WriteJSONResponse(w, httpStatus, err.Error())
 			return
@@ -165,7 +140,7 @@ func HandleGetVariables(ctx context.Context, valkeyClient valkey.Client, k8sClie
 	}
 }
 
-func HandleSetDeleteVariables(ctx context.Context, k8sClient dynamic.Interface, hub eventing.EventHubInterface) http.HandlerFunc {
+func HandleSetDeleteVariables(ctx context.Context, cmController *dcoreKube.ConfigMapController, hub eventing.EventHubInterface) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if err := r.Body.Close(); err != nil {
@@ -177,7 +152,7 @@ func HandleSetDeleteVariables(ctx context.Context, k8sClient dynamic.Interface, 
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
 
-		qryMeta, httpStatus, err := parseHeaders(ctx, r, k8sClient, r.Method)
+		qryMeta, httpStatus, err := parseHeaders(r, cmController, r.Method)
 		if err != nil {
 			WriteJSONResponse(w, httpStatus, err.Error())
 			return
@@ -350,7 +325,7 @@ func contentTypeOk(r *http.Request) bool {
 	return r.Header.Get("Content-Type") == "application/json"
 }
 
-func parseHeaders(ctx context.Context, r *http.Request, k8sClient dynamic.Interface, queryType string) (queryMeta, int, error) {
+func parseHeaders(r *http.Request, cmController *dcoreKube.ConfigMapController, queryType string) (queryMeta, int, error) {
 	var result = queryMeta{}
 
 	if queryType == http.MethodPost || queryType == http.MethodDelete {
@@ -359,7 +334,7 @@ func parseHeaders(ctx context.Context, r *http.Request, k8sClient dynamic.Interf
 		}
 	}
 
-	hubsVariables, err := getConfiguredManualVariables(ctx, k8sClient)
+	hubsVariables, err := getAllHubsToDataMap(cmController)
 	if err != nil {
 		return result, http.StatusInternalServerError, err
 	} else if len(hubsVariables) == 0 {
