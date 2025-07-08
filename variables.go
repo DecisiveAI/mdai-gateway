@@ -12,6 +12,7 @@ import (
 	dcoreKube "github.com/decisiveai/mdai-data-core/kube"
 	datacore "github.com/decisiveai/mdai-data-core/variables"
 	"github.com/decisiveai/mdai-event-hub/eventing"
+	"github.com/decisiveai/mdai-event-hub/eventing/nats"
 	"github.com/decisiveai/mdai-gateway/types"
 	"github.com/valkey-io/valkey-go"
 	"go.uber.org/zap"
@@ -140,7 +141,7 @@ func HandleGetVariables(ctx context.Context, valkeyClient valkey.Client, cmContr
 	}
 }
 
-func HandleSetDeleteVariables(ctx context.Context, cmController *dcoreKube.ConfigMapController, hub eventing.EventHubInterface) http.HandlerFunc {
+func HandleSetDeleteVariables(ctx context.Context, cmController *dcoreKube.ConfigMapController, publisher *nats.EventPublisher) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if err := r.Body.Close(); err != nil {
@@ -283,7 +284,7 @@ func HandleSetDeleteVariables(ctx context.Context, cmController *dcoreKube.Confi
 			zap.String("name", eventPayload.Name),
 			zap.String("source", eventPayload.Source))
 
-		if err := hub.PublishMessage(eventPayload); err != nil {
+		if err := publisher.Publish(ctx, eventPayload); err != nil {
 			logger.Error("Failed to publish MdaiEvent", zap.Error(err))
 			http.Error(w, fmt.Sprintf("Failed to publish event: %v", err), http.StatusInternalServerError)
 			return
