@@ -38,13 +38,8 @@ spec:
             secretKeyRef:
               key: VALKEY_PASSWORD
               name: valkey-secret
-        - name: RABBITMQ_ENDPOINT
+        - name: NATS_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: rabbitmq-secret
-              key: RABBITMQ_ENDPOINT
-        - name: RABBITMQ_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: rabbitmq-secret
-              key: RABBITMQ_PASSWORD
+              name: nats-secret
+              key: NATS_PASSWORD

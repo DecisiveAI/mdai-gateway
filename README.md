@@ -14,11 +14,13 @@ helm upgrade --install --create-namespace --namespace mdai mdai-gateway ./deploy
 
 # to simulate an alert via curl
 ```sh
-curl -X POST -H "Content-Type: application/json" -d@testdata/alert_post_body_1.json http://localhost:8081/alerts
+curl -X POST -H "Content-Type: application/json" -d@testdata/alert_post_body_1.json http://localhost:8081/events
 ```
 
 ```sh
-curl -X POST -H "Content-Type: application/json" -d@testdata/event.json http://localhost:8081/events
+curl -X POST -H "Content-Type: application/json" -d@testdata/event-part1.json http://localhost:8081/events
+curl -X POST -H "Content-Type: application/json" -d@testdata/event-part2.json http://localhost:8081/events
+
 ```
 
 # API

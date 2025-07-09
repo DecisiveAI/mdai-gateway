@@ -5,14 +5,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
-	"net/url"
 	"os"
 	"strconv"
 	"time"
 
 	dcoreKube "github.com/decisiveai/mdai-data-core/kube"
 	"github.com/decisiveai/mdai-event-hub/eventing"
+	"github.com/decisiveai/mdai-event-hub/eventing/nats"
 	"github.com/decisiveai/mdai-gateway/types"
 	"github.com/prometheus/alertmanager/template"
 
@@ -32,9 +33,6 @@ const (
 	valkeyEndpointEnvVarKey            = "VALKEY_ENDPOINT"
 	valkeyPasswordEnvVarKey            = "VALKEY_PASSWORD"
 	valkeyAuditStreamExpiryMSEnvVarKey = "VALKEY_AUDIT_STREAM_EXPIRY_MS"
-
-	rabbitmqEndpointEnvVarKey = "RABBITMQ_ENDPOINT"
-	rabbitmqPasswordEnvVarKey = "RABBITMQ_PASSWORD"
 
 	httpPortEnvVarKey              = "HTTP_PORT"
 	defaultHttpPort                = "8081"
@@ -110,8 +108,13 @@ func main() {
 	valkeyClient := initValkey(ctx)
 	defer valkeyClient.Close()
 
-	hub := initRmq(ctx)
-	defer hub.Close()
+	publisher, err := nats.NewPublisher(logger, "publisher-mdai-gateway")
+	if err != nil {
+		log.Fatalf("initialising event publisher: %v", err)
+	}
+	defer func(publisher *nats.EventPublisher) {
+		_ = publisher.Close()
+	}(publisher)
 
 	clientset, err := dcoreKube.NewK8sClient(logger)
 	if err != nil {
@@ -133,55 +136,14 @@ func main() {
 
 	router := http.NewServeMux()
 
-	router.HandleFunc("/events", handleEventsRoute(ctx, valkeyClient, hub))
+	router.HandleFunc("/events", handleEventsRoute(ctx, valkeyClient, publisher))
 	router.HandleFunc("/variables/list/hub/{hubName}/", HandleListVariables(ctx, cmController))
 	router.HandleFunc("/variables/list/", HandleListVariables(ctx, cmController))
 	router.HandleFunc("/variables/values/hub/{hubName}/var/{varName}/", HandleGetVariables(ctx, valkeyClient, cmController))
-	router.HandleFunc("/variables/hub/{hubName}/var/{varName}/", HandleSetDeleteVariables(ctx, cmController, hub))
+	router.HandleFunc("/variables/hub/{hubName}/var/{varName}/", HandleSetDeleteVariables(ctx, cmController, publisher))
 
 	logger.Info("Starting server", zap.String("address", ":"+httpPort))
 	logger.Fatal("failed to start server", zap.Error(http.ListenAndServe(":"+httpPort, router)))
-}
-
-func initRmq(ctx context.Context) eventing.EventHubInterface {
-	retryCount := 0
-	connectToRmq := func() (eventing.EventHubInterface, error) {
-		rmqPassword := getEnvVariableWithDefault(rabbitmqPasswordEnvVarKey, "")
-		rmqEndpoint := getEnvVariableWithDefault(rabbitmqEndpointEnvVarKey, "localhost:5672")
-
-		hubUrl := (&url.URL{
-			Scheme: "amqp",
-			Host:   rmqEndpoint,
-			User:   url.UserPassword("mdai", rmqPassword),
-		}).String()
-
-		hub, err := eventing.NewEventHub(hubUrl, eventing.EventQueueName, logger)
-		if err != nil {
-			retryCount++
-			return nil, err
-		}
-		logger.Info("Successfully created EventHub", zap.String("Endpoint", rmqEndpoint))
-		return hub, nil
-	}
-
-	notifyFunc := func(err error, duration time.Duration) {
-		logger.Warn("failed to initialize rmq. retrying...",
-			zap.Error(err),
-			zap.Int("retry_count", retryCount),
-			zap.Duration("duration", duration))
-	}
-
-	hub, err := backoff.Retry(
-		ctx,
-		connectToRmq,
-		backoff.WithBackOff(backoff.NewExponentialBackOff()),
-		backoff.WithMaxElapsedTime(3*time.Minute),
-		backoff.WithNotify(notifyFunc),
-	)
-	if err != nil {
-		logger.Fatal("failed to connect to rmq", zap.Error(err))
-	}
-	return hub
 }
 
 func initValkey(ctx context.Context) valkey.Client {
@@ -229,7 +191,7 @@ func getEnvVariableWithDefault(key, defaultValue string) string {
 	}
 	return defaultValue
 }
-func handleEventsRoute(ctx context.Context, valkeyClient valkey.Client, hub eventing.EventHubInterface) http.HandlerFunc {
+func handleEventsRoute(ctx context.Context, valkeyClient valkey.Client, publisher *nats.EventPublisher) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		logger.Info("handling request ", zap.Any("request", r))
 		if r.Method == http.MethodGet {
@@ -275,7 +237,7 @@ func handleEventsRoute(ctx context.Context, valkeyClient valkey.Client, hub even
 			// Check if it looks like a Prometheus alert
 			if _, hasReceiver := rawJson["receiver"]; hasReceiver {
 				if _, hasAlerts := rawJson["alerts"]; hasAlerts {
-					handlePrometheusAlert(w, bodyBytes, hub, logger)
+					handlePrometheusAlert(w, bodyBytes, publisher, logger)
 					return
 				}
 			}
@@ -283,7 +245,7 @@ func handleEventsRoute(ctx context.Context, valkeyClient valkey.Client, hub even
 			// Check if it looks like an MdaiEvent
 			if _, hasName := rawJson["name"]; hasName {
 				if _, hasPayload := rawJson["payload"]; hasPayload {
-					handleMdaiEvent(w, bodyBytes, hub, logger)
+					handleMdaiEvent(w, bodyBytes, publisher, logger)
 					return
 				}
 			}
@@ -299,7 +261,7 @@ func handleEventsRoute(ctx context.Context, valkeyClient valkey.Client, hub even
 }
 
 // Handle Prometheus Alertmanager alerts
-func handlePrometheusAlert(w http.ResponseWriter, bodyBytes []byte, hub eventing.EventHubInterface, logger *zap.Logger) {
+func handlePrometheusAlert(w http.ResponseWriter, bodyBytes []byte, publisher *nats.EventPublisher, logger *zap.Logger) {
 	var alertData template.Data
 	if err := json.Unmarshal(bodyBytes, &alertData); err != nil {
 		logger.Error("Failed to unmarshal Prometheus alert", zap.Error(err))
@@ -316,7 +278,7 @@ func handlePrometheusAlert(w http.ResponseWriter, bodyBytes []byte, hub eventing
 
 	successCount := 0
 	for _, event := range events {
-		if err := hub.PublishMessage(event); err != nil {
+		if err := publisher.Publish(context.Background(), event); err != nil { //FIXME provide a real context
 			logger.Warn("Failed to publish event",
 				zap.String("event_name", event.Name),
 				zap.Error(err))
@@ -340,7 +302,7 @@ func handlePrometheusAlert(w http.ResponseWriter, bodyBytes []byte, hub eventing
 }
 
 // Handle direct MdaiEvent submissions
-func handleMdaiEvent(w http.ResponseWriter, bodyBytes []byte, hub eventing.EventHubInterface, logger *zap.Logger) {
+func handleMdaiEvent(w http.ResponseWriter, bodyBytes []byte, publisher *nats.EventPublisher, logger *zap.Logger) {
 	var event eventing.MdaiEvent
 	if err := json.Unmarshal(bodyBytes, &event); err != nil {
 		logger.Error("Failed to unmarshal MdaiEvent", zap.Error(err))
@@ -382,7 +344,7 @@ func handleMdaiEvent(w http.ResponseWriter, bodyBytes []byte, hub eventing.Event
 		zap.String("name", event.Name),
 		zap.String("source", event.Source))
 
-	if err := hub.PublishMessage(event); err != nil {
+	if err := publisher.Publish(context.Background(), event); err != nil {
 		logger.Error("Failed to publish MdaiEvent", zap.Error(err))
 		http.Error(w, fmt.Sprintf("Failed to publish event: %v", err), http.StatusInternalServerError)
 		return
