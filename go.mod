@@ -7,7 +7,7 @@ toolchain go1.24.3
 require (
 	github.com/cenkalti/backoff/v5 v5.0.2
 	github.com/decisiveai/mdai-data-core v0.1.8
-	github.com/decisiveai/mdai-event-hub v0.0.7
+	github.com/decisiveai/mdai-event-hub v0.0.9
 	github.com/google/uuid v1.6.0
 	github.com/nats-io/nats-server/v2 v2.11.6
 	github.com/prometheus/alertmanager v0.28.1
@@ -26,8 +26,6 @@ require (
 	k8s.io/apimachinery v0.33.2
 	k8s.io/client-go v0.33.2
 )
-
-replace github.com/decisiveai/mdai-event-hub => ../event-hub-poc
 
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
