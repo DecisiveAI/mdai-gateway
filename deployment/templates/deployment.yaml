@@ -38,6 +38,8 @@ spec:
             secretKeyRef:
               key: VALKEY_PASSWORD
               name: valkey-secret
+        - name: NATS_URL
+          value: "{{ .Values.natsUrl }}"
         - name: NATS_PASSWORD
           valueFrom:
             secretKeyRef:
