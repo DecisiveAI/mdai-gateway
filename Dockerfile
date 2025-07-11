@@ -1,7 +1,6 @@
 FROM --platform=$BUILDPLATFORM golang:1.24-bookworm AS builder
 ARG TARGETOS
 ARG TARGETARCH
-ENV GOPRIVATE=github.com/decisiveai/mdai-operator
 WORKDIR /opt/mdai-gateway
 
 COPY . .
