@@ -11,9 +11,6 @@ import (
 type ByHub map[string]map[string]string
 
 func Get(cmController *datacorekube.ConfigMapController) (ByHub, error) {
-	cmController.Lock.RLock()
-	defer cmController.Lock.RUnlock()
-
 	hubMap := make(ByHub)
 
 	indexer := cmController.CmInformer.Informer().GetIndexer()
