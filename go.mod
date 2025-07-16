@@ -8,7 +8,6 @@ require (
 	github.com/cenkalti/backoff/v5 v5.0.2
 	github.com/decisiveai/mdai-data-core v0.1.10
 	github.com/decisiveai/mdai-event-hub v0.0.10
-	github.com/decisiveai/mdai-operator v0.1.22
 	github.com/nats-io/nats-server/v2 v2.11.6
 	github.com/prometheus/alertmanager v0.28.1
 	github.com/stretchr/testify v1.10.0
@@ -25,7 +24,6 @@ require (
 	k8s.io/api v0.33.2
 	k8s.io/apimachinery v0.33.2
 	k8s.io/client-go v0.33.2
-	sigs.k8s.io/controller-runtime v0.21.0
 )
 
 require (
@@ -33,7 +31,6 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/emicklei/go-restful/v3 v3.12.1 // indirect
-	github.com/evanphx/json-patch/v5 v5.9.11 // indirect
 	github.com/fxamacker/cbor/v2 v2.7.0 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
@@ -59,9 +56,9 @@ require (
 	github.com/nats-io/nats.go v1.43.0 // indirect
 	github.com/nats-io/nkeys v0.4.11 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
+	github.com/onsi/ginkgo/v2 v2.22.1 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
-	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.79.2 // indirect
 	github.com/prometheus/client_golang v1.22.0 // indirect
 	github.com/prometheus/client_model v0.6.1 // indirect
 	github.com/prometheus/common v0.62.0 // indirect
