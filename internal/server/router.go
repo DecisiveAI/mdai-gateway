@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"github.com/decisiveai/mdai-data-core/audit"
 	"net/http"
 
 	datacorekube "github.com/decisiveai/mdai-data-core/kube"
@@ -13,6 +14,7 @@ import (
 type HandlerDeps struct {
 	Logger              *zap.Logger
 	ValkeyClient        valkey.Client
+	AuditAdapter        *audit.AuditAdapter
 	EventPublisher      eventing.Publisher
 	ConfigMapController *datacorekube.ConfigMapController
 }

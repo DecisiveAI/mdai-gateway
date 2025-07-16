@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/decisiveai/mdai-data-core/audit"
 	"testing"
 	"time"
 
@@ -156,6 +157,7 @@ func setupMocks(t *testing.T, clientset kubernetes.Interface) HandlerDeps {
 	srv := runJetStream(t)
 	ctrl := gomock.NewController(t)
 	valkeyClient := valkeymock.NewClient(ctrl)
+	auditAdapter := audit.NewAuditAdapter(zap.NewNop(), valkeyClient, 30*24*time.Hour)
 	publisher, err := nats.NewPublisher(zap.NewNop(), publisherClientName)
 	require.NoError(t, err)
 	cmController, err := newFakeConfigMapController(t, clientset, "mdai")
@@ -172,6 +174,7 @@ func setupMocks(t *testing.T, clientset kubernetes.Interface) HandlerDeps {
 	deps := HandlerDeps{
 		Logger:              zap.NewNop(),
 		ValkeyClient:        valkeyClient,
+		AuditAdapter:        auditAdapter,
 		EventPublisher:      publisher,
 		ConfigMapController: cmController,
 	}

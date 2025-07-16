@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/decisiveai/mdai-event-hub/eventing"
+	"github.com/google/uuid"
 	"github.com/prometheus/alertmanager/template"
 )
 
@@ -60,13 +62,18 @@ func toMdaiEvent(alert template.Alert) (eventing.MdaiEvent, error) {
 		return eventing.MdaiEvent{}, fmt.Errorf("marshal payload: %w", err)
 	}
 
+	id := uuid.New().String()
+	correlationID := fmt.Sprintf("%d-%s", time.Now().UnixMilli(), id)
+
 	event := eventing.MdaiEvent{
-		Name:      annotations[AlertName] + "." + alert.Status,
-		Source:    Prometheus,
-		Id:        alert.Fingerprint,
-		Timestamp: alert.StartsAt,
-		HubName:   annotations[HubName],
-		Payload:   string(payloadJSON),
+		Id:            id,
+		Name:          annotations[AlertName] + "." + alert.Status,
+		Source:        Prometheus,
+		SourceId:      alert.Fingerprint,
+		Timestamp:     alert.StartsAt,
+		HubName:       annotations[HubName],
+		Payload:       string(payloadJSON),
+		CorrelationId: correlationID,
 	}
 	event.ApplyDefaults()
 

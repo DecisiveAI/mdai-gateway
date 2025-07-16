@@ -8,4 +8,5 @@ type Config struct {
 
 	InitialBackoffInterval time.Duration
 	MaxBackoffElapsedTime  time.Duration
+	AuditStreamExpiration  time.Duration
 }

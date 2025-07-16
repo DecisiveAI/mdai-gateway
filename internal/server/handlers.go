@@ -5,12 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
-	"os"
-	"strconv"
-	"time"
-
 	"github.com/decisiveai/mdai-data-core/audit"
 	datacore "github.com/decisiveai/mdai-data-core/variables"
 	"github.com/decisiveai/mdai-event-hub/eventing"
@@ -22,6 +16,8 @@ import (
 	"github.com/decisiveai/mdai-gateway/internal/valkey"
 	"github.com/prometheus/alertmanager/template"
 	"go.uber.org/zap"
+	"io"
+	"net/http"
 )
 
 func handleListAllVariables(_ context.Context, deps HandlerDeps) http.HandlerFunc {
@@ -176,7 +172,7 @@ func handleSetDeleteVariables(ctx context.Context, deps HandlerDeps) http.Handle
 			zap.String("name", event.Name),
 			zap.String("source", event.Source))
 
-		if _, err := nats.PublishEvents(ctx, deps.Logger, deps.EventPublisher, []eventing.MdaiEvent{*event}); err != nil {
+		if _, err := nats.PublishEvents(ctx, deps.Logger, deps.EventPublisher, []eventing.MdaiEvent{*event}, deps.AuditAdapter); err != nil {
 			deps.Logger.Error("Failed to publish MdaiEvent", zap.Error(err))
 			http.Error(w, fmt.Sprintf("Failed to publish event: %v", err), http.StatusInternalServerError)
 
@@ -194,7 +190,7 @@ func handleSetDeleteVariables(ctx context.Context, deps HandlerDeps) http.Handle
 
 func handleEventsGet(ctx context.Context, deps HandlerDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) {
-		eventsMap, err := audit.NewAuditAdapter(deps.Logger, deps.ValkeyClient, getValkeyAuditStreamExpiry(deps.Logger)).HandleEventsGet(ctx)
+		eventsMap, err := deps.AuditAdapter.HandleEventsGet(ctx)
 		if err != nil {
 			deps.Logger.Error("failed to get events", zap.Error(err))
 			http.Error(w, "Unable to fetch history from Valkey", http.StatusInternalServerError)
@@ -227,9 +223,9 @@ func handleEventsPost(ctx context.Context, deps HandlerDeps) http.HandlerFunc {
 
 		switch {
 		case raw["receiver"] != nil && raw["alerts"] != nil:
-			handlePrometheusAlert(ctx, deps.Logger, w, body, deps.EventPublisher)
+			handlePrometheusAlert(ctx, deps.Logger, w, body, deps.EventPublisher, deps.AuditAdapter)
 		case raw["name"] != nil && raw["payload"] != nil:
-			handleMdaiEvent(ctx, deps.Logger, w, body, deps.EventPublisher)
+			handleMdaiEvent(ctx, deps.Logger, w, body, deps.EventPublisher, deps.AuditAdapter)
 		default:
 			deps.Logger.Error("Unrecognized payload format", zap.ByteString("body", body))
 			http.Error(w, "Invalid request body format", http.StatusBadRequest)
@@ -238,7 +234,7 @@ func handleEventsPost(ctx context.Context, deps HandlerDeps) http.HandlerFunc {
 }
 
 // Handle Prometheus Alertmanager alerts.
-func handlePrometheusAlert(ctx context.Context, logger *zap.Logger, w http.ResponseWriter, body []byte, publisher eventing.Publisher) {
+func handlePrometheusAlert(ctx context.Context, logger *zap.Logger, w http.ResponseWriter, body []byte, publisher eventing.Publisher, auditAdapter *audit.AuditAdapter) {
 	var alertData template.Data
 	if err := json.Unmarshal(body, &alertData); err != nil {
 		logger.Error("Failed to unmarshal Prometheus alert", zap.Error(err))
@@ -259,7 +255,7 @@ func handlePrometheusAlert(ctx context.Context, logger *zap.Logger, w http.Respo
 		return
 	}
 
-	successCount, err := nats.PublishEvents(ctx, logger, publisher, events)
+	successCount, err := nats.PublishEvents(ctx, logger, publisher, events, auditAdapter)
 	switch {
 	case err != nil:
 		w.WriteHeader(http.StatusAccepted)
@@ -280,7 +276,7 @@ func handlePrometheusAlert(ctx context.Context, logger *zap.Logger, w http.Respo
 }
 
 // Handle direct MdaiEvent submissions.
-func handleMdaiEvent(ctx context.Context, logger *zap.Logger, w http.ResponseWriter, body []byte, publisher eventing.Publisher) {
+func handleMdaiEvent(ctx context.Context, logger *zap.Logger, w http.ResponseWriter, body []byte, publisher eventing.Publisher, auditAdapter *audit.AuditAdapter) {
 	var event eventing.MdaiEvent
 	if err := json.Unmarshal(body, &event); err != nil {
 		logger.Error("Failed to unmarshal MdaiEvent", zap.Error(err))
@@ -300,34 +296,11 @@ func handleMdaiEvent(ctx context.Context, logger *zap.Logger, w http.ResponseWri
 		zap.String("name", event.Name),
 		zap.String("source", event.Source))
 
-	if _, err := nats.PublishEvents(ctx, logger, publisher, []eventing.MdaiEvent{event}); err != nil {
+	if _, err := nats.PublishEvents(ctx, logger, publisher, []eventing.MdaiEvent{event}, auditAdapter); err != nil {
 		logger.Error("Failed to publish MdaiEvent", zap.Error(err))
 		http.Error(w, fmt.Sprintf("Failed to publish event: %v", err), http.StatusInternalServerError)
 		return
 	}
 
 	httputil.WriteJSONResponse(w, logger, http.StatusCreated, event)
-}
-
-const (
-	valkeyAuditStreamExpiryMSEnvVarKey = "VALKEY_AUDIT_STREAM_EXPIRY_MS"
-	valkeyAuditStreamExpiry            = 30 * 24 * time.Hour
-)
-
-func getValkeyAuditStreamExpiry(logger *zap.Logger) time.Duration {
-	expiryStr := os.Getenv(valkeyAuditStreamExpiryMSEnvVarKey)
-	if expiryStr == "" {
-		logger.Info("Using default stream expiry", zap.Duration("expiry", valkeyAuditStreamExpiry))
-		return valkeyAuditStreamExpiry
-	}
-
-	expiryMs, err := strconv.Atoi(expiryStr)
-	if err != nil {
-		logger.Fatal("Invalid Valkey stream expiry env var", zap.String("value", expiryStr), zap.Error(err))
-	}
-
-	expiry := time.Duration(expiryMs) * time.Millisecond
-	logger.Info("Using custom Valkey stream expiry", zap.Duration("expiry", expiry))
-
-	return expiry
 }
