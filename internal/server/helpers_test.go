@@ -52,7 +52,6 @@ func newFakeClientset(t *testing.T) kubernetes.Interface { //nolint:ireturn
 
 func newFakeConfigMapController(t *testing.T, clientset kubernetes.Interface, namespace string) (*datacorekube.ConfigMapController, error) {
 	t.Helper()
-	t.Log("CREATING CONFIGMAP CONTROLLER")
 	defaultResyncTime := 0 * time.Second
 
 	informerFactory := informers.NewSharedInformerFactoryWithOptions(
