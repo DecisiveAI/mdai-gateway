@@ -3,30 +3,10 @@ package manualvariables
 import (
 	"net/http"
 
-	datacorekube "github.com/decisiveai/mdai-data-core/kube"
 	"github.com/decisiveai/mdai-gateway/internal/valkey"
-	corev1 "k8s.io/api/core/v1"
 )
 
 type ByHub map[string]map[string]string
-
-func Get(cmController *datacorekube.ConfigMapController) (ByHub, error) {
-	hubMap := make(ByHub)
-
-	indexer := cmController.CmInformer.Informer().GetIndexer()
-	hubNames := indexer.ListIndexFuncValues(datacorekube.ByHub)
-	for _, hubName := range hubNames {
-		objs, err := indexer.ByIndex(datacorekube.ByHub, hubName)
-		if err != nil {
-			continue
-		}
-		for _, obj := range objs {
-			cm := obj.(*corev1.ConfigMap) //nolint:forcetypeassert
-			hubMap[hubName] = cm.Data
-		}
-	}
-	return hubMap, nil
-}
 
 var (
 	ErrMissingQueryParams     = HTTPError{"missing hub or variable name", http.StatusBadRequest}

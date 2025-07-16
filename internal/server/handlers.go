@@ -26,7 +26,7 @@ import (
 
 func handleListAllVariables(_ context.Context, deps HandlerDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		hubsVariables, err := manualvariables.Get(deps.ConfigMapController)
+		hubsVariables, err := deps.ConfigMapController.GetAllHubsToDataMap()
 		if err != nil {
 			httputil.WriteJSONResponse(w, deps.Logger, http.StatusInternalServerError, "failed to fetch manual variables")
 			return
@@ -47,7 +47,7 @@ func handleListHubVariables(_ context.Context, deps HandlerDeps) http.HandlerFun
 			http.Error(w, "hub name required", http.StatusBadRequest)
 			return
 		}
-		hubsVariables, err := manualvariables.Get(deps.ConfigMapController)
+		hubsVariables, err := deps.ConfigMapController.GetAllHubsToDataMap()
 		if err != nil {
 			httputil.WriteJSONResponse(w, deps.Logger, http.StatusInternalServerError, "failed to fetch manual variables")
 			return
@@ -73,17 +73,17 @@ func handleGetVariables(ctx context.Context, deps HandlerDeps) http.HandlerFunc 
 			return
 		}
 
-		hubsVars, err := manualvariables.Get(deps.ConfigMapController)
+		hubsVariables, err := deps.ConfigMapController.GetAllHubsToDataMap()
 		if err != nil {
 			httputil.WriteJSONResponse(w, deps.Logger, http.StatusInternalServerError, "failed to fetch manual variables")
 			return
 		}
-		if len(hubsVars) == 0 {
+		if len(hubsVariables) == 0 {
 			httputil.WriteJSONResponse(w, deps.Logger, http.StatusNotFound, "no hubs with manual variables found")
 			return
 		}
 
-		varType, err := manualvariables.GetVarType(hubName, varName, hubsVars)
+		varType, err := manualvariables.GetVarType(hubName, varName, hubsVariables)
 		if err != nil {
 			status := http.StatusInternalServerError
 			var httpErr manualvariables.HTTPError
@@ -116,17 +116,17 @@ func handleSetDeleteVariables(ctx context.Context, deps HandlerDeps) http.Handle
 			return
 		}
 
-		hubsVars, err := manualvariables.Get(deps.ConfigMapController)
+		hubsVariables, err := deps.ConfigMapController.GetAllHubsToDataMap()
 		if err != nil {
 			httputil.WriteJSONResponse(w, deps.Logger, http.StatusInternalServerError, "failed to fetch manual variables")
 			return
 		}
-		if len(hubsVars) == 0 {
+		if len(hubsVariables) == 0 {
 			httputil.WriteJSONResponse(w, deps.Logger, http.StatusNotFound, "no hubs with manual variables found")
 			return
 		}
 
-		varType, err := manualvariables.GetVarType(hubName, varName, hubsVars)
+		varType, err := manualvariables.GetVarType(hubName, varName, hubsVariables)
 		if err != nil {
 			status := http.StatusInternalServerError
 			var httpErr manualvariables.HTTPError
