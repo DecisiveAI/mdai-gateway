@@ -41,7 +41,8 @@ func TestGetConfiguredManualVariables(t *testing.T) {
 	require.NotNil(t, cmController)
 	require.NoError(t, err, "failed to start configmap controller")
 
-	hubMap, err := manualvariables.Get(cmController)
+	hubMap, err := cmController.GetAllHubsToDataMap()
+
 	require.NoError(t, err)
 	assert.Len(t, hubMap, 1)
 
