@@ -50,9 +50,8 @@ func newFakeClientset(t *testing.T) kubernetes.Interface { //nolint:ireturn
 	return fake.NewClientset(&configMap)
 }
 
-func newFakeConfigMapController(t *testing.T, clientset kubernetes.Interface, namespace string) (*datacorekube.ConfigMapController, func(), error) {
+func newFakeConfigMapController(t *testing.T, clientset kubernetes.Interface, namespace string) (*datacorekube.ConfigMapController, error) {
 	t.Helper()
-	t.Log("CREATING CONFIGMAP CONTROLLER")
 	defaultResyncTime := 0 * time.Second
 
 	informerFactory := informers.NewSharedInformerFactoryWithOptions(
@@ -75,39 +74,24 @@ func newFakeConfigMapController(t *testing.T, clientset kubernetes.Interface, na
 		},
 	}); err != nil {
 		t.Fatal("failed to add index", err)
-		return nil, nil, err
+		return nil, err
 	}
 
-	c := &datacorekube.ConfigMapController{
-		Namespace:       namespace,
-		ConfigMapType:   datacorekube.ManualEnvConfigMapType,
-		InformerFactory: informerFactory,
-		CmInformer:      cmInformer,
-		Logger:          zap.NewNop(),
+	c, err := datacorekube.NewConfigMapController(datacorekube.ManualEnvConfigMapType, namespace, clientset, zap.NewNop())
+	if err != nil {
+		return nil, err
+	}
+
+	if err := c.Run(); err != nil {
+		t.Errorf("Controller failed to run: %v", err)
 	}
 
 	stopCh := make(chan struct{})
-
-	go func() {
-		if err := c.Run(stopCh); err != nil {
-			t.Errorf("Controller failed to run: %v", err)
-		}
-	}()
-
 	if !cache.WaitForCacheSync(stopCh, c.CmInformer.Informer().HasSynced) {
-		return nil, nil, errors.New("failed to sync informer caches")
+		return nil, errors.New("failed to sync informer caches")
 	}
 
-	stopFunc := func() {
-		t.Log("STOPPING CONTROLLER")
-		select {
-		case <-stopCh: // already closed, do nothing
-		default:
-			close(stopCh)
-		}
-	}
-
-	return c, stopFunc, nil
+	return c, nil
 }
 
 type errReader struct{}
@@ -174,7 +158,7 @@ func setupMocks(t *testing.T, clientset kubernetes.Interface) HandlerDeps {
 	valkeyClient := valkeymock.NewClient(ctrl)
 	publisher, err := nats.NewPublisher(zap.NewNop(), publisherClientName)
 	require.NoError(t, err)
-	cmController, stop, err := newFakeConfigMapController(t, clientset, "mdai")
+	cmController, err := newFakeConfigMapController(t, clientset, "mdai")
 	require.NoError(t, err)
 	require.NotNil(t, cmController)
 
@@ -182,7 +166,7 @@ func setupMocks(t *testing.T, clientset kubernetes.Interface) HandlerDeps {
 		srv.Shutdown()
 		ctrl.Finish()
 		_ = publisher.Close()
-		stop()
+		cmController.Stop()
 	})
 
 	deps := HandlerDeps{

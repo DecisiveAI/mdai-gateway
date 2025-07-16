@@ -31,7 +31,7 @@ func initDependencies(ctx context.Context, cfg *Config, logger *zap.Logger) (dep
 	valkeyClient := valkey.Init(ctx, logger, cfg.ValkeyCfg)
 	publisher := nats.Init(ctx, logger, publisherClientName)
 
-	cmController, stopConfigMapController, err := startConfigMapControllerWithClient(logger, datacorekube.ManualEnvConfigMapType, corev1.NamespaceAll)
+	cmController, err := startConfigMapControllerWithClient(logger, datacorekube.ManualEnvConfigMapType, corev1.NamespaceAll)
 	if err != nil {
 		logger.Fatal("failed to start config map controller", zap.Error(err))
 	}
@@ -52,9 +52,7 @@ func initDependencies(ctx context.Context, cfg *Config, logger *zap.Logger) (dep
 				logger.Error("OTEL SDK did not shut down gracefully!", zap.Error(err))
 			}
 		}
-		if stopConfigMapController != nil {
-			stopConfigMapController()
-		}
+		cmController.Stop()
 		logger.Info("Cleanup complete.")
 	}
 
@@ -66,40 +64,27 @@ func startConfigMapController(
 	clientset kubernetes.Interface,
 	configMapType string,
 	namespace string,
-) (*datacorekube.ConfigMapController, func(), error) {
+) (*datacorekube.ConfigMapController, error) {
 	controller, err := datacorekube.NewConfigMapController(configMapType, namespace, clientset, logger)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create ConfigMap controller: %w", err)
+		return nil, fmt.Errorf("failed to create ConfigMap controller: %w", err)
 	}
 
-	stop := make(chan struct{})
-
-	go func() {
-		if err := controller.Run(stop); err != nil {
-			logger.Error("ConfigMap controller exited with error", zap.Error(err))
-		}
-	}()
-
-	stopFunc := func() {
-		select {
-		case <-stop:
-			logger.Warn("ConfigMap controller stop channel has already been closed, potential double shutdown.")
-		default:
-			close(stop)
-		}
+	if err := controller.Run(); err != nil {
+		logger.Error("ConfigMap controller exited with error", zap.Error(err))
 	}
 
-	return controller, stopFunc, nil
+	return controller, nil
 }
 
 func startConfigMapControllerWithClient(
 	logger *zap.Logger,
 	configMapType string,
 	namespace string,
-) (*datacorekube.ConfigMapController, func(), error) {
+) (*datacorekube.ConfigMapController, error) {
 	clientset, err := datacorekube.NewK8sClient(logger)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create Kubernetes client: %w", err)
+		return nil, fmt.Errorf("failed to create Kubernetes client: %w", err)
 	}
 
 	return startConfigMapController(logger, clientset, configMapType, namespace)

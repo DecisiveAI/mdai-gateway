@@ -35,13 +35,14 @@ func TestGetConfiguredManualVariables(t *testing.T) {
 	require.NoError(t, err, "failed to list configmaps")
 	assert.Len(t, cmList.Items, 1, "expected one configmap, got %d", len(cmList.Items))
 
-	cmController, stop, err := newFakeConfigMapController(t, clientset, "mdai")
-	defer stop()
+	cmController, err := newFakeConfigMapController(t, clientset, "mdai")
+	defer cmController.Stop()
 	require.NoError(t, err)
 	require.NotNil(t, cmController)
 	require.NoError(t, err, "failed to start configmap controller")
 
-	hubMap, err := manualvariables.Get(cmController)
+	hubMap, err := cmController.GetAllHubsToDataMap()
+
 	require.NoError(t, err)
 	assert.Len(t, hubMap, 1)
 

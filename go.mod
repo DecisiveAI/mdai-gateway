@@ -6,8 +6,8 @@ toolchain go1.24.3
 
 require (
 	github.com/cenkalti/backoff/v5 v5.0.2
-	github.com/decisiveai/mdai-data-core v0.1.8
-	github.com/decisiveai/mdai-event-hub v0.0.9
+	github.com/decisiveai/mdai-data-core v0.1.10
+	github.com/decisiveai/mdai-event-hub v0.0.10
 	github.com/nats-io/nats-server/v2 v2.11.6
 	github.com/prometheus/alertmanager v0.28.1
 	github.com/stretchr/testify v1.10.0
