@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/decisiveai/mdai-data-core/audit"
 	datacorekube "github.com/decisiveai/mdai-data-core/kube"
 	"github.com/decisiveai/mdai-event-hub/eventing"
 	"github.com/valkey-io/valkey-go"
@@ -13,6 +14,7 @@ import (
 type HandlerDeps struct {
 	Logger              *zap.Logger
 	ValkeyClient        valkey.Client
+	AuditAdapter        *audit.AuditAdapter
 	EventPublisher      eventing.Publisher
 	ConfigMapController *datacorekube.ConfigMapController
 }

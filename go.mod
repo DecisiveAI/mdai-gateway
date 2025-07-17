@@ -8,6 +8,7 @@ require (
 	github.com/cenkalti/backoff/v5 v5.0.2
 	github.com/decisiveai/mdai-data-core v0.1.10
 	github.com/decisiveai/mdai-event-hub v0.0.10
+	github.com/google/uuid v1.6.0
 	github.com/nats-io/nats-server/v2 v2.11.6
 	github.com/prometheus/alertmanager v0.28.1
 	github.com/stretchr/testify v1.10.0
@@ -41,7 +42,6 @@ require (
 	github.com/google/gnostic-models v0.6.9 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/go-tpm v0.9.5 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.1 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect

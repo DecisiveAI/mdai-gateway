@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/decisiveai/mdai-data-core/audit"
 	datacorekube "github.com/decisiveai/mdai-data-core/kube"
 	"github.com/decisiveai/mdai-gateway/internal/nats"
 	"github.com/decisiveai/mdai-gateway/internal/server"
@@ -29,6 +30,9 @@ func initDependencies(ctx context.Context, cfg *Config, logger *zap.Logger) (dep
 	}
 
 	valkeyClient := valkey.Init(ctx, logger, cfg.ValkeyCfg)
+
+	auditAdapter := audit.NewAuditAdapter(logger, valkeyClient, cfg.ValkeyCfg.AuditStreamExpiration)
+
 	publisher := nats.Init(ctx, logger, publisherClientName)
 
 	cmController, err := startConfigMapControllerWithClient(logger, datacorekube.ManualEnvConfigMapType, corev1.NamespaceAll)
@@ -41,6 +45,7 @@ func initDependencies(ctx context.Context, cfg *Config, logger *zap.Logger) (dep
 		ValkeyClient:        valkeyClient,
 		EventPublisher:      publisher,
 		ConfigMapController: cmController,
+		AuditAdapter:        auditAdapter,
 	}
 
 	cleanup = func() {

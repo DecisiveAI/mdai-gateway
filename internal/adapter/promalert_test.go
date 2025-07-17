@@ -13,11 +13,10 @@ func TestPrometheusAlertToMdaiEvents(t *testing.T) {
 	now := time.Now()
 
 	tests := []struct {
-		name           string
-		expectIDExact  string
-		alerts         []template.Alert
-		expectOrder    []string
-		expectIDNonNil bool
+		name          string
+		expectIDExact string
+		alerts        []template.Alert
+		expectOrder   []string
 	}{
 		{
 			name: "with fingerprint",
@@ -50,7 +49,6 @@ func TestPrometheusAlertToMdaiEvents(t *testing.T) {
 					StartsAt: now.Add(-1 * time.Minute),
 				},
 			},
-			expectIDNonNil: true,
 		},
 		{
 			name: "sorts by StartsAt",
@@ -92,7 +90,7 @@ func TestPrometheusAlertToMdaiEvents(t *testing.T) {
 
 			if tt.expectOrder != nil {
 				for i, expectedID := range tt.expectOrder {
-					require.Equal(t, expectedID, events[i].Id)
+					require.Equal(t, expectedID, events[i].SourceId)
 				}
 
 				return
@@ -103,10 +101,15 @@ func TestPrometheusAlertToMdaiEvents(t *testing.T) {
 			require.Equal(t, "prod-cluster", e.HubName)
 			require.Equal(t, Prometheus, e.Source)
 
-			if tt.expectIDNonNil {
-				require.NotEmpty(t, e.Id)
-			} else {
-				require.Equal(t, tt.expectIDExact, e.Id)
+			require.NotEmpty(t, e.Id)
+			require.NotEmpty(t, e.CorrelationId)
+
+			for idx, alert := range tt.alerts {
+				found := false
+				for _, event := range events {
+					found = alert.Fingerprint == event.SourceId
+				}
+				require.True(t, found, "alert fingerprint for event index %d was not found in any events", idx)
 			}
 
 			var payload map[string]string

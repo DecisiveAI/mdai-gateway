@@ -2,6 +2,8 @@ package main
 
 import (
 	"os"
+	"strconv"
+	"time"
 
 	"github.com/decisiveai/mdai-gateway/internal/valkey"
 	"go.uber.org/zap"
@@ -31,6 +33,7 @@ func loadConfig(logger *zap.Logger) *Config {
 			Password:               getEnvVariableWithDefault(valkeyPasswordEnvVarKey, "abc"),
 			InitialBackoffInterval: defaultInitialBackoff,
 			MaxBackoffElapsedTime:  defaultMaxElapsedBackoff,
+			AuditStreamExpiration:  getValkeyAuditStreamExpiry(logger),
 		},
 	}
 	return cfg
@@ -41,4 +44,27 @@ func getEnvVariableWithDefault(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+const (
+	valkeyAuditStreamExpiryMSEnvVarKey = "VALKEY_AUDIT_STREAM_EXPIRY_MS"
+	valkeyAuditStreamExpiry            = 30 * 24 * time.Hour
+)
+
+func getValkeyAuditStreamExpiry(logger *zap.Logger) time.Duration {
+	expiryStr := os.Getenv(valkeyAuditStreamExpiryMSEnvVarKey)
+	if expiryStr == "" {
+		logger.Info("Using default stream expiry", zap.Duration("expiry", valkeyAuditStreamExpiry))
+		return valkeyAuditStreamExpiry
+	}
+
+	expiryMs, err := strconv.Atoi(expiryStr)
+	if err != nil {
+		logger.Fatal("Invalid Valkey stream expiry env var", zap.String("value", expiryStr), zap.Error(err))
+	}
+
+	expiry := time.Duration(expiryMs) * time.Millisecond
+	logger.Info("Using custom Valkey stream expiry", zap.Duration("expiry", expiry))
+
+	return expiry
 }
