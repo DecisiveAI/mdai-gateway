@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
+
 	"github.com/decisiveai/mdai-data-core/audit"
 	datacore "github.com/decisiveai/mdai-data-core/variables"
 	"github.com/decisiveai/mdai-event-hub/eventing"
@@ -16,8 +19,6 @@ import (
 	"github.com/decisiveai/mdai-gateway/internal/valkey"
 	"github.com/prometheus/alertmanager/template"
 	"go.uber.org/zap"
-	"io"
-	"net/http"
 )
 
 func handleListAllVariables(_ context.Context, deps HandlerDeps) http.HandlerFunc {

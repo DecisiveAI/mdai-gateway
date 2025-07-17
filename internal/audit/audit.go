@@ -2,11 +2,12 @@ package audit
 
 import (
 	"context"
+	"strconv"
+	"time"
+
 	"github.com/decisiveai/mdai-data-core/audit"
 	"github.com/decisiveai/mdai-event-hub/eventing"
 	"go.uber.org/zap"
-	"strconv"
-	"time"
 )
 
 func RecordAuditEventFromMdaiEvent(ctx context.Context, logger *zap.Logger, auditAdapter *audit.AuditAdapter, event eventing.MdaiEvent, success bool) error {

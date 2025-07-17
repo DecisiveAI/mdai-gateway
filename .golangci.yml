@@ -101,8 +101,6 @@ linters:
           msg: use zap instead
         - pattern: ^os.Exit$
           msg: return errors and exit from main()
-        - pattern: zap.Any
-          msg: define a MarshalLogObject
     depguard:
       rules:
         main:

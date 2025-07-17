@@ -2,9 +2,9 @@ package server
 
 import (
 	"context"
-	"github.com/decisiveai/mdai-data-core/audit"
 	"net/http"
 
+	"github.com/decisiveai/mdai-data-core/audit"
 	datacorekube "github.com/decisiveai/mdai-data-core/kube"
 	"github.com/decisiveai/mdai-event-hub/eventing"
 	"github.com/valkey-io/valkey-go"

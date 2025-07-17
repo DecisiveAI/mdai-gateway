@@ -5,15 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/decisiveai/mdai-data-core/audit"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/decisiveai/mdai-data-core/audit"
 	"github.com/decisiveai/mdai-event-hub/eventing"
+	auditutils "github.com/decisiveai/mdai-gateway/internal/audit"
 	"go.uber.org/zap"
-
-	auditUtils "github.com/decisiveai/mdai-gateway/internal/audit"
 )
 
 func NewMdaiEvent(hubName string, varName string, varType string, action string, payload any) (*eventing.MdaiEvent, error) {
@@ -57,7 +56,7 @@ func PublishEvents(ctx context.Context, logger *zap.Logger, publisher eventing.P
 			break
 		}
 
-		if auditErr := auditUtils.RecordAuditEventFromMdaiEvent(ctx, logger, auditAdapter, event, err == nil); auditErr != nil {
+		if auditErr := auditutils.RecordAuditEventFromMdaiEvent(ctx, logger, auditAdapter, event, err == nil); auditErr != nil {
 			logger.Error("Failed to write audit event for automation step",
 				zap.String("hubName", event.HubName),
 				zap.String("name", event.Name),

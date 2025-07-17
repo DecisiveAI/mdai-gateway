@@ -63,11 +63,11 @@ func toMdaiEvent(alert template.Alert) (eventing.MdaiEvent, error) {
 	}
 
 	id := uuid.New().String()
-	correlationIdCore := alert.Fingerprint
-	if correlationIdCore == "" {
-		correlationIdCore = uuid.New().String()
+	correlationIDCore := alert.Fingerprint
+	if correlationIDCore == "" {
+		correlationIDCore = uuid.New().String()
 	}
-	correlationID := fmt.Sprintf("%d-%s", time.Now().UnixMilli(), correlationIdCore)
+	correlationID := fmt.Sprintf("%d-%s", time.Now().UnixMilli(), correlationIDCore)
 
 	event := eventing.MdaiEvent{
 		Id:            id,
