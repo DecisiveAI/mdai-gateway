@@ -62,7 +62,6 @@ func toMdaiEvent(alert template.Alert) (eventing.MdaiEvent, error) {
 		return eventing.MdaiEvent{}, fmt.Errorf("marshal payload: %w", err)
 	}
 
-	id := uuid.New().String()
 	correlationIDCore := alert.Fingerprint
 	if correlationIDCore == "" {
 		correlationIDCore = uuid.New().String()
@@ -70,7 +69,6 @@ func toMdaiEvent(alert template.Alert) (eventing.MdaiEvent, error) {
 	correlationID := fmt.Sprintf("%d-%s", time.Now().UnixMilli(), correlationIDCore)
 
 	event := eventing.MdaiEvent{
-		Id:            id,
 		Name:          annotations[AlertName] + "." + alert.Status,
 		Source:        Prometheus,
 		SourceId:      alert.Fingerprint,
