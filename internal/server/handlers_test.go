@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"slices"
 	"testing"
 	"time"
 
@@ -348,6 +349,20 @@ func TestHandleGetVariables(t *testing.T) {
 	}
 }
 
+type XaddMatcher struct{}
+
+func (XaddMatcher) Matches(x any) bool {
+	if cmd, ok := x.(valkey.Completed); ok {
+		commands := cmd.Commands()
+		return slices.Contains(commands, "XADD") && slices.Contains(commands, "mdai_hub_event_history")
+	}
+	return false
+}
+
+func (XaddMatcher) String() string {
+	return "Wanted XADD to mdai_hub_event_history command"
+}
+
 func TestHandleDeleteVariables(t *testing.T) {
 	deleteTests := []struct {
 		name string
@@ -377,12 +392,19 @@ func TestHandleDeleteVariables(t *testing.T) {
 
 	clientset := newFakeClientset(t)
 	deps := setupMocks(t, clientset)
-	mux := NewRouter(t.Context(), deps)
+	ctx := t.Context()
+	mux := NewRouter(ctx, deps)
 
 	for _, tt := range deleteTests {
 		t.Run(tt.name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodDelete, "/variables/hub/mdaihub-sample/var/data_"+tt.name+"/", bytes.NewBufferString(tt.body))
 			req.Header.Set("Content-Type", "application/json")
+
+			mockClient, ok := deps.ValkeyClient.(*valkeymock.Client)
+			if !ok {
+				t.Fatal("ValkeyClient is not a *valkeymock.Client")
+			}
+			mockClient.EXPECT().Do(ctx, XaddMatcher{}).Return(valkeymock.Result(valkeymock.ValkeyString(""))).Times(1)
 
 			rr := httptest.NewRecorder()
 
@@ -435,12 +457,19 @@ func TestHandleSetVariables(t *testing.T) {
 
 	clientset := newFakeClientset(t)
 	deps := setupMocks(t, clientset)
-	mux := NewRouter(t.Context(), deps)
+	ctx := t.Context()
+	mux := NewRouter(ctx, deps)
 
 	for _, tt := range setTests {
 		t.Run(tt.name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "/variables/hub/mdaihub-sample/var/data_"+tt.name+"/", bytes.NewBufferString(tt.body))
 			req.Header.Set("Content-Type", "application/json")
+
+			mockClient, ok := deps.ValkeyClient.(*valkeymock.Client)
+			if !ok {
+				t.Fatal("ValkeyClient is not a *valkeymock.Client")
+			}
+			mockClient.EXPECT().Do(ctx, XaddMatcher{}).Return(valkeymock.Result(valkeymock.ValkeyString(""))).Times(1)
 
 			rr := httptest.NewRecorder()
 
@@ -661,6 +690,12 @@ func TestUpdateEventsHandler(t *testing.T) {
 	mux := NewRouter(ctx, deps)
 	req := httptest.NewRequest(http.MethodPost, "/events", bytes.NewBuffer(alertPostBody1))
 	req.Header.Set("Content-Type", "application/json")
+
+	mockClient, ok := deps.ValkeyClient.(*valkeymock.Client)
+	if !ok {
+		t.Fatal("ValkeyClient is not a *valkeymock.Client")
+	}
+	mockClient.EXPECT().Do(ctx, XaddMatcher{}).Return(valkeymock.Result(valkeymock.ValkeyString(""))).Times(12)
 
 	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
