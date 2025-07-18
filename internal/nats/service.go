@@ -47,14 +47,6 @@ func PublishEvents(ctx context.Context, logger *zap.Logger, publisher eventing.P
 
 	for _, event := range events {
 		err := publishWithRetry(ctx, logger, publisher, event)
-		if err == nil {
-			successCount++
-			continue
-		}
-
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			break
-		}
 
 		if auditErr := auditutils.RecordAuditEventFromMdaiEvent(ctx, logger, auditAdapter, event, err == nil); auditErr != nil {
 			logger.Error("Failed to write audit event for automation step",
@@ -64,6 +56,15 @@ func PublishEvents(ctx context.Context, logger *zap.Logger, publisher eventing.P
 				zap.String("publishSuccess", strconv.FormatBool(err == nil)),
 				zap.Error(auditErr),
 			)
+		}
+
+		if err == nil {
+			successCount++
+			continue
+		}
+
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			break
 		}
 
 		errs = append(errs, err)
