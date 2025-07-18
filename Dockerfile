@@ -4,7 +4,7 @@ ARG TARGETARCH
 WORKDIR /opt/mdai-gateway
 
 COPY . .
-RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -mod=vendor -ldflags="-w -s" -o /mdai-gateway ./cmd/mdai-gateway
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build --trimpath -ldflags="-w -s" -o /mdai-gateway ./cmd/mdai-gateway
 
 FROM gcr.io/distroless/static-debian12
 WORKDIR /
