@@ -351,7 +351,7 @@ func TestHandleGetVariables(t *testing.T) {
 
 type XaddMatcher struct{}
 
-func (_ XaddMatcher) Matches(x any) bool {
+func (XaddMatcher) Matches(x any) bool {
 	if cmd, ok := x.(valkey.Completed); ok {
 		commands := cmd.Commands()
 		return slices.Contains(commands, "XADD") && slices.Contains(commands, "mdai_hub_event_history")
@@ -359,7 +359,7 @@ func (_ XaddMatcher) Matches(x any) bool {
 	return false
 }
 
-func (_ XaddMatcher) String() string {
+func (XaddMatcher) String() string {
 	return "Wanted XADD to mdai_hub_event_history command"
 }
 
@@ -851,8 +851,8 @@ func TestUpdateEventsHandler(t *testing.T) {
 
 	// GET
 	deps.ValkeyClient.(*valkeymock.Client).EXPECT(). //nolint:forcetypeassert
-		Do(t.Context(), valkeymock.Match("XREVRANGE", audit.MdaiHubEventHistoryStreamName, "+", "-")).
-		Return(
+								Do(t.Context(), valkeymock.Match("XREVRANGE", audit.MdaiHubEventHistoryStreamName, "+", "-")).
+								Return(
 			valkeymock.Result(
 				valkeymock.ValkeyArray([]valkey.ValkeyMessage{ // Wrap outer result array
 					valkeymock.ValkeyArray([]valkey.ValkeyMessage{ // One entry
@@ -878,8 +878,8 @@ func TestUpdateEventsHandler(t *testing.T) {
 
 	// GET fail
 	deps.ValkeyClient.(*valkeymock.Client).EXPECT(). //nolint:forcetypeassert
-		Do(t.Context(), valkeymock.Match("XREVRANGE", audit.MdaiHubEventHistoryStreamName, "+", "-")).
-		Return(valkeymock.Result(valkeymock.ValkeyBlobString("foo"))).Times(1)
+								Do(t.Context(), valkeymock.Match("XREVRANGE", audit.MdaiHubEventHistoryStreamName, "+", "-")).
+								Return(valkeymock.Result(valkeymock.ValkeyBlobString("foo"))).Times(1)
 
 	mux = NewRouter(ctx, deps)
 	req = httptest.NewRequest(http.MethodGet, "/events", http.NoBody)
