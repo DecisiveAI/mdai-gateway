@@ -6,8 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
-
-	datacore "github.com/decisiveai/mdai-data-core/variables"
 )
 
 type (
@@ -95,7 +93,13 @@ func GetParser(varType VariableType, command CommandType) (ParseFn, error) {
 	return parser, nil
 }
 
-func GetValue(ctx context.Context, a *datacore.ValkeyAdapter, varRef string, varType VariableType, hubName string) (any, error) {
+type kvAdapter interface {
+	GetSetAsStringSlice(ctx context.Context, variableKey string, hubName string) ([]string, error)
+	GetMap(ctx context.Context, variableKey string, hubName string) (map[string]string, error)
+	GetString(ctx context.Context, variableKey string, hubName string) (string, bool, error)
+}
+
+func GetValue(ctx context.Context, a kvAdapter, varRef string, varType VariableType, hubName string) (any, error) {
 	switch varType {
 	case VariableTypeSet:
 		return a.GetSetAsStringSlice(ctx, varRef, hubName)

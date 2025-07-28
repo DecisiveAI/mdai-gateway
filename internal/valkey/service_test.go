@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/decisiveai/mdai-gateway/mocks"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -98,4 +100,103 @@ func TestGetParser(t *testing.T) {
 		_, err := GetParser(VariableTypeSet, "invalid-command")
 		require.Error(t, err)
 	})
+}
+
+func TestGetValue(t *testing.T) {
+	tests := []struct {
+		name      string
+		key       string
+		varType   VariableType
+		hubName   string
+		mockSetup func(m *mocks.MockKVAdapter)
+		expected  any
+		expectErr bool
+	}{
+		{
+			name:    "set value",
+			key:     "foo",
+			varType: "set",
+			hubName: "hub",
+			mockSetup: func(m *mocks.MockKVAdapter) {
+				m.On("GetSetAsStringSlice", mock.Anything, "foo", "hub").
+					Return([]string{"foo", "bar"}, nil).Once()
+			},
+			expected:  []string{"foo", "bar"},
+			expectErr: false,
+		},
+		{
+			name:    "map value",
+			key:     "foo",
+			varType: "map",
+			hubName: "hub",
+			mockSetup: func(m *mocks.MockKVAdapter) {
+				m.On("GetMap", mock.Anything, "foo", "hub").
+					Return(map[string]string{"foo": "bar"}, nil).Once()
+			},
+			expected:  map[string]string{"foo": "bar"},
+			expectErr: false,
+		},
+		{
+			name:    "string value",
+			key:     "foo_string",
+			varType: "string",
+			hubName: "hub",
+			mockSetup: func(m *mocks.MockKVAdapter) {
+				m.On("GetString", mock.Anything, "foo_string", "hub").
+					Return("bar", true, nil).Once()
+			},
+			expected:  "bar",
+			expectErr: false,
+		},
+		{
+			name:    "boolean value",
+			key:     "foo_bool",
+			varType: "boolean",
+			hubName: "hub",
+			mockSetup: func(m *mocks.MockKVAdapter) {
+				m.On("GetString", mock.Anything, "foo_bool", "hub").
+					Return("true", true, nil).Once()
+			},
+			expected:  "true",
+			expectErr: false,
+		},
+		{
+			name:    "int value",
+			key:     "foo_int",
+			varType: "int",
+			hubName: "hub",
+			mockSetup: func(m *mocks.MockKVAdapter) {
+				m.On("GetString", mock.Anything, "foo_int", "hub").
+					Return("999", true, nil).Once()
+			},
+			expected:  "999",
+			expectErr: false,
+		},
+		{
+			name:      "invalid value",
+			key:       "foo_invalid",
+			varType:   "invalid",
+			hubName:   "hub",
+			mockSetup: func(m *mocks.MockKVAdapter) {},
+			expected:  nil,
+			expectErr: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			mockKV := &mocks.MockKVAdapter{}
+			tc.mockSetup(mockKV)
+			t.Cleanup(func() { mockKV.AssertExpectations(t) })
+
+			val, err := GetValue(t.Context(), mockKV, tc.key, tc.varType, tc.hubName)
+
+			if tc.expectErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tc.expected, val)
+			}
+		})
+	}
 }
