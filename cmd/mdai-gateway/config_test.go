@@ -20,7 +20,7 @@ func TestLoadConfig(t *testing.T) {
 	}{
 		{
 			name:  "default",
-			setup: func(t *testing.T) {},
+			setup: func(t *testing.T) { t.Helper() },
 			expected: &Config{
 				HTTPPort:     "8081",
 				OTelEndpoint: "",
@@ -35,8 +35,9 @@ func TestLoadConfig(t *testing.T) {
 			},
 		},
 		{
-			name: "something",
+			name: "non-default values",
 			setup: func(t *testing.T) {
+				t.Helper()
 				t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "otlp.mdai.svc.cluster.local:4317")
 				t.Setenv("OTEL_SDK_DISABLED", "true")
 				t.Setenv("HTTP_PORT", "8080")
@@ -63,7 +64,7 @@ func TestLoadConfig(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.setup(t)
 			cfg := loadConfig(zap.NewNop())
-			assert.Equal(t, tt.expected, cfg, "got %v, want %v", cfg, tt.expected)
+			assert.Equal(t, tt.expected, cfg)
 		})
 	}
 }
