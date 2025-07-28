@@ -4,10 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/decisiveai/mdai-data-core/audit"
 	"github.com/decisiveai/mdai-event-hub/eventing"
@@ -46,7 +44,7 @@ func PublishEvents(ctx context.Context, logger *zap.Logger, publisher eventing.P
 	)
 
 	for _, event := range events {
-		err := publishWithRetry(ctx, logger, publisher, event)
+		err := publisher.Publish(ctx, event)
 
 		if auditErr := auditutils.RecordAuditEventFromMdaiEvent(ctx, logger, auditAdapter, event, err == nil); auditErr != nil {
 			logger.Error("Failed to write audit event for automation step",
@@ -64,6 +62,7 @@ func PublishEvents(ctx context.Context, logger *zap.Logger, publisher eventing.P
 		}
 
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			errs = append(errs, err)
 			break
 		}
 
@@ -71,36 +70,4 @@ func PublishEvents(ctx context.Context, logger *zap.Logger, publisher eventing.P
 	}
 
 	return successCount, errors.Join(errs...)
-}
-
-func publishWithRetry(ctx context.Context, logger *zap.Logger, publisher eventing.Publisher, event eventing.MdaiEvent) error {
-	const (
-		maxRetries = 3
-		retryDelay = 100 * time.Millisecond
-	)
-
-	var err error
-	for attempt := 1; attempt <= maxRetries; attempt++ {
-		if err = publisher.Publish(ctx, event); err == nil {
-			return nil
-		}
-
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-
-		logger.Warn("Failed to publish event, will retry...",
-			zap.String("event_name", event.Name),
-			zap.Int("attempt", attempt),
-			zap.Error(err),
-		)
-
-		select {
-		case <-time.After(retryDelay):
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
-
-	return fmt.Errorf("event %s failed after %d attempts: %w", event.Name, maxRetries, err)
 }
