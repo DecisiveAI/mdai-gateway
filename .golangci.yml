@@ -121,9 +121,15 @@ linters:
         linters:
           - cyclop
           - dupl
+          - forcetypeassert
           - funlen
           - maintidx
           - unparam
+      - path: mocks/*
+        linters:
+          - forcetypeassert
+          - mnd
+          - gocritic
       - linters:
           - lll
         path: internal/*

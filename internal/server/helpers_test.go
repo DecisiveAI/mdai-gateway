@@ -154,22 +154,20 @@ func runJetStream(t *testing.T) *natsserver.Server {
 func setupMocks(t *testing.T, clientset kubernetes.Interface) HandlerDeps {
 	t.Helper()
 
-	srv := runJetStream(t)
 	ctrl := gomock.NewController(t)
 	valkeyClient := valkeymock.NewClient(ctrl)
 	auditAdapter := audit.NewAuditAdapter(zap.NewNop(), valkeyClient, 30*24*time.Hour)
+
+	srv := runJetStream(t)
+	t.Cleanup(func() { srv.Shutdown() })
 	publisher, err := nats.NewPublisher(zap.NewNop(), publisherClientName)
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = publisher.Close() })
+
 	cmController, err := newFakeConfigMapController(t, clientset, "mdai")
 	require.NoError(t, err)
 	require.NotNil(t, cmController)
-
-	t.Cleanup(func() {
-		srv.Shutdown()
-		ctrl.Finish()
-		_ = publisher.Close()
-		cmController.Stop()
-	})
+	t.Cleanup(func() { cmController.Stop() })
 
 	deps := HandlerDeps{
 		Logger:              zap.NewNop(),
