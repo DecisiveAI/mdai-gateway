@@ -28,7 +28,7 @@ func Init(ctx context.Context, logger *zap.Logger, cfg Config) valkey.Client { /
 	exponentialBackoff.InitialInterval = cfg.InitialBackoffInterval
 
 	notifyFunc := func(err error, duration time.Duration) {
-		logger.Warn("Failed to initialize EventHub. Retrying...",
+		logger.Warn("Failed to connect to Valkey. Retrying...",
 			zap.Error(err),
 			zap.Int("retry_count", retryCount),
 			zap.Duration("duration", duration))
@@ -44,6 +44,8 @@ func Init(ctx context.Context, logger *zap.Logger, cfg Config) valkey.Client { /
 	if err != nil {
 		logger.Fatal("failed to get valkey client", zap.Error(err))
 	}
+
+	logger.Info("Connected to Valkey successfully", zap.Int("retry_count", retryCount))
 
 	return valkeyClient
 }
