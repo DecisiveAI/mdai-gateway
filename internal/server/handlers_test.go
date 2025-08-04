@@ -920,6 +920,34 @@ func TestUpdateEventsHandler(t *testing.T) {
 	assert.Equal(t, http.StatusRequestEntityTooLarge, rr.Code)
 	assert.Equal(t, "request body too large (max 10MiB)\n", rr.Body.String())
 
+	// Alertmanager: body too large -> 413 Request Entity Too Large
+	mux = NewRouter(ctx, deps)
+
+	oversizedAlert := map[string]any{
+		"receiver": "webhook",
+		"status":   "firing",
+		"alerts": []map[string]any{
+			{
+				"status": "firing",
+				"labels": map[string]any{
+					"service_name": tooBig, // long string forces read beyond MaxBytesReader
+				},
+			},
+		},
+	}
+
+	body, err := json.Marshal(oversizedAlert)
+	require.NoError(t, err)
+
+	req = httptest.NewRequest(http.MethodPost, "/alerts/alertmanager", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr = httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusRequestEntityTooLarge, rr.Code)
+	assert.Equal(t, "request body too large (max 10MiB)\n", rr.Body.String())
+
 	// Content-Type wrong -> 415 Unsupported Media Type (middleware)
 	mux = NewRouter(ctx, deps)
 	req = httptest.NewRequest(http.MethodPost, "/alerts/alertmanager", bytes.NewBuffer(alertPostBody1))
