@@ -13,10 +13,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/decisiveai/mdai-data-core/audit"
-	datacorekube "github.com/decisiveai/mdai-data-core/kube"
-	"github.com/decisiveai/mdai-event-hub/eventing"
-	"github.com/decisiveai/mdai-gateway/internal/manualvariables"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valkey-io/valkey-go"
@@ -25,6 +21,11 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+
+	"github.com/decisiveai/mdai-data-core/audit"
+	datacorekube "github.com/decisiveai/mdai-data-core/kube"
+	"github.com/decisiveai/mdai-event-hub/eventing"
+	"github.com/decisiveai/mdai-gateway/internal/manualvariables"
 )
 
 const publisherClientName = "publisher-mdai-gateway"
@@ -910,8 +911,7 @@ func TestUpdateEventsHandler(t *testing.T) {
 	// MDAI Event: body too large (triggers http.MaxBytesError -> 413)
 	mux = NewRouter(ctx, deps)
 	tooBig := strings.Repeat("x", (10<<20)+1) // 10 MiB + 1 byte
-	oversized := fmt.Sprintf(`{"name":"foo","payload":"%s","hubName":"mdai-sample"}`, tooBig)
-
+	oversized := fmt.Sprintf(`{"name":"foo","payload":%q,"hubName":"mdai-sample"}`, tooBig)
 	req = httptest.NewRequest(http.MethodPost, "/events/mdai", strings.NewReader(oversized))
 	req.Header.Set("Content-Type", "application/json")
 
