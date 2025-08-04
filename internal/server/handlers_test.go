@@ -2,7 +2,6 @@ package server
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -685,7 +684,7 @@ func TestUpdateEventsHandler(t *testing.T) {
 	alertPostBody3, err := os.ReadFile("../../testdata/alert_post_body_3.json")
 	require.NoError(t, err)
 
-	ctx := context.Background()
+	ctx := t.Context()
 	clientset := newFakeClientset(t)
 	deps := setupMocks(t, clientset)
 	mux := NewRouter(ctx, deps)
@@ -735,7 +734,7 @@ func TestUpdateEventsHandler(t *testing.T) {
 	mux.ServeHTTP(rr, req)
 
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
-	assert.Equal(t, "invalid Alertmanager payload: json: cannot unmarshal bool into Go struct field Message.Data.alerts of type template.Alerts\n", rr.Body.String())
+	assert.Equal(t, "invalid Alertmanager payload\n", rr.Body.String())
 
 	// io.ReadAll failure
 	mux = NewRouter(ctx, deps)
@@ -746,7 +745,7 @@ func TestUpdateEventsHandler(t *testing.T) {
 	mux.ServeHTTP(rr, req)
 
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
-	assert.Equal(t, "invalid Alertmanager payload: forced read error\n", rr.Body.String())
+	assert.Equal(t, "invalid Alertmanager payload\n", rr.Body.String())
 
 	// bad json
 	mux = NewRouter(ctx, deps)
@@ -757,7 +756,7 @@ func TestUpdateEventsHandler(t *testing.T) {
 	mux.ServeHTTP(rr, req)
 
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
-	assert.Equal(t, "invalid Alertmanager payload: invalid character 'o' in literal false (expecting 'a')\n", rr.Body.String())
+	assert.Equal(t, "invalid Alertmanager payload\n", rr.Body.String())
 
 	// Method not allowed (DELETE)
 	for _, method := range []string{http.MethodConnect, http.MethodOptions, http.MethodTrace, http.MethodPut, http.MethodPatch, http.MethodDelete} {

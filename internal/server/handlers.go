@@ -228,7 +228,7 @@ func handleMdaiEventsPost(deps HandlerDeps) http.HandlerFunc {
 			return
 		}
 
-		deps.Logger.Debug("Received /events/mdai POST", zap.Any("event", event))
+		deps.Logger.Debug("Received /events/mdai POST", zap.Inline(&event))
 
 		handleMdaiEvent(r.Context(), deps.Logger, w, event, deps.EventPublisher, deps.AuditAdapter)
 	}
@@ -251,7 +251,7 @@ func handlePromAlertsPost(deps HandlerDeps) http.HandlerFunc {
 				return
 			}
 			deps.Logger.Error("Failed to decode Alertmanager JSON", zap.Error(err))
-			http.Error(w, "invalid Alertmanager payload: "+err.Error(), http.StatusBadRequest)
+			http.Error(w, "invalid Alertmanager payload", http.StatusBadRequest)
 			return
 		}
 		// Ensure single JSON value (no trailing junk)
