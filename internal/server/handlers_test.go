@@ -13,6 +13,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/decisiveai/mdai-data-core/audit"
+	datacorekube "github.com/decisiveai/mdai-data-core/kube"
+	"github.com/decisiveai/mdai-event-hub/eventing"
+	"github.com/decisiveai/mdai-gateway/internal/manualvariables"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valkey-io/valkey-go"
@@ -21,11 +25,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
-
-	"github.com/decisiveai/mdai-data-core/audit"
-	datacorekube "github.com/decisiveai/mdai-data-core/kube"
-	"github.com/decisiveai/mdai-event-hub/eventing"
-	"github.com/decisiveai/mdai-gateway/internal/manualvariables"
 )
 
 const publisherClientName = "publisher-mdai-gateway"
