@@ -23,7 +23,7 @@ type HandlerDeps struct {
 func NewRouter(ctx context.Context, deps HandlerDeps) *http.ServeMux {
 	router := http.NewServeMux()
 
-	router.HandleFunc("GET /events", handleAuditEventsGet(ctx, deps)) // TODO: this is used only for audit events, rename it to /audit-events
+	router.HandleFunc("GET /audit", handleAuditEventsGet(ctx, deps))
 	router.Handle("POST /events/mdai", requireJSON(handleMdaiEventsPost(deps)))
 	router.Handle("POST /alerts/alertmanager", requireJSON(handlePromAlertsPost(deps)))
 	router.Handle("GET /variables/list", handleListAllVariables(ctx, deps))
