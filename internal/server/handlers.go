@@ -17,6 +17,7 @@ import (
 	"github.com/decisiveai/mdai-gateway/internal/nats"
 	"github.com/decisiveai/mdai-gateway/internal/stringutil"
 	"github.com/decisiveai/mdai-gateway/internal/valkey"
+	"github.com/prometheus/alertmanager/notify/webhook"
 	"github.com/prometheus/alertmanager/template"
 	"go.uber.org/zap"
 )
@@ -189,7 +190,7 @@ func handleSetDeleteVariables(ctx context.Context, deps HandlerDeps) http.Handle
 	}
 }
 
-func handleEventsGet(ctx context.Context, deps HandlerDeps) http.HandlerFunc {
+func handleAuditEventsGet(ctx context.Context, deps HandlerDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		eventsMap, err := deps.AuditAdapter.HandleEventsGet(ctx)
 		if err != nil {
@@ -202,47 +203,71 @@ func handleEventsGet(ctx context.Context, deps HandlerDeps) http.HandlerFunc {
 	}
 }
 
-func handleEventsPost(ctx context.Context, deps HandlerDeps) http.HandlerFunc {
+func handleMdaiEventsPost(deps HandlerDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		const maxBody = 10 << 20 // 10 MiB, TODO make this configurable
+		r.Body = http.MaxBytesReader(w, r.Body, maxBody)
 		defer r.Body.Close() //nolint:errcheck
 
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			deps.Logger.Error("Failed to read request body", zap.Error(err))
-			http.Error(w, "Failed to read request body", http.StatusBadRequest)
+		var event eventing.MdaiEvent
+		decoder := json.NewDecoder(r.Body)
+		decoder.DisallowUnknownFields()
+
+		if err := decoder.Decode(&event); err != nil {
+			var mbe *http.MaxBytesError
+			if errors.As(err, &mbe) {
+				http.Error(w, "request body too large (max 10MiB)", http.StatusRequestEntityTooLarge)
+				return
+			}
+			http.Error(w, "invalid JSON: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		// Ensure no trailing data
+		if err := decoder.Decode(&struct{}{}); err != io.EOF {
+			http.Error(w, "request must contain a single JSON object", http.StatusBadRequest)
 			return
 		}
 
-		deps.Logger.Debug("Received POST request body", zap.ByteString("body", body))
+		deps.Logger.Debug("Received /events/mdai POST", zap.Inline(&event))
 
-		var raw map[string]json.RawMessage
-		if err := json.Unmarshal(body, &raw); err != nil {
-			deps.Logger.Error("Invalid JSON in request body", zap.Error(err))
-			http.Error(w, "Invalid JSON in request body", http.StatusBadRequest)
+		handleMdaiEvent(r.Context(), deps.Logger, w, event, deps.EventPublisher, deps.AuditAdapter)
+	}
+}
+
+func handlePromAlertsPost(deps HandlerDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		const maxBody = 10 << 20 // 10 MiB, TODO make this configurable
+		r.Body = http.MaxBytesReader(w, r.Body, maxBody)
+		defer r.Body.Close() //nolint:errcheck
+
+		var msg webhook.Message
+		dec := json.NewDecoder(r.Body)
+		dec.DisallowUnknownFields()
+
+		if err := dec.Decode(&msg); err != nil {
+			var mbe *http.MaxBytesError
+			if errors.As(err, &mbe) {
+				http.Error(w, "request body too large (max 10MiB)", http.StatusRequestEntityTooLarge)
+				return
+			}
+			deps.Logger.Error("Failed to decode Alertmanager JSON", zap.Error(err))
+			http.Error(w, "invalid Alertmanager payload", http.StatusBadRequest)
+			return
+		}
+		// Ensure single JSON value (no trailing junk)
+		if err := dec.Decode(&struct{}{}); err != io.EOF {
+			http.Error(w, "request must contain a single JSON object", http.StatusBadRequest)
 			return
 		}
 
-		switch {
-		case raw["receiver"] != nil && raw["alerts"] != nil:
-			handlePrometheusAlert(ctx, deps.Logger, w, body, deps.EventPublisher, deps.AuditAdapter)
-		case raw["name"] != nil && raw["payload"] != nil:
-			handleMdaiEvent(ctx, deps.Logger, w, body, deps.EventPublisher, deps.AuditAdapter)
-		default:
-			deps.Logger.Error("Unrecognized payload format", zap.ByteString("body", body))
-			http.Error(w, "Invalid request body format", http.StatusBadRequest)
-		}
+		deps.Logger.Debug("Received /alerts/alertmanager POST", zap.Any("msg", msg))
+
+		handlePrometheusAlert(r.Context(), deps.Logger, w, *msg.Data, deps.EventPublisher, deps.AuditAdapter)
 	}
 }
 
 // Handle Prometheus Alertmanager alerts.
-func handlePrometheusAlert(ctx context.Context, logger *zap.Logger, w http.ResponseWriter, body []byte, publisher eventing.Publisher, auditAdapter *audit.AuditAdapter) {
-	var alertData template.Data
-	if err := json.Unmarshal(body, &alertData); err != nil {
-		logger.Error("Failed to unmarshal Prometheus alert", zap.Error(err))
-		http.Error(w, "Invalid Prometheus alert format", http.StatusBadRequest)
-		return
-	}
-
+func handlePrometheusAlert(ctx context.Context, logger *zap.Logger, w http.ResponseWriter, alertData template.Data, publisher eventing.Publisher, auditAdapter *audit.AuditAdapter) {
 	logger.Debug("Processing Prometheus alert",
 		zap.String("receiver", alertData.Receiver),
 		zap.String("status", alertData.Status),
@@ -277,14 +302,7 @@ func handlePrometheusAlert(ctx context.Context, logger *zap.Logger, w http.Respo
 }
 
 // Handle direct MdaiEvent submissions.
-func handleMdaiEvent(ctx context.Context, logger *zap.Logger, w http.ResponseWriter, body []byte, publisher eventing.Publisher, auditAdapter *audit.AuditAdapter) {
-	var event eventing.MdaiEvent
-	if err := json.Unmarshal(body, &event); err != nil {
-		logger.Error("Failed to unmarshal MdaiEvent", zap.Error(err))
-		http.Error(w, "Invalid MdaiEvent format: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-
+func handleMdaiEvent(ctx context.Context, logger *zap.Logger, w http.ResponseWriter, event eventing.MdaiEvent, publisher eventing.Publisher, auditAdapter *audit.AuditAdapter) {
 	event.ApplyDefaults()
 	if err := event.Validate(); err != nil {
 		logger.Error("Failed to validate MdaiEvent", zap.Error(err))
