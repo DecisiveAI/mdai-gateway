@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -19,6 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/valkey-io/valkey-go"
 	valkeymock "github.com/valkey-io/valkey-go/mock"
+	"go.uber.org/mock/gomock"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -69,7 +71,7 @@ func TestHandleListVariables(t *testing.T) {
 	}{
 		{
 			name:   "List",
-			target: "/variables/list/",
+			target: "/variables/list",
 			status: http.StatusOK,
 			out:    &manualvariables.ByHub{},
 			expected: &manualvariables.ByHub{
@@ -84,7 +86,7 @@ func TestHandleListVariables(t *testing.T) {
 		},
 		{
 			name:   "ListHub",
-			target: "/variables/list/hub/mdaihub-sample/",
+			target: "/variables/list/hub/mdaihub-sample",
 			status: http.StatusOK,
 			out:    &map[string]string{},
 			expected: &map[string]string{
@@ -97,7 +99,7 @@ func TestHandleListVariables(t *testing.T) {
 		},
 		{
 			name:     "ListHub_NonExistent",
-			target:   "/variables/list/hub/nonexistent_hub/",
+			target:   "/variables/list/hub/nonexistent_hub",
 			status:   http.StatusNotFound,
 			out:      new(string),
 			expected: ptr("Hub not found"),
@@ -137,7 +139,7 @@ func TestHandleGetVariables(t *testing.T) {
 	}{
 		{
 			name:     "Int",
-			target:   "/variables/values/hub/mdaihub-sample/var/data_int/",
+			target:   "/variables/values/hub/mdaihub-sample/var/data_int",
 			status:   http.StatusOK,
 			out:      &map[string]string{},
 			expected: &map[string]string{"data_int": "3"},
@@ -153,7 +155,7 @@ func TestHandleGetVariables(t *testing.T) {
 		},
 		{
 			name:     "Boolean",
-			target:   "/variables/values/hub/mdaihub-sample/var/data_boolean/",
+			target:   "/variables/values/hub/mdaihub-sample/var/data_boolean",
 			status:   http.StatusOK,
 			out:      &map[string]string{},
 			expected: &map[string]string{"data_boolean": "true"},
@@ -169,7 +171,7 @@ func TestHandleGetVariables(t *testing.T) {
 		},
 		{
 			name:     "String",
-			target:   "/variables/values/hub/mdaihub-sample/var/data_string/",
+			target:   "/variables/values/hub/mdaihub-sample/var/data_string",
 			status:   http.StatusOK,
 			out:      &map[string]string{},
 			expected: &map[string]string{"data_string": "foo"},
@@ -185,7 +187,7 @@ func TestHandleGetVariables(t *testing.T) {
 		},
 		{
 			name:   "Set",
-			target: "/variables/values/hub/mdaihub-sample/var/data_set/",
+			target: "/variables/values/hub/mdaihub-sample/var/data_set",
 			status: http.StatusOK,
 			out:    &map[string][]string{},
 			expected: &map[string][]string{
@@ -210,7 +212,7 @@ func TestHandleGetVariables(t *testing.T) {
 		},
 		{
 			name:   "Map",
-			target: "/variables/values/hub/mdaihub-sample/var/data_map/",
+			target: "/variables/values/hub/mdaihub-sample/var/data_map",
 			status: http.StatusOK,
 			out:    &map[string]map[string]string{},
 			expected: &map[string]map[string]string{
@@ -234,7 +236,7 @@ func TestHandleGetVariables(t *testing.T) {
 		},
 		{
 			name:     "String_NoValue",
-			target:   "/variables/values/hub/mdaihub-sample/var/data_string/",
+			target:   "/variables/values/hub/mdaihub-sample/var/data_string",
 			status:   http.StatusOK,
 			out:      &map[string]string{},
 			expected: &map[string]string{"data_string": ""},
@@ -250,21 +252,21 @@ func TestHandleGetVariables(t *testing.T) {
 		},
 		{
 			name:     "NonExistentHub",
-			target:   "/variables/values/hub/nonexistent_hub/var/data_string/",
+			target:   "/variables/values/hub/nonexistent_hub/var/data_string",
 			status:   http.StatusNotFound,
 			out:      new(string),
 			expected: ptr("hub not found"),
 		},
 		{
 			name:     "NonExistentVariable",
-			target:   "/variables/values/hub/mdaihub-sample/var/nonexistent_variable/",
+			target:   "/variables/values/hub/mdaihub-sample/var/nonexistent_variable",
 			status:   http.StatusNotFound,
 			out:      new(string),
 			expected: ptr("variable not found"),
 		},
 		{
 			name:     "UnsupportedVariableType",
-			target:   "/variables/values/hub/mdaihub-sample/var/data_unsupported_type/",
+			target:   "/variables/values/hub/mdaihub-sample/var/data_unsupported_type",
 			status:   http.StatusInternalServerError,
 			out:      new(string),
 			expected: ptr("unsupported variable type booleaninttstring"),
@@ -397,7 +399,7 @@ func TestHandleDeleteVariables(t *testing.T) {
 
 	for _, tt := range deleteTests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodDelete, "/variables/hub/mdaihub-sample/var/data_"+tt.name+"/", bytes.NewBufferString(tt.body))
+			req := httptest.NewRequest(http.MethodDelete, "/variables/hub/mdaihub-sample/var/data_"+tt.name, bytes.NewBufferString(tt.body))
 			req.Header.Set("Content-Type", "application/json")
 
 			mockClient, ok := deps.ValkeyClient.(*valkeymock.Client)
@@ -462,7 +464,7 @@ func TestHandleSetVariables(t *testing.T) {
 
 	for _, tt := range setTests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodPost, "/variables/hub/mdaihub-sample/var/data_"+tt.name+"/", bytes.NewBufferString(tt.body))
+			req := httptest.NewRequest(http.MethodPost, "/variables/hub/mdaihub-sample/var/data_"+tt.name, bytes.NewBufferString(tt.body))
 			req.Header.Set("Content-Type", "application/json")
 
 			mockClient, ok := deps.ValkeyClient.(*valkeymock.Client)
@@ -547,7 +549,7 @@ func TestHandleSetVariables_InvalidRequestPayload(t *testing.T) {
 
 	for _, tt := range setTests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodPost, "/variables/hub/mdaihub-sample/var/data_"+tt.name+"/", bytes.NewBufferString(tt.body))
+			req := httptest.NewRequest(http.MethodPost, "/variables/hub/mdaihub-sample/var/data_"+tt.name, bytes.NewBufferString(tt.body))
 			req.Header.Set("Content-Type", "application/json")
 
 			rr := httptest.NewRecorder()
@@ -614,7 +616,7 @@ func TestHandleDeleteVariables_InvalidRequestPayload(t *testing.T) {
 
 	for _, tt := range setTests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodDelete, "/variables/hub/mdaihub-sample/var/data_"+tt.name+"/", bytes.NewBufferString(tt.body))
+			req := httptest.NewRequest(http.MethodDelete, "/variables/hub/mdaihub-sample/var/data_"+tt.name, bytes.NewBufferString(tt.body))
 			req.Header.Set("Content-Type", "application/json")
 
 			rr := httptest.NewRecorder()
@@ -681,21 +683,19 @@ func TestUpdateEventsHandler(t *testing.T) {
 	require.NoError(t, err)
 	alertPostBody3, err := os.ReadFile("../../testdata/alert_post_body_3.json")
 	require.NoError(t, err)
-	eventPostBody1, err := os.ReadFile("../../testdata/event-part1.json")
-	require.NoError(t, err)
 
-	ctx := t.Context()
+	ctx := context.Background()
 	clientset := newFakeClientset(t)
 	deps := setupMocks(t, clientset)
 	mux := NewRouter(ctx, deps)
-	req := httptest.NewRequest(http.MethodPost, "/events", bytes.NewBuffer(alertPostBody1))
+	req := httptest.NewRequest(http.MethodPost, "/alerts/alertmanager", bytes.NewBuffer(alertPostBody1))
 	req.Header.Set("Content-Type", "application/json")
 
 	mockClient, ok := deps.ValkeyClient.(*valkeymock.Client)
 	if !ok {
 		t.Fatal("ValkeyClient is not a *valkeymock.Client")
 	}
-	mockClient.EXPECT().Do(ctx, XaddMatcher{}).Return(valkeymock.Result(valkeymock.ValkeyString(""))).Times(12)
+	mockClient.EXPECT().Do(gomock.Any(), XaddMatcher{}).Return(valkeymock.Result(valkeymock.ValkeyString(""))).Times(12)
 
 	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
@@ -705,7 +705,7 @@ func TestUpdateEventsHandler(t *testing.T) {
 
 	// one more time with different payload
 	mux = NewRouter(ctx, deps)
-	req = httptest.NewRequest(http.MethodPost, "/events", bytes.NewBuffer(alertPostBody2))
+	req = httptest.NewRequest(http.MethodPost, "/alerts/alertmanager", bytes.NewBuffer(alertPostBody2))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr = httptest.NewRecorder()
@@ -716,7 +716,7 @@ func TestUpdateEventsHandler(t *testing.T) {
 
 	// one more time to emulate a scenario when alert was re-created or renamed
 	mux = NewRouter(ctx, deps)
-	req = httptest.NewRequest(http.MethodPost, "/events", bytes.NewBuffer(alertPostBody3))
+	req = httptest.NewRequest(http.MethodPost, "/alerts/alertmanager", bytes.NewBuffer(alertPostBody3))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr = httptest.NewRecorder()
@@ -727,54 +727,56 @@ func TestUpdateEventsHandler(t *testing.T) {
 
 	// Prometheus JSON fail
 	mux = NewRouter(ctx, deps)
-	req = httptest.NewRequest(http.MethodPost, "/events", bytes.NewBufferString(`{"receiver":"foo","alerts": true}`))
+	req = httptest.NewRequest(http.MethodPost, "/alerts/alertmanager", bytes.NewBufferString(`{"receiver":"foo","alerts": true}`))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr = httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
 
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
-	assert.Equal(t, "Invalid Prometheus alert format\n", rr.Body.String())
+	assert.Equal(t, "invalid Alertmanager payload: json: cannot unmarshal bool into Go struct field Message.Data.alerts of type template.Alerts\n", rr.Body.String())
 
 	// io.ReadAll failure
 	mux = NewRouter(ctx, deps)
-	req = httptest.NewRequest(http.MethodPost, "/events", &errReader{})
+	req = httptest.NewRequest(http.MethodPost, "/alerts/alertmanager", &errReader{})
 	req.Header.Set("Content-Type", "application/json")
 
 	rr = httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
 
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
-	assert.Equal(t, "Failed to read request body\n", rr.Body.String())
+	assert.Equal(t, "invalid Alertmanager payload: forced read error\n", rr.Body.String())
 
 	// bad json
 	mux = NewRouter(ctx, deps)
-	req = httptest.NewRequest(http.MethodPost, "/events", bytes.NewBufferString("foo"))
+	req = httptest.NewRequest(http.MethodPost, "/alerts/alertmanager", bytes.NewBufferString("foo"))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr = httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
 
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
-	assert.Equal(t, "Invalid JSON in request body\n", rr.Body.String())
+	assert.Equal(t, "invalid Alertmanager payload: invalid character 'o' in literal false (expecting 'a')\n", rr.Body.String())
 
 	// Method not allowed (DELETE)
 	for _, method := range []string{http.MethodConnect, http.MethodOptions, http.MethodTrace, http.MethodPut, http.MethodPatch, http.MethodDelete} {
 		mux = NewRouter(ctx, deps)
-		req = httptest.NewRequest(method, "/events", http.NoBody)
+		req = httptest.NewRequest(method, "/alerts/alertmanager", http.NoBody)
 		req.Header.Set("Content-Type", "application/json")
 
 		rr = httptest.NewRecorder()
 		mux.ServeHTTP(rr, req)
 
-		assert.Equal(t, "GET, HEAD, POST", rr.Header().Get("Allow"))
+		assert.Equal(t, "POST", rr.Header().Get("Allow"))
 		assert.Equal(t, http.StatusMethodNotAllowed, rr.Code)
 		assert.Equal(t, "Method Not Allowed\n", rr.Body.String())
 	}
 
 	// MDAI Event
+	eventPostBody1, err := os.ReadFile("../../testdata/event-part1.json")
+	require.NoError(t, err)
 	mux = NewRouter(ctx, deps)
-	req = httptest.NewRequest(http.MethodPost, "/events", bytes.NewBuffer(eventPostBody1))
+	req = httptest.NewRequest(http.MethodPost, "/events/mdai", bytes.NewBuffer(eventPostBody1))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr = httptest.NewRecorder()
@@ -796,18 +798,18 @@ func TestUpdateEventsHandler(t *testing.T) {
 
 	// MDAI Event FAIL
 	mux = NewRouter(ctx, deps)
-	req = httptest.NewRequest(http.MethodPost, "/events", bytes.NewBufferString(`{"name":"foo", "payload": "bar", "hubName": true}`))
+	req = httptest.NewRequest(http.MethodPost, "/events/mdai", bytes.NewBufferString(`{"name":"foo", "payload": "bar", "hubName": true}`))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr = httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
 
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
-	assert.Equal(t, "Invalid MdaiEvent format: json: cannot unmarshal bool into Go struct field MdaiEvent.hubName of type string\n", rr.Body.String())
+	assert.Equal(t, "invalid JSON: json: cannot unmarshal bool into Go struct field MdaiEvent.hubName of type string\n", rr.Body.String())
 
 	// MDAI Missing Name
 	mux = NewRouter(ctx, deps)
-	req = httptest.NewRequest(http.MethodPost, "/events", bytes.NewBufferString(`{"name":"", "payload": "bar", "hubName": "mdai-sample"}`))
+	req = httptest.NewRequest(http.MethodPost, "/events/mdai", bytes.NewBufferString(`{"name":"", "payload": "bar", "hubName": "mdai-sample"}`))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr = httptest.NewRecorder()
@@ -818,7 +820,7 @@ func TestUpdateEventsHandler(t *testing.T) {
 
 	// MDAI Missing HubName
 	mux = NewRouter(ctx, deps)
-	req = httptest.NewRequest(http.MethodPost, "/events", bytes.NewBufferString(`{"name":"foo", "payload": "bar", "hubName": ""}`))
+	req = httptest.NewRequest(http.MethodPost, "/events/mdai", bytes.NewBufferString(`{"name":"foo", "payload": "bar", "hubName": ""}`))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr = httptest.NewRecorder()
@@ -829,7 +831,7 @@ func TestUpdateEventsHandler(t *testing.T) {
 
 	// MDAI Missing Payload
 	mux = NewRouter(ctx, deps)
-	req = httptest.NewRequest(http.MethodPost, "/events", bytes.NewBufferString(`{"name":"foo", "payload": "", "hubName": "mdai-sample"}`))
+	req = httptest.NewRequest(http.MethodPost, "/events/mdai", bytes.NewBufferString(`{"name":"foo", "payload": "", "hubName": "mdai-sample"}`))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr = httptest.NewRecorder()
@@ -840,18 +842,18 @@ func TestUpdateEventsHandler(t *testing.T) {
 
 	// FAIL
 	mux = NewRouter(ctx, deps)
-	req = httptest.NewRequest(http.MethodPost, "/events", bytes.NewBufferString(`{"foo":"bar"}`))
+	req = httptest.NewRequest(http.MethodPost, "/events/mdai", bytes.NewBufferString(`{"foo":"bar"}`))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr = httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
 
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
-	assert.Equal(t, "Invalid request body format\n", rr.Body.String())
+	assert.Equal(t, "invalid JSON: json: unknown field \"foo\"\n", rr.Body.String())
 
 	// GET
 	deps.ValkeyClient.(*valkeymock.Client).EXPECT(). //nolint:forcetypeassert
-								Do(t.Context(), valkeymock.Match("XREVRANGE", audit.MdaiHubEventHistoryStreamName, "+", "-")).
+								Do(gomock.Any(), valkeymock.Match("XREVRANGE", audit.MdaiHubEventHistoryStreamName, "+", "-")).
 								Return(
 			valkeymock.Result(
 				valkeymock.ValkeyArray([]valkey.ValkeyMessage{ // Wrap outer result array
@@ -869,7 +871,7 @@ func TestUpdateEventsHandler(t *testing.T) {
 		).Times(1)
 
 	mux = NewRouter(ctx, deps)
-	req = httptest.NewRequest(http.MethodGet, "/events", http.NoBody)
+	req = httptest.NewRequest(http.MethodGet, "/audit", http.NoBody)
 	rr = httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
 
@@ -878,11 +880,11 @@ func TestUpdateEventsHandler(t *testing.T) {
 
 	// GET fail
 	deps.ValkeyClient.(*valkeymock.Client).EXPECT(). //nolint:forcetypeassert
-								Do(t.Context(), valkeymock.Match("XREVRANGE", audit.MdaiHubEventHistoryStreamName, "+", "-")).
+								Do(gomock.Any(), valkeymock.Match("XREVRANGE", audit.MdaiHubEventHistoryStreamName, "+", "-")).
 								Return(valkeymock.Result(valkeymock.ValkeyBlobString("foo"))).Times(1)
 
 	mux = NewRouter(ctx, deps)
-	req = httptest.NewRequest(http.MethodGet, "/events", http.NoBody)
+	req = httptest.NewRequest(http.MethodGet, "/audit", http.NoBody)
 	rr = httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
 
