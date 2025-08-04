@@ -969,4 +969,19 @@ func TestUpdateEventsHandler(t *testing.T) {
 
 	assert.Equal(t, http.StatusUnsupportedMediaType, rr.Code)
 	assert.Equal(t, "Content-Type header must be application/json\n", rr.Body.String())
+
+	// MDAI Event: trailing JSON after a valid object -> 400 Bad Request
+	mux = NewRouter(ctx, deps)
+	req = httptest.NewRequest(
+		http.MethodPost,
+		"/events/mdai",
+		bytes.NewBufferString(string(eventPostBody1)+" {}"), // second top-level value
+	)
+	req.Header.Set("Content-Type", "application/json")
+
+	rr = httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Equal(t, "request must contain a single JSON object\n", rr.Body.String())
 }
