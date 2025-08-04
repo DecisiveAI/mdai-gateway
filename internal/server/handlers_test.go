@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -890,4 +891,55 @@ func TestUpdateEventsHandler(t *testing.T) {
 
 	assert.Equal(t, http.StatusInternalServerError, rr.Code)
 	assert.Equal(t, "Unable to fetch history from Valkey\n", rr.Body.String())
+
+	// trailing JSON after a valid object -> must be rejected
+	mux = NewRouter(ctx, deps)
+	req = httptest.NewRequest(
+		http.MethodPost,
+		"/alerts/alertmanager",
+		bytes.NewBufferString(string(alertPostBody1)+" {}"), // second top-level JSON value
+	)
+	req.Header.Set("Content-Type", "application/json")
+
+	rr = httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Equal(t, "request must contain a single JSON object\n", rr.Body.String())
+
+	// MDAI Event: body too large (triggers http.MaxBytesError -> 413)
+	mux = NewRouter(ctx, deps)
+	tooBig := strings.Repeat("x", (10<<20)+1) // 10 MiB + 1 byte
+	oversized := fmt.Sprintf(`{"name":"foo","payload":"%s","hubName":"mdai-sample"}`, tooBig)
+
+	req = httptest.NewRequest(http.MethodPost, "/events/mdai", strings.NewReader(oversized))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr = httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusRequestEntityTooLarge, rr.Code)
+	assert.Equal(t, "request body too large (max 10MiB)\n", rr.Body.String())
+
+	// Content-Type wrong -> 415 Unsupported Media Type (middleware)
+	mux = NewRouter(ctx, deps)
+	req = httptest.NewRequest(http.MethodPost, "/alerts/alertmanager", bytes.NewBuffer(alertPostBody1))
+	req.Header.Set("Content-Type", "text/plain")
+
+	rr = httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusUnsupportedMediaType, rr.Code)
+	assert.Equal(t, "Content-Type header must be application/json\n", rr.Body.String())
+
+	// Content-Type missing -> 415 Unsupported Media Type (middleware)
+	mux = NewRouter(ctx, deps)
+	req = httptest.NewRequest(http.MethodPost, "/events/mdai", bytes.NewBufferString(`{"name":"foo","payload":"bar","hubName":"mdai-sample"}`))
+	// intentionally do NOT set Content-Type
+
+	rr = httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusUnsupportedMediaType, rr.Code)
+	assert.Equal(t, "Content-Type header must be application/json\n", rr.Body.String())
 }
