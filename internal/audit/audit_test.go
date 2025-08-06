@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/decisiveai/mdai-event-hub/eventing"
+	"github.com/decisiveai/mdai-event-hub/pkg/eventing"
 	"github.com/decisiveai/mdai-gateway/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -19,13 +19,13 @@ func TestRecordAuditEventFromMdaiEvent(t *testing.T) {
 
 	mockAudit := &mocks.MockAuditAdapter{}
 	event := eventing.MdaiEvent{
-		Id:            "id1",
+		ID:            "id1",
 		Name:          "event_name",
 		Timestamp:     time.Date(2025, 7, 19, 12, 0, 0, 0, time.UTC),
 		Payload:       "{}",
 		Source:        "source",
-		SourceId:      "src1",
-		CorrelationId: "cid1",
+		SourceID:      "src1",
+		CorrelationID: "cid1",
 		HubName:       "hub",
 	}
 

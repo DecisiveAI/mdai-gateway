@@ -3,59 +3,58 @@
   "status": "firing",
   "alerts": [
     {
-      "status": "firing",
+      "status": "resolved",
       "labels": {
         "alertname": "logBytesOutTooHighBySvc",
         "dc": "eu-west-1",
-        "instance": "svc-a-1:9100",
+        "instance": "svc-a:9100",
         "job": "prometheus24",
         "service_name": "service-a"
       },
       "annotations": {
         "hub_name": "mdaihub-sample",
-        "description": "bytes out above threshold",
-        "current_value": "1.68e7"
+        "description": "latest change"
       },
-      "startsAt": "2025-08-03T10:02:26.739266876+02:00",
-      "endsAt": "0001-01-01T00:00:00Z",
-      "generatorURL": "http://example.com:9090/graph?g0.expr=rate%28log_bytes_out%5B5m%5D%29&g0.tab=1",
-      "fingerprint": "fp-service-a-1"
+      "startsAt": "2018-08-03T09:58:00+02:00",
+      "endsAt":   "2018-08-03T10:06:00+02:00",
+      "generatorURL": "http://example.com:9090/graph",
+      "fingerprint": "fp-dup-service-a"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "logBytesOutTooHighBySvc",
+        "dc": "eu-west-1",
+        "instance": "svc-a:9100",
+        "job": "prometheus24",
+        "service_name": "service-a"
+      },
+      "annotations": {
+        "hub_name": "mdaihub-sample",
+        "description": "older change - should skip"
+      },
+      "startsAt": "2018-08-03T10:02:00+02:00",
+      "endsAt":   "0001-01-01T00:00:00Z",
+      "generatorURL": "http://example.com:9090/graph",
+      "fingerprint": "fp-dup-service-a"
     },
     {
       "status": "resolved",
       "labels": {
         "alertname": "logBytesOutTooHighBySvc",
         "dc": "eu-west-1",
-        "instance": "svc-a-2:9100",
+        "instance": "svc-a:9100",
         "job": "prometheus24",
         "service_name": "service-a"
       },
       "annotations": {
         "hub_name": "mdaihub-sample",
-        "description": "returned below threshold"
+        "description": "older change - should skip"
       },
-      "startsAt": "2025-08-03T09:58:00+02:00",
-      "endsAt": "2025-08-03T10:05:00+02:00",
-      "generatorURL": "http://example.com:9090/graph?g0.expr=rate%28log_bytes_out%5B5m%5D%29&g0.tab=1",
-      "fingerprint": "fp-service-a-2"
-    },
-    {
-      "status": "firing",
-      "labels": {
-        "alertname": "logBytesOutTooHighBySvc",
-        "dc": "eu-west-1",
-        "instance": "svc-a-3:9100",
-        "job": "prometheus24",
-        "service_name": "service-a"
-      },
-      "annotations": {
-        "hub_name": "mdaihub-sample",
-        "description": "bytes out above threshold (another instance)"
-      },
-      "startsAt": "2025-08-03T10:03:30+02:00",
-      "endsAt": "0001-01-01T00:00:00Z",
-      "generatorURL": "http://example.com:9090/graph?g0.expr=rate%28log_bytes_out%5B5m%5D%29&g0.tab=1",
-      "fingerprint": "fp-service-a-3"
+      "startsAt": "2018-08-03T09:58:00+02:00",
+      "endsAt":   "2018-08-03T10:04:00+02:00",
+      "generatorURL": "http://example.com:9090/graph",
+      "fingerprint": "fp-dup-service-a"
     }
   ],
   "groupLabels": {
@@ -69,8 +68,7 @@
     "service_name": "service-a"
   },
   "commonAnnotations": {
-    "hub_name": "mdaihub-sample",
-    "description": "bytes out too high"
+    "hub_name": "mdaihub-sample"
   },
   "externalURL": "http://example.com:9093",
   "version": "4",

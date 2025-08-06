@@ -7,7 +7,8 @@ import (
 
 	"github.com/decisiveai/mdai-data-core/audit"
 	datacorekube "github.com/decisiveai/mdai-data-core/kube"
-	"github.com/decisiveai/mdai-event-hub/eventing"
+	"github.com/decisiveai/mdai-event-hub/pkg/eventing"
+	"github.com/decisiveai/mdai-gateway/internal/adapter"
 	"github.com/valkey-io/valkey-go"
 	"go.uber.org/zap"
 )
@@ -18,6 +19,7 @@ type HandlerDeps struct {
 	AuditAdapter        *audit.AuditAdapter
 	EventPublisher      eventing.Publisher
 	ConfigMapController *datacorekube.ConfigMapController
+	Deduper             *adapter.Deduper
 }
 
 func NewRouter(ctx context.Context, deps HandlerDeps) *http.ServeMux {

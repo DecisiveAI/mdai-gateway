@@ -6,6 +6,7 @@ import (
 
 	"github.com/decisiveai/mdai-data-core/audit"
 	datacorekube "github.com/decisiveai/mdai-data-core/kube"
+	"github.com/decisiveai/mdai-gateway/internal/adapter"
 	"github.com/decisiveai/mdai-gateway/internal/nats"
 	"github.com/decisiveai/mdai-gateway/internal/server"
 	"github.com/decisiveai/mdai-gateway/internal/valkey"
@@ -40,12 +41,15 @@ func initDependencies(ctx context.Context, cfg *Config, logger *zap.Logger) (dep
 		logger.Fatal("failed to start config map controller", zap.Error(err))
 	}
 
+	deduper := adapter.NewDeduper()
+
 	deps = server.HandlerDeps{
 		Logger:              logger,
 		ValkeyClient:        valkeyClient,
 		EventPublisher:      publisher,
 		ConfigMapController: cmController,
 		AuditAdapter:        auditAdapter,
+		Deduper:             deduper,
 	}
 
 	cleanup = func() {

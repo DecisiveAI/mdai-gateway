@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/decisiveai/mdai-data-core/audit"
-	"github.com/decisiveai/mdai-event-hub/eventing"
+	"github.com/decisiveai/mdai-event-hub/pkg/eventing"
 	"github.com/decisiveai/mdai-gateway/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"

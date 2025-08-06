@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/decisiveai/mdai-data-core/audit"
-	"github.com/decisiveai/mdai-event-hub/eventing"
+	"github.com/decisiveai/mdai-event-hub/pkg/eventing"
 	auditutils "github.com/decisiveai/mdai-gateway/internal/audit"
 	"go.uber.org/zap"
 )
@@ -50,7 +50,7 @@ func PublishEvents(ctx context.Context, logger *zap.Logger, publisher eventing.P
 			logger.Error("Failed to write audit event for automation step",
 				zap.String("hubName", event.HubName),
 				zap.String("name", event.Name),
-				zap.String("eventCorrelationId", event.CorrelationId),
+				zap.String("eventCorrelationId", event.CorrelationID),
 				zap.String("publishSuccess", strconv.FormatBool(err == nil)),
 				zap.Error(auditErr),
 			)

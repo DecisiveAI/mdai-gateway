@@ -10,7 +10,7 @@ import (
 
 	"github.com/decisiveai/mdai-data-core/audit"
 	datacore "github.com/decisiveai/mdai-data-core/variables"
-	"github.com/decisiveai/mdai-event-hub/eventing"
+	"github.com/decisiveai/mdai-event-hub/pkg/eventing"
 	"github.com/decisiveai/mdai-gateway/internal/adapter"
 	"github.com/decisiveai/mdai-gateway/internal/httputil"
 	"github.com/decisiveai/mdai-gateway/internal/manualvariables"
@@ -170,7 +170,7 @@ func handleSetDeleteVariables(ctx context.Context, deps HandlerDeps) http.Handle
 		}
 
 		deps.Logger.Info("Publishing MdaiEvent",
-			zap.String("id", event.Id),
+			zap.String("id", event.ID),
 			zap.String("name", event.Name),
 			zap.String("source", event.Source))
 
@@ -262,19 +262,19 @@ func handlePromAlertsPost(deps HandlerDeps) http.HandlerFunc {
 
 		deps.Logger.Debug("Received /alerts/alertmanager POST", zap.Any("msg", msg))
 
-		handlePrometheusAlert(r.Context(), deps.Logger, w, *msg.Data, deps.EventPublisher, deps.AuditAdapter)
+		handlePrometheusAlert(r.Context(), deps.Logger, w, *msg.Data, deps.EventPublisher, deps.AuditAdapter, deps.Deduper)
 	}
 }
 
 // Handle Prometheus Alertmanager alerts.
-func handlePrometheusAlert(ctx context.Context, logger *zap.Logger, w http.ResponseWriter, alertData template.Data, publisher eventing.Publisher, auditAdapter *audit.AuditAdapter) {
+func handlePrometheusAlert(ctx context.Context, logger *zap.Logger, w http.ResponseWriter, alertData template.Data, publisher eventing.Publisher, auditAdapter *audit.AuditAdapter, deduper *adapter.Deduper) {
 	logger.Debug("Processing Prometheus alert",
 		zap.String("receiver", alertData.Receiver),
 		zap.String("status", alertData.Status),
 		zap.Int("alertCount", len(alertData.Alerts)))
 
-	wrappedAlertData := adapter.NewPromAlertWrapper(alertData)
-	events, err := wrappedAlertData.ToMdaiEvents()
+	wrappedAlertData := adapter.NewPromAlertWrapper(alertData, logger, deduper)
+	events, skipped, err := wrappedAlertData.ToMdaiEvents()
 	if err != nil {
 		logger.Error("Failed to adapt Prometheus Alert to MDAI Events", zap.Error(err))
 		http.Error(w, "Failed to adapt Prometheus Alert to MDAI Events", http.StatusInternalServerError)
@@ -287,14 +287,12 @@ func handlePrometheusAlert(ctx context.Context, logger *zap.Logger, w http.Respo
 		w.WriteHeader(http.StatusAccepted)
 		_, _ = fmt.Fprintf(w, "Published %d/%d events; some failed", successCount, len(events))
 		return
-	case successCount == 0:
-		http.Error(w, "Failed to publish any events", http.StatusInternalServerError)
-		return
 	default:
 		response := httputil.PrometheusAlertResponse{
 			Message:    "Processed Prometheus alerts",
-			Total:      len(events),
+			Total:      len(alertData.Alerts),
 			Successful: successCount,
+			Skipped:    skipped,
 		}
 
 		httputil.WriteJSONResponse(w, logger, http.StatusCreated, response)
@@ -311,7 +309,7 @@ func handleMdaiEvent(ctx context.Context, logger *zap.Logger, w http.ResponseWri
 	}
 
 	logger.Debug("Processing MdaiEvent",
-		zap.String("id", event.Id),
+		zap.String("id", event.ID),
 		zap.String("name", event.Name),
 		zap.String("source", event.Source))
 
