@@ -45,12 +45,14 @@ func (w *PromAlertWrapper) ToMdaiEvents() ([]eventing.MdaiEvent, int, error) {
 			return nil, 0, fmt.Errorf("%w (name=%q status=%s)", ErrMissingFingerprint,
 				alert.Annotations[AlertName], alert.Status)
 		}
-		if !w.deduper.IsNewer(alert.Fingerprint, changeTime(alert)) {
+		changeTime := changeTime(alert)
+		if isNewer, lastTime := w.deduper.UpdateIfNewer(alert.Fingerprint, changeTime); !isNewer {
 			skipped++
 			w.Logger.Info(
-				"Skipping alert",
+				"Skipping stale alert",
 				zap.String("alert_name", alert.Annotations[AlertName]),
-				zap.Time("last_update", w.deduper.last[alert.Fingerprint]),
+				zap.Time("last_update", lastTime),
+				zap.Time("this_change", changeTime),
 			)
 			continue
 		}

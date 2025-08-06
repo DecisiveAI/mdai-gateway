@@ -12,12 +12,25 @@ type Deduper struct {
 
 func NewDeduper() *Deduper { return &Deduper{last: make(map[string]time.Time)} }
 
-func (d *Deduper) IsNewer(fp string, t time.Time) bool {
+// UpdateIfNewer checks the stored time for key and, if changeTime is strictly newer
+func (d *Deduper) UpdateIfNewer(fingerprint string, changeTime time.Time) (bool, time.Time) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if prev, ok := d.last[fp]; ok && !t.After(prev) {
-		return false
+	if prev, ok := d.last[fingerprint]; ok && !changeTime.After(prev) {
+		return false, prev
 	}
-	d.last[fp] = t
-	return true
+	d.last[fingerprint] = changeTime
+	return true, changeTime
+}
+
+func (d *Deduper) isNewer(fingerprint string, changeTime time.Time) bool {
+	updated, _ := d.UpdateIfNewer(fingerprint, changeTime)
+	return updated
+}
+
+func (d *Deduper) PeekLast(key string) (time.Time, bool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	t, ok := d.last[key]
+	return t, ok
 }
