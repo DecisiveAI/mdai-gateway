@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/decisiveai/mdai-event-hub/pkg/eventing"
+	"github.com/decisiveai/mdai-event-hub/pkg/eventing/nats"
 	"github.com/google/uuid"
 	"github.com/prometheus/alertmanager/template"
 	"go.uber.org/zap"
@@ -35,11 +36,11 @@ func NewPromAlertWrapper(v template.Data, l *zap.Logger, d *Deduper) *PromAlertW
 	return &PromAlertWrapper{Data: &v, Logger: l, deduper: d}
 }
 
-func (w *PromAlertWrapper) ToMdaiEvents() ([]eventing.MdaiEvent, int, error) {
+func (w *PromAlertWrapper) ToMdaiEvents() ([]eventing.EventPerSubject, int, error) {
 	skipped := 0
 	alerts := w.Alerts // we don't need sorting within the same payload since it's deduplicated by fingerprint
 
-	mdaiEvents := make([]eventing.MdaiEvent, 0, len(alerts))
+	eventsPerSubject := make([]eventing.EventPerSubject, 0, len(alerts))
 	for _, alert := range alerts {
 		if alert.Fingerprint == "" {
 			return nil, 0, fmt.Errorf("%w (name=%q status=%s)", ErrMissingFingerprint,
@@ -61,10 +62,27 @@ func (w *PromAlertWrapper) ToMdaiEvents() ([]eventing.MdaiEvent, int, error) {
 			return nil, 0, err
 		}
 
-		mdaiEvents = append(mdaiEvents, event)
+		subj := subjectFromAlert(alert, event.HubName)
+		w.Logger.Debug("subject for alert", zap.String("alert_name", alert.Annotations[AlertName]), zap.String("subject", subj))
+
+		eventPerSubject := eventing.EventPerSubject{
+			Event:   event,
+			Subject: subj,
+		}
+
+		eventsPerSubject = append(eventsPerSubject, eventPerSubject)
 	}
 
-	return mdaiEvents, skipped, nil
+	return eventsPerSubject, skipped, nil
+}
+
+// subjectFromAlert creates a subject from an alert. Prefix has to be added later at eventing package.
+func subjectFromAlert(alert template.Alert, hubName string) string {
+	return strings.Join([]string{
+		hubName,
+		"alert",
+		nats.SafeToken(alert.Fingerprint),
+	}, ".")
 }
 
 func (w *PromAlertWrapper) toMdaiEvent(alert template.Alert) (eventing.MdaiEvent, error) {
@@ -94,7 +112,7 @@ func (w *PromAlertWrapper) toMdaiEvent(alert template.Alert) (eventing.MdaiEvent
 	correlationID := fmt.Sprintf("%d-%s", time.Now().UnixMilli(), correlationIDCore)
 
 	event := eventing.MdaiEvent{
-		Name:          annotations[AlertName] + "." + alert.Status,
+		Name:          annotations[AlertName],
 		Source:        Prometheus,
 		SourceID:      alert.Fingerprint,
 		Timestamp:     changeTime(alert),

@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/decisiveai/mdai-data-core/audit"
 	datacore "github.com/decisiveai/mdai-data-core/variables"
 	"github.com/decisiveai/mdai-event-hub/pkg/eventing"
+	enats "github.com/decisiveai/mdai-event-hub/pkg/eventing/nats"
 	"github.com/decisiveai/mdai-gateway/internal/adapter"
 	"github.com/decisiveai/mdai-gateway/internal/httputil"
 	"github.com/decisiveai/mdai-gateway/internal/manualvariables"
@@ -169,15 +171,18 @@ func handleSetDeleteVariables(ctx context.Context, deps HandlerDeps) http.Handle
 			return
 		}
 
+		subject := subjectFromVarsEvent(*event, varName)
+
 		deps.Logger.Info("Publishing MdaiEvent",
 			zap.String("id", event.ID),
 			zap.String("name", event.Name),
-			zap.String("source", event.Source))
+			zap.String("source", event.Source),
+			zap.String("subject", subject),
+		)
 
-		if _, err := nats.PublishEvents(ctx, deps.Logger, deps.EventPublisher, []eventing.MdaiEvent{*event}, deps.AuditAdapter); err != nil {
+		if _, err := nats.PublishEvents(ctx, deps.Logger, deps.EventPublisher, []eventing.EventPerSubject{{*event, subject}}, deps.AuditAdapter); err != nil {
 			deps.Logger.Error("Failed to publish MdaiEvent", zap.Error(err))
 			http.Error(w, fmt.Sprintf("Failed to publish event: %v", err), http.StatusInternalServerError)
-
 			return
 		}
 
@@ -262,30 +267,30 @@ func handlePromAlertsPost(deps HandlerDeps) http.HandlerFunc {
 
 		deps.Logger.Debug("Received /alerts/alertmanager POST", zap.Any("msg", msg))
 
-		handlePrometheusAlert(r.Context(), deps.Logger, w, *msg.Data, deps.EventPublisher, deps.AuditAdapter, deps.Deduper)
+		handlePrometheusAlerts(r.Context(), deps.Logger, w, *msg.Data, deps.EventPublisher, deps.AuditAdapter, deps.Deduper)
 	}
 }
 
 // Handle Prometheus Alertmanager alerts.
-func handlePrometheusAlert(ctx context.Context, logger *zap.Logger, w http.ResponseWriter, alertData template.Data, publisher eventing.Publisher, auditAdapter *audit.AuditAdapter, deduper *adapter.Deduper) {
+func handlePrometheusAlerts(ctx context.Context, logger *zap.Logger, w http.ResponseWriter, alertData template.Data, publisher eventing.Publisher, auditAdapter *audit.AuditAdapter, deduper *adapter.Deduper) {
 	logger.Debug("Processing Prometheus alert",
 		zap.String("receiver", alertData.Receiver),
 		zap.String("status", alertData.Status),
 		zap.Int("alertCount", len(alertData.Alerts)))
 
 	wrappedAlertData := adapter.NewPromAlertWrapper(alertData, logger, deduper)
-	events, skipped, err := wrappedAlertData.ToMdaiEvents()
+	eventPerSubjects, skipped, err := wrappedAlertData.ToMdaiEvents()
 	if err != nil {
 		logger.Error("Failed to adapt Prometheus Alert to MDAI Events", zap.Error(err))
 		http.Error(w, "Failed to adapt Prometheus Alert to MDAI Events", http.StatusInternalServerError)
 		return
 	}
 
-	successCount, err := nats.PublishEvents(ctx, logger, publisher, events, auditAdapter)
+	successCount, err := nats.PublishEvents(ctx, logger, publisher, eventPerSubjects, auditAdapter)
 	switch {
 	case err != nil:
 		w.WriteHeader(http.StatusAccepted)
-		_, _ = fmt.Fprintf(w, "Published %d/%d events; some failed", successCount, len(events))
+		_, _ = fmt.Fprintf(w, "Published %d/%d eventPerSubjects; some failed", successCount, len(eventPerSubjects))
 		return
 	default:
 		response := httputil.PrometheusAlertResponse{
@@ -301,6 +306,13 @@ func handlePrometheusAlert(ctx context.Context, logger *zap.Logger, w http.Respo
 
 // Handle direct MdaiEvent submissions.
 func handleMdaiEvent(ctx context.Context, logger *zap.Logger, w http.ResponseWriter, event eventing.MdaiEvent, publisher eventing.Publisher, auditAdapter *audit.AuditAdapter) {
+	if event.Source == adapter.Prometheus || event.Source == eventing.ManualVariablesEventSource {
+		err := fmt.Errorf("MDAI event cannot use reserved sources like %q", event.Source)
+		logger.Error("Failed to publish MdaiEvent", zap.Error(err))
+		http.Error(w, fmt.Sprintf("Failed to publish event: %v", err), http.StatusInternalServerError)
+		return
+	}
+
 	event.ApplyDefaults()
 	if err := event.Validate(); err != nil {
 		logger.Error("Failed to validate MdaiEvent", zap.Error(err))
@@ -313,11 +325,37 @@ func handleMdaiEvent(ctx context.Context, logger *zap.Logger, w http.ResponseWri
 		zap.String("name", event.Name),
 		zap.String("source", event.Source))
 
-	if _, err := nats.PublishEvents(ctx, logger, publisher, []eventing.MdaiEvent{event}, auditAdapter); err != nil {
+	eventsPerSubject := []eventing.EventPerSubject{
+		{
+			Subject: subjectFromMdaiEvent(event),
+			Event:   event,
+		},
+	}
+
+	if _, err := nats.PublishEvents(ctx, logger, publisher, eventsPerSubject, auditAdapter); err != nil {
 		logger.Error("Failed to publish MdaiEvent", zap.Error(err))
 		http.Error(w, fmt.Sprintf("Failed to publish event: %v", err), http.StatusInternalServerError)
 		return
 	}
 
 	httputil.WriteJSONResponse(w, logger, http.StatusCreated, event)
+}
+
+// subjectFromMdaiEvent creates a subject from a mdai event. Prefix has to be added later at eventing package.
+func subjectFromMdaiEvent(event eventing.MdaiEvent) string {
+	return strings.Join([]string{
+		"mdai",
+		enats.SafeToken(event.Source),
+		enats.SafeToken(event.HubName),
+	}, ".")
+}
+
+// subjectFromAlert creates a subject from a mdai event and variable key. Prefix has to be added later at eventing package.
+func subjectFromVarsEvent(event eventing.MdaiEvent, varkey string) string {
+	return strings.Join([]string{
+		"vars",
+		enats.SafeToken(event.Source),
+		enats.SafeToken(event.HubName),
+		enats.SafeToken(varkey),
+	}, ".")
 }

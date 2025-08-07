@@ -28,6 +28,7 @@ require (
 )
 
 replace github.com/decisiveai/mdai-data-core => ../mdai-data-core
+replace github.com/decisiveai/mdai-event-hub => ../mdai-event-hub
 
 require (
 	github.com/armon/go-metrics v0.3.10 // indirect

@@ -3,5 +3,5 @@ package adapter
 import "github.com/decisiveai/mdai-event-hub/pkg/eventing"
 
 type EventAdapter interface {
-	ToMdaiEvents() ([]eventing.MdaiEvent, int, error)
+	ToMdaiEvents() ([]eventing.EventPerSubject, int, error)
 }

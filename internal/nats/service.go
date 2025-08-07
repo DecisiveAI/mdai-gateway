@@ -37,14 +37,15 @@ func NewMdaiEvent(hubName string, varName string, varType string, action string,
 	return mdaiEvent, nil
 }
 
-func PublishEvents(ctx context.Context, logger *zap.Logger, publisher eventing.Publisher, events []eventing.MdaiEvent, auditAdapter *audit.AuditAdapter) (int, error) {
+func PublishEvents(ctx context.Context, logger *zap.Logger, publisher eventing.Publisher, eventsPerSubjects []eventing.EventPerSubject, auditAdapter *audit.AuditAdapter) (int, error) {
 	var (
 		successCount int
 		errs         []error
 	)
 
-	for _, event := range events {
-		err := publisher.Publish(ctx, event)
+	for _, eventPerSubject := range eventsPerSubjects {
+		event := eventPerSubject.Event
+		err := publisher.Publish(ctx, event, eventPerSubject.Subject)
 
 		if auditErr := auditutils.RecordAuditEventFromMdaiEvent(ctx, logger, auditAdapter, event, err == nil); auditErr != nil {
 			logger.Error("Failed to write audit event for automation step",

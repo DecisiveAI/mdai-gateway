@@ -80,25 +80,25 @@ func TestPrometheusAlertToMdaiEvents(t *testing.T) {
 			// Order check (when provided)
 			if tt.expectOrder != nil {
 				for i, expectedID := range tt.expectOrder {
-					require.Equal(t, expectedID, events[i].SourceID)
+					require.Equal(t, expectedID, events[i].Event.SourceID)
 				}
 				return
 			}
 
 			// Common field checks for single-alert cases
 			e := events[0]
-			require.Equal(t, "DiskUsageHigh.firing", e.Name)
-			require.Equal(t, "prod-cluster", e.HubName)
-			require.Equal(t, Prometheus, e.Source)
-			require.NotEmpty(t, e.ID)
-			require.NotEmpty(t, e.CorrelationID)
+			require.Equal(t, "DiskUsageHigh.firing", e.Event.Name)
+			require.Equal(t, "prod-cluster", e.Event.HubName)
+			require.Equal(t, Prometheus, e.Event.Source)
+			require.NotEmpty(t, e.Event.ID)
+			require.NotEmpty(t, e.Event.CorrelationID)
 
 			// SourceID expectations
 			if tt.expectIDExact != "" {
-				require.Equal(t, tt.expectIDExact, e.SourceID)
+				require.Equal(t, tt.expectIDExact, e.Event.SourceID)
 			} else {
 				// no fingerprint => we expect a non-empty fallback SourceID
-				require.NotEmpty(t, e.SourceID)
+				require.NotEmpty(t, e.Event.SourceID)
 			}
 
 			// Payload now uses a nested structure
@@ -108,7 +108,7 @@ func TestPrometheusAlertToMdaiEvents(t *testing.T) {
 				Status      string            `json:"status"`
 				Value       string            `json:"value"`
 			}
-			err = json.Unmarshal([]byte(e.Payload), &payload)
+			err = json.Unmarshal([]byte(e.Event.Payload), &payload)
 			require.NoError(t, err)
 			require.Equal(t, "92%", payload.Value)
 			require.Equal(t, "firing", payload.Status)
@@ -118,12 +118,12 @@ func TestPrometheusAlertToMdaiEvents(t *testing.T) {
 			for idx, alert := range tt.alerts {
 				if alert.Fingerprint == "" {
 					// no exact match possible; ensure at least one event has non-empty SourceID
-					require.NotEmpty(t, events[idx].SourceID, "event %d should carry a generated SourceID", idx)
+					require.NotEmpty(t, events[idx].Event.SourceID, "event %d should carry a generated SourceID", idx)
 					continue
 				}
 				found := false
 				for _, event := range events {
-					found = found || (alert.Fingerprint == event.SourceID)
+					found = found || (alert.Fingerprint == event.Event.SourceID)
 				}
 				require.True(t, found, "alert fingerprint for event index %d was not found in any events", idx)
 			}
