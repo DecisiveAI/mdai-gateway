@@ -20,7 +20,6 @@ const (
 	hubName      = "hub_name"
 	currentValue = "current_value"
 	AlertName    = "alert_name"
-	Prometheus   = "prometheus"
 )
 
 type PromAlertWrapper struct {
@@ -79,8 +78,8 @@ func (w *PromAlertWrapper) ToMdaiEvents() ([]eventing.EventPerSubject, int, erro
 // subjectFromAlert creates a subject from an alert. Prefix has to be added later at eventing package.
 func subjectFromAlert(alert template.Alert, hubName string) string {
 	return strings.Join([]string{
-		hubName,
 		"alert",
+		hubName,
 		nats.SafeToken(alert.Fingerprint),
 	}, ".")
 }
@@ -112,8 +111,8 @@ func (w *PromAlertWrapper) toMdaiEvent(alert template.Alert) (eventing.MdaiEvent
 	correlationID := fmt.Sprintf("%d-%s", time.Now().UnixMilli(), correlationIDCore)
 
 	event := eventing.MdaiEvent{
-		Name:          annotations[AlertName],
-		Source:        Prometheus,
+		Name:          alert.Annotations[AlertName] + "." + alert.Status,
+		Source:        eventing.PrometheusAlertsEventSource,
 		SourceID:      alert.Fingerprint,
 		Timestamp:     changeTime(alert),
 		HubName:       annotations[hubName],

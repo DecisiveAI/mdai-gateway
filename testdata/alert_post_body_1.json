@@ -12,6 +12,7 @@
         "service_name": "service-a"
       },
       "annotations": {
+        "alert_name": "logBytesOutTooHighBySvc",
         "hub_name": "mdaihub-sample",
         "description": "bytes out above threshold",
         "current_value": "1.68e7"
@@ -31,6 +32,7 @@
         "service_name": "service-a"
       },
       "annotations": {
+        "alert_name": "logBytesOutTooHighBySvc",
         "hub_name": "mdaihub-sample",
         "description": "returned below threshold"
       },
@@ -49,6 +51,7 @@
         "service_name": "service-a"
       },
       "annotations": {
+        "alert_name": "logBytesOutTooHighBySvc",
         "hub_name": "mdaihub-sample",
         "description": "bytes out above threshold (another instance)"
       },

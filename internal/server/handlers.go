@@ -208,37 +208,6 @@ func handleAuditEventsGet(ctx context.Context, deps HandlerDeps) http.HandlerFun
 	}
 }
 
-func handleMdaiEventsPost(deps HandlerDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		const maxBody = 10 << 20 // 10 MiB, TODO make this configurable
-		r.Body = http.MaxBytesReader(w, r.Body, maxBody)
-		defer r.Body.Close() //nolint:errcheck
-
-		var event eventing.MdaiEvent
-		decoder := json.NewDecoder(r.Body)
-		decoder.DisallowUnknownFields()
-
-		if err := decoder.Decode(&event); err != nil {
-			var mbe *http.MaxBytesError
-			if errors.As(err, &mbe) {
-				http.Error(w, "request body too large (max 10MiB)", http.StatusRequestEntityTooLarge)
-				return
-			}
-			http.Error(w, "invalid JSON: "+err.Error(), http.StatusBadRequest)
-			return
-		}
-		// Ensure no trailing data
-		if err := decoder.Decode(&struct{}{}); err != io.EOF {
-			http.Error(w, "request must contain a single JSON object", http.StatusBadRequest)
-			return
-		}
-
-		deps.Logger.Debug("Received /events/mdai POST", zap.Inline(&event))
-
-		handleMdaiEvent(r.Context(), deps.Logger, w, event, deps.EventPublisher, deps.AuditAdapter)
-	}
-}
-
 func handlePromAlertsPost(deps HandlerDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		const maxBody = 10 << 20 // 10 MiB, TODO make this configurable
@@ -304,57 +273,10 @@ func handlePrometheusAlerts(ctx context.Context, logger *zap.Logger, w http.Resp
 	}
 }
 
-// Handle direct MdaiEvent submissions.
-func handleMdaiEvent(ctx context.Context, logger *zap.Logger, w http.ResponseWriter, event eventing.MdaiEvent, publisher eventing.Publisher, auditAdapter *audit.AuditAdapter) {
-	if event.Source == adapter.Prometheus || event.Source == eventing.ManualVariablesEventSource {
-		err := fmt.Errorf("MDAI event cannot use reserved sources like %q", event.Source)
-		logger.Error("Failed to publish MdaiEvent", zap.Error(err))
-		http.Error(w, fmt.Sprintf("Failed to publish event: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	event.ApplyDefaults()
-	if err := event.Validate(); err != nil {
-		logger.Error("Failed to validate MdaiEvent", zap.Error(err))
-		http.Error(w, stringutil.UpperFirst(err.Error()), http.StatusBadRequest)
-		return
-	}
-
-	logger.Debug("Processing MdaiEvent",
-		zap.String("id", event.ID),
-		zap.String("name", event.Name),
-		zap.String("source", event.Source))
-
-	eventsPerSubject := []eventing.EventPerSubject{
-		{
-			Subject: subjectFromMdaiEvent(event),
-			Event:   event,
-		},
-	}
-
-	if _, err := nats.PublishEvents(ctx, logger, publisher, eventsPerSubject, auditAdapter); err != nil {
-		logger.Error("Failed to publish MdaiEvent", zap.Error(err))
-		http.Error(w, fmt.Sprintf("Failed to publish event: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	httputil.WriteJSONResponse(w, logger, http.StatusCreated, event)
-}
-
-// subjectFromMdaiEvent creates a subject from a mdai event. Prefix has to be added later at eventing package.
-func subjectFromMdaiEvent(event eventing.MdaiEvent) string {
-	return strings.Join([]string{
-		"mdai",
-		enats.SafeToken(event.Source),
-		enats.SafeToken(event.HubName),
-	}, ".")
-}
-
 // subjectFromAlert creates a subject from a mdai event and variable key. Prefix has to be added later at eventing package.
 func subjectFromVarsEvent(event eventing.MdaiEvent, varkey string) string {
 	return strings.Join([]string{
-		"vars",
-		enats.SafeToken(event.Source),
+		"var",
 		enats.SafeToken(event.HubName),
 		enats.SafeToken(varkey),
 	}, ".")

@@ -19,7 +19,7 @@
         "hub_name": "mdaihub-sample",
         "relevant_labels": "[\"service_name\"]"
       },
-      "startsAt": "2018-08-03T09:59:29.739266878+02:00",
+      "startsAt": "2018-08-03T09:59:30.739266878+02:00",
       "endsAt": "0001-01-01T00:00:00Z",
       "fingerprint":"0a12f1ac0c0c75fe",
       "generatorURL": "http://example.com:9090/graph?g0.expr=go_memstats_alloc_bytes+%3E+0\u0026g0.tab=1"

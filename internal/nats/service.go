@@ -27,7 +27,7 @@ func NewMdaiEvent(hubName string, varName string, varType string, action string,
 	}
 
 	mdaiEvent := &eventing.MdaiEvent{
-		Name:    strings.Join([]string{"manual_variable", action, hubName, varName}, "__"),
+		Name:    strings.Join([]string{"var", action}, "."),
 		HubName: hubName,
 		Source:  eventing.ManualVariablesEventSource,
 		Payload: string(payloadBytes),
