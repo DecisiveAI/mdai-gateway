@@ -19,7 +19,8 @@ curl -X POST -H "Content-Type: application/json" -d@testdata/alert_test.json htt
 
 # to simulate a var updat event via curl
 ```sh
-curl -X POST -H "Content-Type: application/json" -d@testdata/var-test.json http://localhost:8081/events/mdai
+curl -X POST -H "Content-Type: application/json" -d@testdata/var-test.json \
+  http://localhost:8081/variables/hub/mdaihub-sample/var/manual_filter
 ```
 
 # API
