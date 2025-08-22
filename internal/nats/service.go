@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"strconv"
-	"strings"
 
 	"github.com/decisiveai/mdai-data-core/audit"
 	"github.com/decisiveai/mdai-event-hub/pkg/eventing"
@@ -27,7 +26,7 @@ func NewMdaiEvent(hubName string, varName string, varType string, action string,
 	}
 
 	mdaiEvent := &eventing.MdaiEvent{
-		Name:    strings.Join([]string{"var", action}, "."),
+		Name:    "var" + "." + action,
 		HubName: hubName,
 		Source:  eventing.ManualVariablesEventSource,
 		Payload: string(payloadBytes),

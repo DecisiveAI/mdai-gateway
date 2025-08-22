@@ -425,7 +425,7 @@ func TestHandleDeleteVariables(t *testing.T) {
 			require.NoError(t, err)
 
 			assert.Equal(t, "manual_variables_api", result.Source)
-			assert.Equal(t, "var.remove", result.Type)
+			assert.Equal(t, "var.remove", result.Name)
 			assert.Equal(t, "mdaihub-sample", result.HubName)
 			assert.JSONEq(t, fmt.Sprintf(`{"variableRef":%q,"dataType":%q,"operation":"remove","data":%v}`, "data_"+tt.name, tt.name, stringifyData(t, tt.body)), result.Payload)
 			assert.NotEmpty(t, result.ID)
@@ -490,7 +490,7 @@ func TestHandleSetVariables(t *testing.T) {
 			require.NoError(t, err)
 
 			assert.Equal(t, "manual_variables_api", result.Source)
-			assert.Equal(t, "var.add", result.Type)
+			assert.Equal(t, "var.add", result.Name)
 			assert.Equal(t, "mdaihub-sample", result.HubName)
 			assert.JSONEq(t, fmt.Sprintf(`{"variableRef":%q,"dataType":%q,"operation":"add","data":%v}`, "data_"+tt.name, tt.name, stringifyData(t, tt.body)), result.Payload)
 			assert.NotEmpty(t, result.ID)

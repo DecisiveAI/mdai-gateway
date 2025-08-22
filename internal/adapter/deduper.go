@@ -12,7 +12,7 @@ type Deduper struct {
 
 func NewDeduper() *Deduper { return &Deduper{last: make(map[string]time.Time)} }
 
-// UpdateIfNewer checks the stored time for key and, if changeTime is strictly newer
+// UpdateIfNewer checks the stored time for key and, if changeTime is strictly newer.
 func (d *Deduper) UpdateIfNewer(fingerprint string, changeTime time.Time) (bool, time.Time) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -23,14 +23,14 @@ func (d *Deduper) UpdateIfNewer(fingerprint string, changeTime time.Time) (bool,
 	return true, changeTime
 }
 
-func (d *Deduper) isNewer(fingerprint string, changeTime time.Time) bool {
-	updated, _ := d.UpdateIfNewer(fingerprint, changeTime)
-	return updated
-}
-
 func (d *Deduper) PeekLast(key string) (time.Time, bool) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	t, ok := d.last[key]
 	return t, ok
+}
+
+func (d *Deduper) isNewer(fingerprint string, changeTime time.Time) bool {
+	updated, _ := d.UpdateIfNewer(fingerprint, changeTime)
+	return updated
 }

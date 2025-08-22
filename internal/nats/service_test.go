@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"slices"
-	"strings"
 	"testing"
 	"time"
 
@@ -63,8 +62,8 @@ func TestNewMdaiEvent(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, event)
 
-			expectedName := strings.Join([]string{"var", tt.action}, ".")
-			assert.Equal(t, expectedName, event.Type)
+			expectedName := "var" + "." + tt.action
+			assert.Equal(t, expectedName, event.Name)
 			assert.Equal(t, tt.hubName, event.HubName)
 			assert.Equal(t, eventing.ManualVariablesEventSource, event.Source)
 
@@ -106,7 +105,7 @@ func TestPublishEvents(t *testing.T) {
 	auditAdapter := audit.NewAuditAdapter(zap.NewNop(), valkeyClient, 30*24*time.Hour)
 
 	event := eventing.MdaiEvent{
-		Type:    "var.set",
+		Name:    "var.set",
 		HubName: "hub",
 	}
 
