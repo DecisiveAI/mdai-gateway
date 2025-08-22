@@ -88,7 +88,7 @@ func TestPrometheusAlertToMdaiEvents(t *testing.T) {
 
 			// Common field checks for single-alert cases
 			e := events[0]
-			require.Equal(t, "alert_firing", e.Event.Name)
+			require.Equal(t, "DiskUsageHigh.firing", e.Event.Name)
 			require.Equal(t, "prod-cluster", e.Event.HubName)
 			require.Equal(t, eventing.PrometheusAlertsEventSource, e.Event.Source)
 			require.NotEmpty(t, e.Event.ID)
