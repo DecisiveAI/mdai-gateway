@@ -5,8 +5,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/decisiveai/mdai-event-hub/pkg/eventing"
 	"github.com/prometheus/alertmanager/template"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 func TestPrometheusAlertToMdaiEvents(t *testing.T) {
@@ -34,21 +36,6 @@ func TestPrometheusAlertToMdaiEvents(t *testing.T) {
 				},
 			},
 			expectIDExact: "abc123",
-		},
-		{
-			name: "without fingerprint",
-			alerts: []template.Alert{
-				{
-					Annotations: template.KV{
-						"alert_name":    "DiskUsageHigh",
-						"hub_name":      "prod-cluster",
-						"current_value": "92%",
-					},
-					Labels:   template.KV{"severity": "critical"},
-					Status:   "firing",
-					StartsAt: now.Add(-1 * time.Minute),
-				},
-			},
 		},
 		{
 			name: "sorts by StartsAt",
@@ -80,45 +67,93 @@ func TestPrometheusAlertToMdaiEvents(t *testing.T) {
 		},
 	}
 
+	deduper := NewDeduper() // shared across subtests is fine since fingerprints differ
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			input := template.Data{Alerts: tt.alerts}
-			wrappedInput := NewPromAlertWrapper(input)
-			events, err := wrappedInput.ToMdaiEvents()
+			wrappedInput := NewPromAlertWrapper(input, zap.NewNop(), deduper)
+
+			events, skipped, err := wrappedInput.ToMdaiEvents()
 			require.NoError(t, err)
+			require.Equal(t, 0, skipped)
 			require.Len(t, events, len(tt.alerts))
 
+			// Order check (when provided)
 			if tt.expectOrder != nil {
 				for i, expectedID := range tt.expectOrder {
-					require.Equal(t, expectedID, events[i].SourceId)
+					require.Equal(t, expectedID, events[i].Event.SourceID)
 				}
-
 				return
 			}
 
+			// Common field checks for single-alert cases
 			e := events[0]
-			require.Equal(t, "DiskUsageHigh.firing", e.Name)
-			require.Equal(t, "prod-cluster", e.HubName)
-			require.Equal(t, Prometheus, e.Source)
+			require.Equal(t, "alert_firing", e.Event.Name)
+			require.Equal(t, "prod-cluster", e.Event.HubName)
+			require.Equal(t, eventing.PrometheusAlertsEventSource, e.Event.Source)
+			require.NotEmpty(t, e.Event.ID)
+			require.NotEmpty(t, e.Event.CorrelationID)
 
-			require.NotEmpty(t, e.Id)
-			require.NotEmpty(t, e.CorrelationId)
+			// SourceID expectations
+			if tt.expectIDExact != "" {
+				require.Equal(t, tt.expectIDExact, e.Event.SourceID)
+			} else {
+				// no fingerprint => we expect a non-empty fallback SourceID
+				require.NotEmpty(t, e.Event.SourceID)
+			}
 
+			// Payload now uses a nested structure
+			var payload struct {
+				Labels      map[string]string `json:"labels"`
+				Annotations map[string]string `json:"annotations"`
+				Status      string            `json:"status"`
+				Value       string            `json:"value"`
+			}
+			err = json.Unmarshal([]byte(e.Event.Payload), &payload)
+			require.NoError(t, err)
+			require.Equal(t, "92%", payload.Value)
+			require.Equal(t, "firing", payload.Status)
+			require.Equal(t, "critical", payload.Labels["severity"])
+
+			// Verify each alert maps to some event (fingerprint-aware)
 			for idx, alert := range tt.alerts {
+				if alert.Fingerprint == "" {
+					// no exact match possible; ensure at least one event has non-empty SourceID
+					require.NotEmpty(t, events[idx].Event.SourceID, "event %d should carry a generated SourceID", idx)
+					continue
+				}
 				found := false
 				for _, event := range events {
-					found = alert.Fingerprint == event.SourceId
+					found = found || (alert.Fingerprint == event.Event.SourceID)
 				}
 				require.True(t, found, "alert fingerprint for event index %d was not found in any events", idx)
 			}
-
-			var payload map[string]string
-
-			err = json.Unmarshal([]byte(e.Payload), &payload)
-			require.NoError(t, err)
-			require.Equal(t, "92%", payload["value"])
-			require.Equal(t, "firing", payload["status"])
-			require.Equal(t, "critical", payload["severity"])
 		})
 	}
+}
+
+// Verifies that an alert without a fingerprint is rejected with ErrMissingFingerprint.
+func TestPrometheusAlertWithoutFingerprint(t *testing.T) {
+	now := time.Now()
+
+	alert := template.Alert{
+		Annotations: template.KV{
+			"alert_name":    "DiskUsageHigh",
+			"hub_name":      "prod-cluster",
+			"current_value": "92%",
+		},
+		Labels:   template.KV{"severity": "critical"},
+		Status:   "firing",
+		StartsAt: now.Add(-1 * time.Minute),
+		// Fingerprint intentionally omitted
+	}
+
+	input := template.Data{Alerts: []template.Alert{alert}}
+	deduper := NewDeduper() // shared/global in real server wiring
+	wrapped := NewPromAlertWrapper(input, zap.NewNop(), deduper)
+
+	events, skipped, err := wrapped.ToMdaiEvents()
+	require.ErrorIs(t, err, ErrMissingFingerprint)
+	require.Empty(t, events)
+	require.Equal(t, 0, skipped)
 }

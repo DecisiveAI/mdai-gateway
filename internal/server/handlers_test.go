@@ -14,7 +14,7 @@ import (
 
 	"github.com/decisiveai/mdai-data-core/audit"
 	datacorekube "github.com/decisiveai/mdai-data-core/kube"
-	"github.com/decisiveai/mdai-event-hub/eventing"
+	"github.com/decisiveai/mdai-event-hub/pkg/eventing"
 	"github.com/decisiveai/mdai-gateway/internal/manualvariables"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -26,7 +26,12 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-const publisherClientName = "publisher-mdai-gateway"
+const (
+	publisherClientName = "publisher-mdai-gateway"
+	alert3              = "../../testdata/alert_post_body_3.json"
+	alert2              = "../../testdata/alert_post_body_2.json"
+	alert1              = "../../testdata/alert_post_body_1.json"
+)
 
 func TestGetConfiguredManualVariables(t *testing.T) {
 	ctx := t.Context()
@@ -420,10 +425,10 @@ func TestHandleDeleteVariables(t *testing.T) {
 			require.NoError(t, err)
 
 			assert.Equal(t, "manual_variables_api", result.Source)
-			assert.Equal(t, "manual_variable__remove__mdaihub-sample__data_"+tt.name, result.Name)
+			assert.Equal(t, "var.remove", result.Type)
 			assert.Equal(t, "mdaihub-sample", result.HubName)
 			assert.JSONEq(t, fmt.Sprintf(`{"variableRef":%q,"dataType":%q,"operation":"remove","data":%v}`, "data_"+tt.name, tt.name, stringifyData(t, tt.body)), result.Payload)
-			assert.NotEmpty(t, result.Id)
+			assert.NotEmpty(t, result.ID)
 			assert.NotZero(t, result.Timestamp)
 			assert.WithinDuration(t, time.Now(), result.Timestamp, time.Minute)
 		})
@@ -485,10 +490,10 @@ func TestHandleSetVariables(t *testing.T) {
 			require.NoError(t, err)
 
 			assert.Equal(t, "manual_variables_api", result.Source)
-			assert.Equal(t, "manual_variable__add__mdaihub-sample__data_"+tt.name, result.Name)
+			assert.Equal(t, "var.add", result.Type)
 			assert.Equal(t, "mdaihub-sample", result.HubName)
 			assert.JSONEq(t, fmt.Sprintf(`{"variableRef":%q,"dataType":%q,"operation":"add","data":%v}`, "data_"+tt.name, tt.name, stringifyData(t, tt.body)), result.Payload)
-			assert.NotEmpty(t, result.Id)
+			assert.NotEmpty(t, result.ID)
 			assert.NotZero(t, result.Timestamp)
 			assert.WithinDuration(t, time.Now(), result.Timestamp, time.Minute)
 		})
@@ -670,24 +675,25 @@ func TestStringifyData(t *testing.T) {
 	}
 }
 
+func readPayloadFromFile(t *testing.T, fileName string) []byte {
+	t.Helper()
+	body, err := os.ReadFile(fileName) //nolint:gosec
+	require.NoError(t, err)
+	return body
+}
+
 func TestUpdateEventsHandler(t *testing.T) {
 	const (
-		post1Response = `{"message":"Processed Prometheus alerts","successful":6,"total":6}` + "\n"
-		post2Response = `{"message":"Processed Prometheus alerts","successful":3,"total":3}` + "\n"
-		post3Response = `{"message":"Processed Prometheus alerts","successful":2,"total":2}` + "\n"
+		post1Response = `{"message":"Processed Prometheus alerts", "skipped":0, "successful":3, "total":3}` + "\n"
+		post2Response = `{"message":"Processed Prometheus alerts", "skipped":0, "successful":3, "total":3}` + "\n"
+		post3Response = `{"message":"Processed Prometheus alerts", "skipped":0, "successful":2, "total":2}` + "\n"
+		post4Response = `{"message":"Processed Prometheus alerts", "skipped":2, "successful":0, "total":2}` + "\n"
 	)
 
-	alertPostBody1, err := os.ReadFile("../../testdata/alert_post_body_1.json")
-	require.NoError(t, err)
-	alertPostBody2, err := os.ReadFile("../../testdata/alert_post_body_2.json")
-	require.NoError(t, err)
-	alertPostBody3, err := os.ReadFile("../../testdata/alert_post_body_3.json")
-	require.NoError(t, err)
-
-	ctx := t.Context()
+	alertPostBody1 := readPayloadFromFile(t, alert1)
 	clientset := newFakeClientset(t)
 	deps := setupMocks(t, clientset)
-	mux := NewRouter(ctx, deps)
+	mux := NewRouter(t.Context(), deps)
 	req := httptest.NewRequest(http.MethodPost, "/alerts/alertmanager", bytes.NewBuffer(alertPostBody1))
 	req.Header.Set("Content-Type", "application/json")
 
@@ -695,7 +701,7 @@ func TestUpdateEventsHandler(t *testing.T) {
 	if !ok {
 		t.Fatal("ValkeyClient is not a *valkeymock.Client")
 	}
-	mockClient.EXPECT().Do(gomock.Any(), XaddMatcher{}).Return(valkeymock.Result(valkeymock.ValkeyString(""))).Times(12)
+	mockClient.EXPECT().Do(gomock.Any(), XaddMatcher{}).Return(valkeymock.Result(valkeymock.ValkeyString(""))).Times(8)
 
 	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
@@ -704,7 +710,7 @@ func TestUpdateEventsHandler(t *testing.T) {
 	assert.JSONEq(t, post1Response, rr.Body.String())
 
 	// one more time with different payload
-	mux = NewRouter(ctx, deps)
+	alertPostBody2 := readPayloadFromFile(t, alert2)
 	req = httptest.NewRequest(http.MethodPost, "/alerts/alertmanager", bytes.NewBuffer(alertPostBody2))
 	req.Header.Set("Content-Type", "application/json")
 
@@ -715,7 +721,7 @@ func TestUpdateEventsHandler(t *testing.T) {
 	assert.JSONEq(t, post2Response, rr.Body.String())
 
 	// one more time to emulate a scenario when alert was re-created or renamed
-	mux = NewRouter(ctx, deps)
+	alertPostBody3 := readPayloadFromFile(t, alert3)
 	req = httptest.NewRequest(http.MethodPost, "/alerts/alertmanager", bytes.NewBuffer(alertPostBody3))
 	req.Header.Set("Content-Type", "application/json")
 
@@ -725,19 +731,34 @@ func TestUpdateEventsHandler(t *testing.T) {
 	assert.Equal(t, http.StatusCreated, rr.Code)
 	assert.JSONEq(t, post3Response, rr.Body.String())
 
-	// Prometheus JSON fail
-	mux = NewRouter(ctx, deps)
-	req = httptest.NewRequest(http.MethodPost, "/alerts/alertmanager", bytes.NewBufferString(`{"receiver":"foo","alerts": true}`))
+	// one more with skipped alerts
+	req = httptest.NewRequest(http.MethodPost, "/alerts/alertmanager", bytes.NewBuffer(alertPostBody3))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr = httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusCreated, rr.Code)
+	assert.JSONEq(t, post4Response, rr.Body.String())
+}
+
+func TestAlerts_Failuers(t *testing.T) {
+	clientset := newFakeClientset(t)
+	deps := setupMocks(t, clientset)
+	mux := NewRouter(t.Context(), deps)
+
+	// Prometheus JSON fail
+	req := httptest.NewRequest(http.MethodPost, "/alerts/alertmanager", bytes.NewBufferString(`{"receiver":"foo","alerts": true}`))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
 
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
 	assert.Equal(t, "invalid Alertmanager payload\n", rr.Body.String())
 
 	// io.ReadAll failure
-	mux = NewRouter(ctx, deps)
+	mux = NewRouter(t.Context(), deps)
 	req = httptest.NewRequest(http.MethodPost, "/alerts/alertmanager", &errReader{})
 	req.Header.Set("Content-Type", "application/json")
 
@@ -748,7 +769,7 @@ func TestUpdateEventsHandler(t *testing.T) {
 	assert.Equal(t, "invalid Alertmanager payload\n", rr.Body.String())
 
 	// bad json
-	mux = NewRouter(ctx, deps)
+	mux = NewRouter(t.Context(), deps)
 	req = httptest.NewRequest(http.MethodPost, "/alerts/alertmanager", bytes.NewBufferString("foo"))
 	req.Header.Set("Content-Type", "application/json")
 
@@ -757,101 +778,31 @@ func TestUpdateEventsHandler(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
 	assert.Equal(t, "invalid Alertmanager payload\n", rr.Body.String())
+}
 
-	// Method not allowed (DELETE)
+func TestAlerts_NotAllowed(t *testing.T) {
+	clientset := newFakeClientset(t)
+	deps := setupMocks(t, clientset)
+
 	for _, method := range []string{http.MethodConnect, http.MethodOptions, http.MethodTrace, http.MethodPut, http.MethodPatch, http.MethodDelete} {
-		mux = NewRouter(ctx, deps)
-		req = httptest.NewRequest(method, "/alerts/alertmanager", http.NoBody)
+		mux := NewRouter(t.Context(), deps)
+		req := httptest.NewRequest(method, "/alerts/alertmanager", http.NoBody)
 		req.Header.Set("Content-Type", "application/json")
 
-		rr = httptest.NewRecorder()
+		rr := httptest.NewRecorder()
 		mux.ServeHTTP(rr, req)
 
 		assert.Equal(t, "POST", rr.Header().Get("Allow"))
 		assert.Equal(t, http.StatusMethodNotAllowed, rr.Code)
 		assert.Equal(t, "Method Not Allowed\n", rr.Body.String())
 	}
+}
 
-	// MDAI Event
-	eventPostBody1, err := os.ReadFile("../../testdata/event-part1.json")
-	require.NoError(t, err)
-	mux = NewRouter(ctx, deps)
-	req = httptest.NewRequest(http.MethodPost, "/events/mdai", bytes.NewBuffer(eventPostBody1))
-	req.Header.Set("Content-Type", "application/json")
+func TestAudit_Success(t *testing.T) {
+	clientset := newFakeClientset(t)
+	deps := setupMocks(t, clientset)
+	mux := NewRouter(t.Context(), deps)
 
-	rr = httptest.NewRecorder()
-	mux.ServeHTTP(rr, req)
-	assert.Equal(t, http.StatusCreated, rr.Code)
-
-	var result eventing.MdaiEvent
-
-	err = json.Unmarshal(rr.Body.Bytes(), &result)
-	require.NoError(t, err)
-
-	assert.Equal(t, "NoisyServiceFired", result.Name)
-	assert.Equal(t, "mdai-hub-second", result.HubName)
-	assert.Equal(t, "postman-test", result.Source)
-	assert.JSONEq(t, `{"service_name":"service.foo.123"}`, result.Payload)
-	assert.NotEmpty(t, result.Id)
-	assert.NotZero(t, result.Timestamp)
-	assert.WithinDuration(t, time.Now(), result.Timestamp, time.Minute)
-
-	// MDAI Event FAIL
-	mux = NewRouter(ctx, deps)
-	req = httptest.NewRequest(http.MethodPost, "/events/mdai", bytes.NewBufferString(`{"name":"foo", "payload": "bar", "hubName": true}`))
-	req.Header.Set("Content-Type", "application/json")
-
-	rr = httptest.NewRecorder()
-	mux.ServeHTTP(rr, req)
-
-	assert.Equal(t, http.StatusBadRequest, rr.Code)
-	assert.Equal(t, "invalid JSON: json: cannot unmarshal bool into Go struct field MdaiEvent.hubName of type string\n", rr.Body.String())
-
-	// MDAI Missing Name
-	mux = NewRouter(ctx, deps)
-	req = httptest.NewRequest(http.MethodPost, "/events/mdai", bytes.NewBufferString(`{"name":"", "payload": "bar", "hubName": "mdai-sample"}`))
-	req.Header.Set("Content-Type", "application/json")
-
-	rr = httptest.NewRecorder()
-	mux.ServeHTTP(rr, req)
-
-	assert.Equal(t, http.StatusBadRequest, rr.Code)
-	assert.Equal(t, "Missing required field: name\n", rr.Body.String())
-
-	// MDAI Missing HubName
-	mux = NewRouter(ctx, deps)
-	req = httptest.NewRequest(http.MethodPost, "/events/mdai", bytes.NewBufferString(`{"name":"foo", "payload": "bar", "hubName": ""}`))
-	req.Header.Set("Content-Type", "application/json")
-
-	rr = httptest.NewRecorder()
-	mux.ServeHTTP(rr, req)
-
-	assert.Equal(t, http.StatusBadRequest, rr.Code)
-	assert.Equal(t, "Missing required field: hubName\n", rr.Body.String())
-
-	// MDAI Missing Payload
-	mux = NewRouter(ctx, deps)
-	req = httptest.NewRequest(http.MethodPost, "/events/mdai", bytes.NewBufferString(`{"name":"foo", "payload": "", "hubName": "mdai-sample"}`))
-	req.Header.Set("Content-Type", "application/json")
-
-	rr = httptest.NewRecorder()
-	mux.ServeHTTP(rr, req)
-
-	assert.Equal(t, http.StatusBadRequest, rr.Code)
-	assert.Equal(t, "Missing required field: payload\n", rr.Body.String())
-
-	// FAIL
-	mux = NewRouter(ctx, deps)
-	req = httptest.NewRequest(http.MethodPost, "/events/mdai", bytes.NewBufferString(`{"foo":"bar"}`))
-	req.Header.Set("Content-Type", "application/json")
-
-	rr = httptest.NewRecorder()
-	mux.ServeHTTP(rr, req)
-
-	assert.Equal(t, http.StatusBadRequest, rr.Code)
-	assert.Equal(t, "invalid JSON: json: unknown field \"foo\"\n", rr.Body.String())
-
-	// GET
 	deps.ValkeyClient.(*valkeymock.Client).EXPECT(). //nolint:forcetypeassert
 								Do(gomock.Any(), valkeymock.Match("XREVRANGE", audit.MdaiHubEventHistoryStreamName, "+", "-")).
 								Return(
@@ -870,57 +821,56 @@ func TestUpdateEventsHandler(t *testing.T) {
 			),
 		).Times(1)
 
-	mux = NewRouter(ctx, deps)
-	req = httptest.NewRequest(http.MethodGet, "/audit", http.NoBody)
-	rr = httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/audit", http.NoBody)
+	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
 
 	assert.Equal(t, http.StatusOK, rr.Code)
 	assert.JSONEq(t, `[{"type":"example_type","value":"{\"foo\":\"bar\"}"}]`+"\n", rr.Body.String())
+}
 
-	// GET fail
+func TestAudit_Fail(t *testing.T) {
+	clientset := newFakeClientset(t)
+	deps := setupMocks(t, clientset)
+	mux := NewRouter(t.Context(), deps)
+
 	deps.ValkeyClient.(*valkeymock.Client).EXPECT(). //nolint:forcetypeassert
 								Do(gomock.Any(), valkeymock.Match("XREVRANGE", audit.MdaiHubEventHistoryStreamName, "+", "-")).
 								Return(valkeymock.Result(valkeymock.ValkeyBlobString("foo"))).Times(1)
 
-	mux = NewRouter(ctx, deps)
-	req = httptest.NewRequest(http.MethodGet, "/audit", http.NoBody)
-	rr = httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/audit", http.NoBody)
+	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
 
 	assert.Equal(t, http.StatusInternalServerError, rr.Code)
 	assert.Equal(t, "Unable to fetch history from Valkey\n", rr.Body.String())
+}
+
+func TestAlets_TrailingJSON(t *testing.T) {
+	clientset := newFakeClientset(t)
+	deps := setupMocks(t, clientset)
+	mux := NewRouter(t.Context(), deps)
 
 	// trailing JSON after a valid object -> must be rejected
-	mux = NewRouter(ctx, deps)
-	req = httptest.NewRequest(
+	req := httptest.NewRequest(
 		http.MethodPost,
 		"/alerts/alertmanager",
-		bytes.NewBufferString(string(alertPostBody1)+" {}"), // second top-level JSON value
+		bytes.NewBufferString(string(readPayloadFromFile(t, alert1))+" {}"), // second top-level JSON value
 	)
 	req.Header.Set("Content-Type", "application/json")
 
-	rr = httptest.NewRecorder()
+	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
 
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
 	assert.Equal(t, "request must contain a single JSON object\n", rr.Body.String())
+}
 
-	// MDAI Event: body too large (triggers http.MaxBytesError -> 413)
-	mux = NewRouter(ctx, deps)
+func TestAlerts_BodyTooLarge(t *testing.T) {
+	clientset := newFakeClientset(t)
+	deps := setupMocks(t, clientset)
+	mux := NewRouter(t.Context(), deps)
 	tooBig := strings.Repeat("x", (10<<20)+1) // 10 MiB + 1 byte
-	oversized := fmt.Sprintf(`{"name":"foo","payload":%q,"hubName":"mdai-sample"}`, tooBig)
-	req = httptest.NewRequest(http.MethodPost, "/events/mdai", strings.NewReader(oversized))
-	req.Header.Set("Content-Type", "application/json")
-
-	rr = httptest.NewRecorder()
-	mux.ServeHTTP(rr, req)
-
-	assert.Equal(t, http.StatusRequestEntityTooLarge, rr.Code)
-	assert.Equal(t, "request body too large (max 10MiB)\n", rr.Body.String())
-
-	// Alertmanager: body too large -> 413 Request Entity Too Large
-	mux = NewRouter(ctx, deps)
 
 	oversizedAlert := map[string]any{
 		"receiver": "webhook",
@@ -938,49 +888,30 @@ func TestUpdateEventsHandler(t *testing.T) {
 	body, err := json.Marshal(oversizedAlert)
 	require.NoError(t, err)
 
-	req = httptest.NewRequest(http.MethodPost, "/alerts/alertmanager", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/alerts/alertmanager", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	rr = httptest.NewRecorder()
+	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
 
 	assert.Equal(t, http.StatusRequestEntityTooLarge, rr.Code)
 	assert.Equal(t, "request body too large (max 10MiB)\n", rr.Body.String())
+}
+
+func TestAlerts_WrongContentType(t *testing.T) {
+	clientset := newFakeClientset(t)
+	deps := setupMocks(t, clientset)
+	mux := NewRouter(t.Context(), deps)
+
+	body := strings.NewReader(`{"status":"firing","alerts":[]}`)
 
 	// Content-Type wrong -> 415 Unsupported Media Type (middleware)
-	mux = NewRouter(ctx, deps)
-	req = httptest.NewRequest(http.MethodPost, "/alerts/alertmanager", bytes.NewBuffer(alertPostBody1))
+	req := httptest.NewRequest(http.MethodPost, "/alerts/alertmanager", body)
 	req.Header.Set("Content-Type", "text/plain")
 
-	rr = httptest.NewRecorder()
+	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
 
 	assert.Equal(t, http.StatusUnsupportedMediaType, rr.Code)
 	assert.Equal(t, "Content-Type header must be application/json\n", rr.Body.String())
-
-	// Content-Type missing -> 415 Unsupported Media Type (middleware)
-	mux = NewRouter(ctx, deps)
-	req = httptest.NewRequest(http.MethodPost, "/events/mdai", bytes.NewBufferString(`{"name":"foo","payload":"bar","hubName":"mdai-sample"}`))
-	// intentionally do NOT set Content-Type
-
-	rr = httptest.NewRecorder()
-	mux.ServeHTTP(rr, req)
-
-	assert.Equal(t, http.StatusUnsupportedMediaType, rr.Code)
-	assert.Equal(t, "Content-Type header must be application/json\n", rr.Body.String())
-
-	// MDAI Event: trailing JSON after a valid object -> 400 Bad Request
-	mux = NewRouter(ctx, deps)
-	req = httptest.NewRequest(
-		http.MethodPost,
-		"/events/mdai",
-		bytes.NewBufferString(string(eventPostBody1)+" {}"), // second top-level value
-	)
-	req.Header.Set("Content-Type", "application/json")
-
-	rr = httptest.NewRecorder()
-	mux.ServeHTTP(rr, req)
-
-	assert.Equal(t, http.StatusBadRequest, rr.Code)
-	assert.Equal(t, "request must contain a single JSON object\n", rr.Body.String())
 }

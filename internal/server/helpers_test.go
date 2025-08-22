@@ -9,7 +9,8 @@ import (
 
 	"github.com/decisiveai/mdai-data-core/audit"
 	datacorekube "github.com/decisiveai/mdai-data-core/kube"
-	"github.com/decisiveai/mdai-event-hub/eventing/nats"
+	"github.com/decisiveai/mdai-event-hub/pkg/eventing/nats"
+	"github.com/decisiveai/mdai-gateway/internal/adapter"
 	natsserver "github.com/nats-io/nats-server/v2/server"
 	"github.com/stretchr/testify/require"
 	valkeymock "github.com/valkey-io/valkey-go/mock"
@@ -175,6 +176,7 @@ func setupMocks(t *testing.T, clientset kubernetes.Interface) HandlerDeps {
 		AuditAdapter:        auditAdapter,
 		EventPublisher:      publisher,
 		ConfigMapController: cmController,
+		Deduper:             adapter.NewDeduper(),
 	}
 	return deps
 }

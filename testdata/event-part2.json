@@ -1,6 +1,0 @@
-{
-  "name": "NoisyServiceRecovered",
-  "hubName": "mdai-hub-second",
-  "payload": "{ \"service_name\": \"service.foo.123\" }",
-  "source": "postman-test"
-}

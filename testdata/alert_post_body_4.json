@@ -1,0 +1,77 @@
+{
+  "receiver": "webhook",
+  "status": "firing",
+  "alerts": [
+    {
+      "status": "resolved",
+      "labels": {
+        "alertname": "logBytesOutTooHighBySvc",
+        "dc": "eu-west-1",
+        "instance": "svc-a:9100",
+        "job": "prometheus24",
+        "service_name": "service-a"
+      },
+      "annotations": {
+        "hub_name": "mdaihub-sample",
+        "description": "latest change"
+      },
+      "startsAt": "2018-08-03T09:58:00+02:00",
+      "endsAt":   "2018-08-03T10:06:00+02:00",
+      "generatorURL": "http://example.com:9090/graph",
+      "fingerprint": "fp-dup-service-a"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "logBytesOutTooHighBySvc",
+        "dc": "eu-west-1",
+        "instance": "svc-a:9100",
+        "job": "prometheus24",
+        "service_name": "service-a"
+      },
+      "annotations": {
+        "hub_name": "mdaihub-sample",
+        "description": "older change - should skip"
+      },
+      "startsAt": "2018-08-03T10:02:00+02:00",
+      "endsAt":   "0001-01-01T00:00:00Z",
+      "generatorURL": "http://example.com:9090/graph",
+      "fingerprint": "fp-dup-service-a"
+    },
+    {
+      "status": "resolved",
+      "labels": {
+        "alertname": "logBytesOutTooHighBySvc",
+        "dc": "eu-west-1",
+        "instance": "svc-a:9100",
+        "job": "prometheus24",
+        "service_name": "service-a"
+      },
+      "annotations": {
+        "hub_name": "mdaihub-sample",
+        "description": "older change - should skip"
+      },
+      "startsAt": "2018-08-03T09:58:00+02:00",
+      "endsAt":   "2018-08-03T10:04:00+02:00",
+      "generatorURL": "http://example.com:9090/graph",
+      "fingerprint": "fp-dup-service-a"
+    }
+  ],
+  "groupLabels": {
+    "alertname": "logBytesOutTooHighBySvc",
+    "service_name": "service-a"
+  },
+  "commonLabels": {
+    "alertname": "logBytesOutTooHighBySvc",
+    "dc": "eu-west-1",
+    "job": "prometheus24",
+    "service_name": "service-a"
+  },
+  "commonAnnotations": {
+    "hub_name": "mdaihub-sample"
+  },
+  "externalURL": "http://example.com:9093",
+  "version": "4",
+  "groupKey": "{}:{alertname=\"logBytesOutTooHighBySvc\", service_name=\"service-a\"}",
+  "truncatedAlerts": 0
+}
