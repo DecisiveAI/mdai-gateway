@@ -90,11 +90,11 @@ func TestDeduper_Concurrent(t *testing.T) {
 	start := time.Now().Truncate(time.Microsecond)
 
 	timestamps := make([]time.Time, numUpdates)
-	for i := 0; i < numUpdates; i++ {
+	for i := range numUpdates {
 		timestamps[i] = start.Add(time.Duration(i) * time.Nanosecond)
 	}
 
-	randomOrder := rand.New(rand.NewSource(42)).Perm(numUpdates)
+	randomOrder := rand.New(rand.NewSource(42)).Perm(numUpdates) //nolint:gosec
 
 	var waitGroup sync.WaitGroup
 	waitGroup.Add(numUpdates)
@@ -125,7 +125,7 @@ func TestDeduper_Concurrent_MultipleKeys(t *testing.T) {
 
 	for _, k := range keys {
 		// different permutations per key
-		perm := rand.New(rand.NewSource(int64(len(k)))).Perm(n)
+		perm := rand.New(rand.NewSource(int64(len(k)))).Perm(n) //nolint:gosec
 		for _, idx := range perm {
 			ts := base.Add(time.Duration(idx) * time.Nanosecond)
 			go func(key string, ts time.Time) {

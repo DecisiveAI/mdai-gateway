@@ -105,7 +105,7 @@ func handleGetVariables(ctx context.Context, deps HandlerDeps) http.HandlerFunc 
 	}
 }
 
-func handleSetDeleteVariables(ctx context.Context, deps HandlerDeps) http.HandlerFunc {
+func handleSetDeleteVariables(ctx context.Context, deps HandlerDeps) http.HandlerFunc { //nolint:funlen
 	return func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close() //nolint:errcheck
 
@@ -180,7 +180,7 @@ func handleSetDeleteVariables(ctx context.Context, deps HandlerDeps) http.Handle
 			zap.String("subject", subject),
 		)
 
-		if _, err := nats.PublishEvents(ctx, deps.Logger, deps.EventPublisher, []eventing.EventPerSubject{{*event, subject}}, deps.AuditAdapter); err != nil {
+		if _, err := nats.PublishEvents(ctx, deps.Logger, deps.EventPublisher, []eventing.EventPerSubject{{Event: *event, Subject: subject}}, deps.AuditAdapter); err != nil {
 			deps.Logger.Error("Failed to publish MdaiEvent", zap.Error(err))
 			http.Error(w, fmt.Sprintf("Failed to publish event: %v", err), http.StatusInternalServerError)
 			return

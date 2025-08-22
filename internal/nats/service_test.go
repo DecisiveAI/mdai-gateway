@@ -115,7 +115,7 @@ func TestPublishEvents(t *testing.T) {
 		mockPub := &mocks.MockPublisher{}
 		mockPub.On("Publish", mock.Anything, event, subject).Return(nil).Once()
 
-		success, err := PublishEvents(ctx, logger, mockPub, []eventing.EventPerSubject{{event, subject}}, auditAdapter)
+		success, err := PublishEvents(ctx, logger, mockPub, []eventing.EventPerSubject{{Event: event, Subject: subject}}, auditAdapter)
 		require.NoError(t, err)
 		assert.Equal(t, 1, success)
 
@@ -126,7 +126,7 @@ func TestPublishEvents(t *testing.T) {
 		mockPub := &mocks.MockPublisher{}
 		mockPub.On("Publish", mock.Anything, event, subject).Return(errors.New("fail")).Once()
 
-		success, err := PublishEvents(ctx, logger, mockPub, []eventing.EventPerSubject{{event, subject}}, auditAdapter)
+		success, err := PublishEvents(ctx, logger, mockPub, []eventing.EventPerSubject{{Event: event, Subject: subject}}, auditAdapter)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "fail")
 		assert.Equal(t, 0, success)
@@ -141,7 +141,7 @@ func TestPublishEvents(t *testing.T) {
 
 		mockPub.On("Publish", ctx, event, subject).Return(ctx.Err()).Once()
 
-		success, err := PublishEvents(ctx, logger, mockPub, []eventing.EventPerSubject{{event, subject}}, auditAdapter)
+		success, err := PublishEvents(ctx, logger, mockPub, []eventing.EventPerSubject{{Event: event, Subject: subject}}, auditAdapter)
 		require.ErrorIs(t, err, context.Canceled)
 		assert.Equal(t, 0, success)
 
