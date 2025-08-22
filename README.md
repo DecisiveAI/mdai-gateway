@@ -17,7 +17,7 @@ helm upgrade --install --create-namespace --namespace mdai mdai-gateway ./deploy
 curl -X POST -H "Content-Type: application/json" -d@testdata/alert_test.json http://localhost:8081/alerts/alertmanager
 ```
 
-# to simulate a var updat event via curl
+# to simulate a var update event via curl
 ```sh
 curl -X POST -H "Content-Type: application/json" -d@testdata/var-test.json \
   http://localhost:8081/variables/hub/mdaihub-sample/var/manual_filter
