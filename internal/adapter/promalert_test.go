@@ -102,7 +102,6 @@ func TestPrometheusAlertToMdaiEvents(t *testing.T) {
 				require.NotEmpty(t, e.Event.SourceID)
 			}
 
-			// Payload now uses a nested structure
 			var payload struct {
 				Labels      map[string]string `json:"labels"`
 				Annotations map[string]string `json:"annotations"`
@@ -156,4 +155,41 @@ func TestPrometheusAlertWithoutFingerprint(t *testing.T) {
 	require.ErrorIs(t, err, ErrMissingFingerprint)
 	require.Empty(t, events)
 	require.Equal(t, 0, skipped)
+}
+
+func TestLatePrometheusAlert(t *testing.T) {
+	now := time.Now()
+
+	alerts := []template.Alert{
+		{
+			Annotations: template.KV{
+				"alert_name":    "DiskUsageHigh",
+				"hub_name":      "prod-cluster",
+				"current_value": "92%",
+			},
+			Labels:      template.KV{"severity": "critical"},
+			Status:      "firing",
+			StartsAt:    now.Add(-1 * time.Minute),
+			Fingerprint: "abc123",
+		},
+		{
+			Annotations: template.KV{
+				"alert_name":    "DiskUsageHigh",
+				"hub_name":      "prod-cluster",
+				"current_value": "92%",
+			},
+			Labels:      template.KV{"severity": "critical"},
+			Status:      "firing",
+			StartsAt:    now.Add(-2 * time.Minute),
+			Fingerprint: "abc123",
+		},
+	}
+
+	input := template.Data{Alerts: alerts}
+	deduper := NewDeduper() // shared/global in real server wiring
+	wrapped := NewPromAlertWrapper(input, zap.NewNop(), deduper)
+
+	_, skipped, err := wrapped.ToMdaiEvents()
+	require.NoError(t, err)
+	require.Equal(t, 1, skipped)
 }
