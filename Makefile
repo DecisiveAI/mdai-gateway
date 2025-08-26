@@ -11,31 +11,31 @@ docker-login:
 	aws ecr-public get-login-password | docker login --username AWS --password-stdin $(AWS_ECR_REPO)
 
 .PHONY: docker-build
-docker-build: tidy vendor
+docker-build: tidy
 	docker buildx build --platform linux/arm64,linux/amd64 -t $(DOCKER_IMAGE) . --load
 
 .PHONY: docker-push
-docker-push: tidy vendor docker-login
+docker-push: tidy docker-login
 	docker buildx build --platform linux/arm64,linux/amd64 -t $(DOCKER_IMAGE) . --push
 
 .PHONY: build
-build: tidy vendor
+build: tidy
 	CGO_ENABLED=0 go build -ldflags="-w -s" -o mdai-gateway ./cmd/mdai-gateway
 
 .PHONY: test
-test: tidy vendor
+test: tidy
 	$(GO_TEST) ./...
 
 .PHONY: testv
-testv: tidy vendor
+testv: tidy
 	$(GO_TEST) -v ./...
 
 .PHONY: cover
-cover: tidy vendor
+cover: tidy
 	$(GO_TEST) -cover ./...
 
 .PHONY: coverv
-coverv: tidy vendor
+coverv: tidy
 	$(GO_TEST) -v -cover ./...
 
 .PHONY: coverhtml
@@ -56,10 +56,6 @@ tidy:
 .PHONY: tidy-check
 tidy-check: tidy
 	@git diff --quiet --exit-code go.mod go.sum || { echo >&2 "go.mod or go.sum is out of sync. Run 'make tidy'."; exit 1; }
-
-.PHONY: vendor
-vendor:
-	@go mod vendor
 
 .PHONY: helm
 helm:
