@@ -1,0 +1,14 @@
+{
+  "name": "mdai-gateway (GoLand)",
+  "build": { "dockerfile": "Dockerfile", "context": ".." },
+  "workspaceFolder": "/workspaces/mdai-gateway",
+
+  "mounts": [
+    "type=volume,source=go-mod-cache,target=/home/goland/go/pkg/mod",
+    "type=volume,source=go-build-cache,target=/home/goland/.cache/go-build"
+  ],
+
+  "postCreateCommand": "go mod download && go get -tool github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.4.0 && chown -R goland:goland /home/goland",
+  "runArgs": ["--cap-add=SYS_PTRACE", "--security-opt", "seccomp=unconfined"],
+  "forwardPorts": [8080]
+}
