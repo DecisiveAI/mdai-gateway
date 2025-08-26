@@ -10,6 +10,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func isNewer(d *Deduper, fingerprint string, changeTime time.Time) bool {
+	updated, _ := d.UpdateIfNewer(fingerprint, changeTime)
+	return updated
+}
+
 func TestDeduper_IsNewer_Basic(t *testing.T) {
 	t.Parallel()
 
@@ -20,19 +25,19 @@ func TestDeduper_IsNewer_Basic(t *testing.T) {
 	earlier := first.Add(-time.Nanosecond)
 
 	// First time for a key -> true
-	assert.True(t, deduper.isNewer(key, first))
+	assert.True(t, isNewer(deduper, key, first))
 
 	// Equal timestamp -> false
-	assert.False(t, deduper.isNewer(key, first))
+	assert.False(t, isNewer(deduper, key, first))
 
 	// Older timestamp -> false
-	assert.False(t, deduper.isNewer(key, earlier))
+	assert.False(t, isNewer(deduper, key, earlier))
 
 	// UpdateIfNewer timestamp -> true
-	assert.True(t, deduper.isNewer(key, later))
+	assert.True(t, isNewer(deduper, key, later))
 
 	// After newer is set, older again -> false
-	assert.False(t, deduper.isNewer(key, first))
+	assert.False(t, isNewer(deduper, key, first))
 }
 
 func TestDeduper_IsNewer_PerKeyIsolation(t *testing.T) {
@@ -46,22 +51,22 @@ func TestDeduper_IsNewer_PerKeyIsolation(t *testing.T) {
 
 	// Set keyA at +10ms
 	at10ms := baseTime.Add(10 * time.Millisecond)
-	assert.True(t, deduper.isNewer(keyA, at10ms))
+	assert.True(t, isNewer(deduper, keyA, at10ms))
 
 	// Set keyB at +5ms (independent) -> true
 	at5ms := baseTime.Add(5 * time.Millisecond)
-	assert.True(t, deduper.isNewer(keyB, at5ms))
+	assert.True(t, isNewer(deduper, keyB, at5ms))
 
 	// keyA older than last -> false
 	at9ms := baseTime.Add(9 * time.Millisecond)
-	assert.False(t, deduper.isNewer(keyA, at9ms))
+	assert.False(t, isNewer(deduper, keyA, at9ms))
 
 	// keyA newer than last -> true
 	at11ms := baseTime.Add(11 * time.Millisecond)
-	assert.True(t, deduper.isNewer(keyA, at11ms))
+	assert.True(t, isNewer(deduper, keyA, at11ms))
 
 	// keyB equal -> false
-	assert.False(t, deduper.isNewer(keyB, at5ms))
+	assert.False(t, isNewer(deduper, keyB, at5ms))
 }
 
 func TestDeduper_ZeroTime(t *testing.T) {
@@ -71,13 +76,13 @@ func TestDeduper_ZeroTime(t *testing.T) {
 	key := "zero-time-key"
 
 	// First zero -> true (we accept zero as "first seen")
-	assert.True(t, deduper.isNewer(key, time.Time{}))
+	assert.True(t, isNewer(deduper, key, time.Time{}))
 
 	// Second zero -> false
-	assert.False(t, deduper.isNewer(key, time.Time{}))
+	assert.False(t, isNewer(deduper, key, time.Time{}))
 
 	// Non-zero after zero -> true
-	assert.True(t, deduper.isNewer(key, time.Now()))
+	assert.True(t, isNewer(deduper, key, time.Now()))
 }
 
 func TestDeduper_Concurrent(t *testing.T) {

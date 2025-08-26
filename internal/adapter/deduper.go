@@ -29,8 +29,3 @@ func (d *Deduper) PeekLast(key string) (time.Time, bool) {
 	t, ok := d.last[key]
 	return t, ok
 }
-
-func (d *Deduper) isNewer(fingerprint string, changeTime time.Time) bool {
-	updated, _ := d.UpdateIfNewer(fingerprint, changeTime)
-	return updated
-}
