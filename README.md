@@ -19,6 +19,9 @@ curl -X POST -H "Content-Type: application/json" -d@testdata/alert_test.json htt
 ```sh
 curl -X POST -H "Content-Type: application/json" -d@testdata/alert_top_talkers.json http://localhost:8081/alerts/alertmanager
 ```
+```sh
+curl -X POST -H "Content-Type: application/json" -d@testdata/alert_anomalous_error_rate.json http://localhost:8081/alerts/alertmanager
+```
 
 # to simulate a var update event via curl
 ```sh
