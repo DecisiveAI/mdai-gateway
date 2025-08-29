@@ -32,8 +32,8 @@ github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc h1:U9qPSI2PIWSS1
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/decisiveai/mdai-data-core v0.2.1 h1:JnQpbrqNU1xY7m1tDQJvKQ6TzLqaAa0ZyNadDg1qZIE=
 github.com/decisiveai/mdai-data-core v0.2.1/go.mod h1:lssMBvOBW1/NgHDM/jfJQIrBRBDgUGO0XvptyRgKq58=
-github.com/decisiveai/mdai-event-hub v0.0.13-0.20250815141444-f34469110a41 h1:nai4S15KXcSq+TWYAQTGD6J8IRAZ35wyNfKjbYnnzag=
-github.com/decisiveai/mdai-event-hub v0.0.13-0.20250815141444-f34469110a41/go.mod h1:lwxW0fLuMgX9S4Jwby6VWyvRfwzJY8TCniObNC3P7wE=
+github.com/decisiveai/mdai-event-hub v0.1.0 h1:zIm6G9I0hPMB+GzvP8e3LY4RSKRflOV3y9xjOs7KEXc=
+github.com/decisiveai/mdai-event-hub v0.1.0/go.mod h1:ww+aQxUqEfTXlVf9hKR/XtYn6WABoHGFLX/bm8wrvdk=
 github.com/emicklei/go-restful/v3 v3.12.1 h1:PJMDIM/ak7btuL8Ex0iYET9hxM3CI2sjZtzpL63nKAU=
 github.com/emicklei/go-restful/v3 v3.12.1/go.mod h1:6n3XBCmQQb25CM2LCACGz8ukIrRry+4bhvbpWn3mrbc=
 github.com/fxamacker/cbor/v2 v2.7.0 h1:iM5WgngdRBanHcxugY4JySA0nk1wZorNOpTgCMedv5E=
