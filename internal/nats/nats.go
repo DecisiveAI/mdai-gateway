@@ -3,8 +3,8 @@ package nats
 import (
 	"context"
 
-	"github.com/decisiveai/mdai-event-hub/eventing"
-	"github.com/decisiveai/mdai-event-hub/eventing/nats"
+	"github.com/decisiveai/mdai-event-hub/pkg/eventing"
+	"github.com/decisiveai/mdai-event-hub/pkg/eventing/nats"
 	"go.uber.org/zap"
 )
 

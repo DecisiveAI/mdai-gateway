@@ -7,7 +7,8 @@ import (
 
 	"github.com/decisiveai/mdai-data-core/audit"
 	datacorekube "github.com/decisiveai/mdai-data-core/kube"
-	"github.com/decisiveai/mdai-event-hub/eventing"
+	"github.com/decisiveai/mdai-event-hub/pkg/eventing"
+	"github.com/decisiveai/mdai-gateway/internal/adapter"
 	"github.com/valkey-io/valkey-go"
 	"go.uber.org/zap"
 )
@@ -18,13 +19,13 @@ type HandlerDeps struct {
 	AuditAdapter        *audit.AuditAdapter
 	EventPublisher      eventing.Publisher
 	ConfigMapController *datacorekube.ConfigMapController
+	Deduper             *adapter.Deduper
 }
 
 func NewRouter(ctx context.Context, deps HandlerDeps) *http.ServeMux {
 	router := http.NewServeMux()
 
 	router.HandleFunc("GET /audit", handleAuditEventsGet(ctx, deps))
-	router.Handle("POST /events/mdai", requireJSON(handleMdaiEventsPost(deps)))
 	router.Handle("POST /alerts/alertmanager", requireJSON(handlePromAlertsPost(deps)))
 	router.Handle("GET /variables/list", handleListAllVariables(ctx, deps))
 	router.Handle("GET /variables/list/hub/{hubName}", handleListHubVariables(ctx, deps))

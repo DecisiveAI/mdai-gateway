@@ -1,0 +1,66 @@
+{
+  "receiver": "mdai-gateway",
+  "status": "firing",
+  "alerts": [
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "top_talkers",
+        "cluster": "mdai-cluster",
+        "data_type": "logs",
+        "mdai_service": "service1234",
+        "prometheus": "mdai/kube-prometheus-stack-prometheus",
+        "severity": "warning"
+      },
+      "annotations": {
+        "alert_name": "top_talkers",
+        "current_value": "57296478.69",
+        "expression": "sum(increase(bytes_sent_by_service_total{mdai_service!=\"\"}[1h])) by (mdai_service, data_type) \u003E 10*1024*1024",
+        "hub_name": "mdaihub-sample"
+      },
+      "startsAt": "2025-08-08T15:56:14.063Z",
+      "endsAt": "2025-08-08T18:20:14.063Z",
+      "fingerprint": "24b55401762206bc",
+      "generatorURL": "http://kube-prometheus-stack-prometheus.mdai:9090/graph?g0.expr=sum+by+%28mdai_service%2C+data_type%29+%28increase%28bytes_sent_by_service_total%7Bmdai_service%21%3D%22%22%7D%5B1h%5D%29%29+%3E+10+%2A+1024+%2A+1024&g0.tab=1"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "top_talkers",
+        "cluster": "mdai-cluster",
+        "data_type": "logs",
+        "mdai_service": "service4321",
+        "prometheus": "mdai/kube-prometheus-stack-prometheus",
+        "severity": "warning"
+      },
+      "annotations": {
+        "alert_name": "top_talkers",
+        "current_value": "260712855.00",
+        "expression": "sum(increase(bytes_sent_by_service_total{mdai_service!=\"\"}[1h])) by (mdai_service, data_type) \u003E 10*1024*1024",
+        "hub_name": "mdaihub-sample"
+      },
+      "startsAt": "2025-08-08T15:47:44.063Z",
+      "endsAt": "2025-08-08T18:20:14.063Z",
+      "fingerprint": "b501e7384d0b1ac4",
+      "generatorURL": "http://kube-prometheus-stack-prometheus.mdai:9090/graph?g0.expr=sum+by+%28mdai_service%2C+data_type%29+%28increase%28bytes_sent_by_service_total%7Bmdai_service%21%3D%22%22%7D%5B1h%5D%29%29+%3E+10+%2A+1024+%2A+1024&g0.tab=1"
+    }
+  ],
+  "groupLabels": {
+    "alertname": "top_talkers"
+  },
+  "commonLabels": {
+    "alertname": "top_talkers",
+    "cluster": "mdai-cluster",
+    "data_type": "logs",
+    "prometheus": "mdai/kube-prometheus-stack-prometheus",
+    "severity": "warning"
+  },
+  "commonAnnotations": {
+    "alert_name": "top_talkers",
+    "expression": "sum(increase(bytes_sent_by_service_total{mdai_service!=\"\"}[1h])) by (mdai_service, data_type) \u003E 10*1024*1024",
+    "hub_name": "mdaihub-sample"
+  },
+  "version": "4",
+  "groupKey": "{}:{alertname=\"top_talkers\"}",
+  "truncatedAlerts": 0
+}

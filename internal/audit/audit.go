@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/decisiveai/mdai-event-hub/eventing"
+	"github.com/decisiveai/mdai-event-hub/pkg/eventing"
 	"go.uber.org/zap"
 )
 
@@ -15,13 +15,13 @@ type Inserter interface {
 
 func RecordAuditEventFromMdaiEvent(ctx context.Context, logger *zap.Logger, auditAdapter Inserter, event eventing.MdaiEvent, success bool) error {
 	eventMap := map[string]string{
-		"id":              event.Id,
+		"id":              event.ID,
 		"name":            event.Name,
 		"timestamp":       event.Timestamp.UTC().Format(time.RFC3339),
 		"payload":         event.Payload,
 		"source":          event.Source,
-		"sourceId":        event.SourceId,
-		"correlation_id":  event.CorrelationId,
+		"sourceId":        event.SourceID,
+		"correlation_id":  event.CorrelationID,
 		"hub_name":        event.HubName,
 		"publish_success": strconv.FormatBool(success),
 	}
