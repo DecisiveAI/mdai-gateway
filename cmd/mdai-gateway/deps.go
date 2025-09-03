@@ -3,12 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
-
 	"github.com/decisiveai/mdai-data-core/audit"
 	datacorekube "github.com/decisiveai/mdai-data-core/kube"
 	"github.com/decisiveai/mdai-data-core/valkey"
 	"github.com/decisiveai/mdai-gateway/internal/adapter"
 	"github.com/decisiveai/mdai-gateway/internal/nats"
+	"github.com/decisiveai/mdai-gateway/internal/opamp"
 	"github.com/decisiveai/mdai-gateway/internal/server"
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
@@ -46,6 +46,12 @@ func initDependencies(ctx context.Context, cfg *Config, logger *zap.Logger) (dep
 
 	deduper := adapter.NewDeduper()
 
+	opampServer := opamp.NewOpAMPControlServer()
+	opampHandler, connCtx, err := opampServer.GetHandler()
+	if err != nil {
+		logger.Fatal("failed to start OpAMP server", zap.Error(err))
+	}
+
 	deps = server.HandlerDeps{
 		Logger:              logger,
 		ValkeyClient:        valkeyClient,
@@ -53,6 +59,9 @@ func initDependencies(ctx context.Context, cfg *Config, logger *zap.Logger) (dep
 		ConfigMapController: cmController,
 		AuditAdapter:        auditAdapter,
 		Deduper:             deduper,
+		OpAMPControlServer:  opampServer,
+		OpAMPHandler:        opampHandler,
+		OpAMPConnCtx:        connCtx,
 	}
 
 	cleanup = func() {
