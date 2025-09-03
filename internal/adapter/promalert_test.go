@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/decisiveai/mdai-event-hub/pkg/eventing"
+	"github.com/decisiveai/mdai-data-core/eventing"
 	"github.com/prometheus/alertmanager/template"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"

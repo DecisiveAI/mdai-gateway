@@ -1,7 +1,12 @@
 package adapter
 
-import "github.com/decisiveai/mdai-event-hub/pkg/eventing"
+import "github.com/decisiveai/mdai-data-core/eventing"
 
 type EventAdapter interface {
-	ToMdaiEvents() ([]eventing.EventPerSubject, int, error)
+	ToMdaiEvents() ([]EventPerSubject, int, error)
+}
+
+type EventPerSubject struct {
+	Event   eventing.MdaiEvent
+	Subject string
 }

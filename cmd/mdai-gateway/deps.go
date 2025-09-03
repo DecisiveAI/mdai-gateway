@@ -6,10 +6,10 @@ import (
 
 	"github.com/decisiveai/mdai-data-core/audit"
 	datacorekube "github.com/decisiveai/mdai-data-core/kube"
+	"github.com/decisiveai/mdai-data-core/valkey"
 	"github.com/decisiveai/mdai-gateway/internal/adapter"
 	"github.com/decisiveai/mdai-gateway/internal/nats"
 	"github.com/decisiveai/mdai-gateway/internal/server"
-	"github.com/decisiveai/mdai-gateway/internal/valkey"
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
@@ -30,9 +30,12 @@ func initDependencies(ctx context.Context, cfg *Config, logger *zap.Logger) (dep
 		}
 	}
 
-	valkeyClient := valkey.Init(ctx, logger, cfg.ValkeyCfg)
+	valkeyClient, err := valkey.Init(ctx, logger, valkey.NewConfig())
+	if err != nil {
+		logger.Fatal("failed to initialize valkey client", zap.Error(err))
+	}
 
-	auditAdapter := audit.NewAuditAdapter(logger, valkeyClient, cfg.ValkeyCfg.AuditStreamExpiration)
+	auditAdapter := audit.NewAuditAdapter(logger, valkeyClient)
 
 	publisher := nats.Init(ctx, logger, publisherClientName)
 

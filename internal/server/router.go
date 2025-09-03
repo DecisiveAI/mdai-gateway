@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/decisiveai/mdai-data-core/audit"
+	"github.com/decisiveai/mdai-data-core/eventing/publisher"
 	datacorekube "github.com/decisiveai/mdai-data-core/kube"
-	"github.com/decisiveai/mdai-event-hub/pkg/eventing"
 	"github.com/decisiveai/mdai-gateway/internal/adapter"
 	"github.com/valkey-io/valkey-go"
 	"go.uber.org/zap"
@@ -17,7 +17,7 @@ type HandlerDeps struct {
 	Logger              *zap.Logger
 	ValkeyClient        valkey.Client
 	AuditAdapter        *audit.AuditAdapter
-	EventPublisher      eventing.Publisher
+	EventPublisher      publisher.Publisher
 	ConfigMapController *datacorekube.ConfigMapController
 	Deduper             *adapter.Deduper
 }

@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/decisiveai/mdai-event-hub/pkg/eventing"
-	"github.com/decisiveai/mdai-event-hub/pkg/eventing/nats"
+	"github.com/decisiveai/mdai-data-core/eventing"
+	"github.com/decisiveai/mdai-data-core/eventing/config"
 	"github.com/google/uuid"
 	"github.com/prometheus/alertmanager/template"
 	"go.uber.org/zap"
@@ -35,11 +35,11 @@ func NewPromAlertWrapper(v template.Data, l *zap.Logger, d *Deduper) *PromAlertW
 	return &PromAlertWrapper{Data: &v, Logger: l, deduper: d}
 }
 
-func (w *PromAlertWrapper) ToMdaiEvents() ([]eventing.EventPerSubject, int, error) {
+func (w *PromAlertWrapper) ToMdaiEvents() ([]EventPerSubject, int, error) {
 	skipped := 0
 	alerts := w.Alerts // we don't need sorting within the same payload since it's deduplicated by fingerprint
 
-	eventsPerSubject := make([]eventing.EventPerSubject, 0, len(alerts))
+	eventsPerSubject := make([]EventPerSubject, 0, len(alerts))
 	for _, alert := range alerts {
 		if alert.Fingerprint == "" {
 			return nil, 0, fmt.Errorf("%w (name=%q status=%s)", ErrMissingFingerprint,
@@ -64,7 +64,7 @@ func (w *PromAlertWrapper) ToMdaiEvents() ([]eventing.EventPerSubject, int, erro
 		subj := subjectFromAlert(alert, event.HubName)
 		w.Logger.Debug("subject for alert", zap.String("alert_name", alert.Annotations[AlertName]), zap.String("subject", subj))
 
-		eventPerSubject := eventing.EventPerSubject{
+		eventPerSubject := EventPerSubject{
 			Event:   event,
 			Subject: subj,
 		}
@@ -80,7 +80,7 @@ func subjectFromAlert(alert template.Alert, hubName string) string {
 	return strings.Join([]string{
 		"alert",
 		hubName,
-		nats.SafeToken(alert.Fingerprint),
+		config.SafeToken(alert.Fingerprint),
 	}, ".")
 }
 

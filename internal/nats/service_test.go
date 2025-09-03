@@ -6,10 +6,10 @@ import (
 	"errors"
 	"slices"
 	"testing"
-	"time"
 
 	"github.com/decisiveai/mdai-data-core/audit"
-	"github.com/decisiveai/mdai-event-hub/pkg/eventing"
+	"github.com/decisiveai/mdai-data-core/eventing"
+	"github.com/decisiveai/mdai-gateway/internal/adapter"
 	"github.com/decisiveai/mdai-gateway/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -51,7 +51,7 @@ func TestNewMdaiEvent(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			event, err := NewMdaiEvent(tt.hubName, tt.varName, tt.varType, tt.action, tt.payload)
+			event, err := eventing.NewMdaiEvent(tt.hubName, tt.varName, tt.varType, tt.action, tt.payload)
 
 			if tt.expectError {
 				require.Error(t, err)
@@ -102,7 +102,7 @@ func TestPublishEvents(t *testing.T) {
 		_, ok := arg.(context.Context)
 		return ok
 	}), XaddMatcher{}).Return(valkeymock.Result(valkeymock.ValkeyString(""))).AnyTimes()
-	auditAdapter := audit.NewAuditAdapter(zap.NewNop(), valkeyClient, 30*24*time.Hour)
+	auditAdapter := audit.NewAuditAdapter(zap.NewNop(), valkeyClient)
 
 	event := eventing.MdaiEvent{
 		Name:    "var.set",
@@ -115,7 +115,7 @@ func TestPublishEvents(t *testing.T) {
 		mockPub := &mocks.MockPublisher{}
 		mockPub.On("Publish", mock.Anything, event, subject).Return(nil).Once()
 
-		success, err := PublishEvents(ctx, logger, mockPub, []eventing.EventPerSubject{{Event: event, Subject: subject}}, auditAdapter)
+		success, err := PublishEvents(ctx, logger, mockPub, []adapter.EventPerSubject{{Event: event, Subject: subject}}, auditAdapter)
 		require.NoError(t, err)
 		assert.Equal(t, 1, success)
 
@@ -126,7 +126,7 @@ func TestPublishEvents(t *testing.T) {
 		mockPub := &mocks.MockPublisher{}
 		mockPub.On("Publish", mock.Anything, event, subject).Return(errors.New("fail")).Once()
 
-		success, err := PublishEvents(ctx, logger, mockPub, []eventing.EventPerSubject{{Event: event, Subject: subject}}, auditAdapter)
+		success, err := PublishEvents(ctx, logger, mockPub, []adapter.EventPerSubject{{Event: event, Subject: subject}}, auditAdapter)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "fail")
 		assert.Equal(t, 0, success)
@@ -141,7 +141,7 @@ func TestPublishEvents(t *testing.T) {
 
 		mockPub.On("Publish", ctx, event, subject).Return(ctx.Err()).Once()
 
-		success, err := PublishEvents(ctx, logger, mockPub, []eventing.EventPerSubject{{Event: event, Subject: subject}}, auditAdapter)
+		success, err := PublishEvents(ctx, logger, mockPub, []adapter.EventPerSubject{{Event: event, Subject: subject}}, auditAdapter)
 		require.ErrorIs(t, err, context.Canceled)
 		assert.Equal(t, 0, success)
 

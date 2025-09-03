@@ -3,15 +3,14 @@ package nats
 import (
 	"context"
 
-	"github.com/decisiveai/mdai-event-hub/pkg/eventing"
-	"github.com/decisiveai/mdai-event-hub/pkg/eventing/nats"
+	"github.com/decisiveai/mdai-data-core/eventing/publisher"
 	"go.uber.org/zap"
 )
 
-func Init(_ context.Context, logger *zap.Logger, clientName string) eventing.Publisher { //nolint:ireturn
-	publisher, err := nats.NewPublisher(logger, clientName)
+func Init(ctx context.Context, logger *zap.Logger, clientName string) publisher.Publisher { //nolint:ireturn
+	eventPublisher, err := publisher.NewPublisher(ctx, logger, clientName)
 	if err != nil {
 		logger.Fatal("initialising event publisher: %v", zap.Error(err))
 	}
-	return publisher
+	return eventPublisher
 }
