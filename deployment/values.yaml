@@ -1,5 +1,5 @@
 # Use to set a custom valkey audit stream expiration (MINID)
-# auditStreamExpiryMs: 3600000
+# auditStreamRetention: 30d
 
 serviceAccount:
   create: false

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -8,8 +9,8 @@ import (
 	"time"
 
 	"github.com/decisiveai/mdai-data-core/audit"
+	"github.com/decisiveai/mdai-data-core/eventing/publisher"
 	datacorekube "github.com/decisiveai/mdai-data-core/kube"
-	"github.com/decisiveai/mdai-event-hub/pkg/eventing/nats"
 	"github.com/decisiveai/mdai-gateway/internal/adapter"
 	natsserver "github.com/nats-io/nats-server/v2/server"
 	"github.com/stretchr/testify/require"
@@ -157,13 +158,13 @@ func setupMocks(t *testing.T, clientset kubernetes.Interface) HandlerDeps {
 
 	ctrl := gomock.NewController(t)
 	valkeyClient := valkeymock.NewClient(ctrl)
-	auditAdapter := audit.NewAuditAdapter(zap.NewNop(), valkeyClient, 30*24*time.Hour)
+	auditAdapter := audit.NewAuditAdapter(zap.NewNop(), valkeyClient)
 
 	srv := runJetStream(t)
 	t.Cleanup(func() { srv.Shutdown() })
-	publisher, err := nats.NewPublisher(zap.NewNop(), publisherClientName)
+	eventPublisher, err := publisher.NewPublisher(context.Background(), zap.NewNop(), publisherClientName)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = publisher.Close() })
+	t.Cleanup(func() { _ = eventPublisher.Close() })
 
 	cmController, err := newFakeConfigMapController(t, clientset, "mdai")
 	require.NoError(t, err)
@@ -174,7 +175,7 @@ func setupMocks(t *testing.T, clientset kubernetes.Interface) HandlerDeps {
 		Logger:              zap.NewNop(),
 		ValkeyClient:        valkeyClient,
 		AuditAdapter:        auditAdapter,
-		EventPublisher:      publisher,
+		EventPublisher:      eventPublisher,
 		ConfigMapController: cmController,
 		Deduper:             adapter.NewDeduper(),
 	}

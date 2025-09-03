@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/decisiveai/mdai-data-core/audit"
+	"github.com/decisiveai/mdai-data-core/eventing"
 	datacorekube "github.com/decisiveai/mdai-data-core/kube"
-	"github.com/decisiveai/mdai-event-hub/pkg/eventing"
 	"github.com/decisiveai/mdai-gateway/internal/manualvariables"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

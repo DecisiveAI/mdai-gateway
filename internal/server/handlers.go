@@ -10,9 +10,10 @@ import (
 	"strings"
 
 	"github.com/decisiveai/mdai-data-core/audit"
+	"github.com/decisiveai/mdai-data-core/eventing"
+	"github.com/decisiveai/mdai-data-core/eventing/config"
+	"github.com/decisiveai/mdai-data-core/eventing/publisher"
 	datacore "github.com/decisiveai/mdai-data-core/variables"
-	"github.com/decisiveai/mdai-event-hub/pkg/eventing"
-	enats "github.com/decisiveai/mdai-event-hub/pkg/eventing/nats"
 	"github.com/decisiveai/mdai-gateway/internal/adapter"
 	"github.com/decisiveai/mdai-gateway/internal/httputil"
 	"github.com/decisiveai/mdai-gateway/internal/manualvariables"
@@ -165,7 +166,7 @@ func handleSetDeleteVariables(ctx context.Context, deps HandlerDeps) http.Handle
 			return
 		}
 
-		event, err := nats.NewMdaiEvent(hubName, varName, string(varType), string(command), payload)
+		event, err := eventing.NewMdaiEvent(hubName, varName, string(varType), string(command), payload)
 		if err != nil {
 			http.Error(w, "Invalid request payload", http.StatusBadRequest)
 			return
@@ -180,7 +181,7 @@ func handleSetDeleteVariables(ctx context.Context, deps HandlerDeps) http.Handle
 			zap.String("subject", subject),
 		)
 
-		if _, err := nats.PublishEvents(ctx, deps.Logger, deps.EventPublisher, []eventing.EventPerSubject{{Event: *event, Subject: subject}}, deps.AuditAdapter); err != nil {
+		if _, err := nats.PublishEvents(ctx, deps.Logger, deps.EventPublisher, []adapter.EventPerSubject{{Event: *event, Subject: subject}}, deps.AuditAdapter); err != nil {
 			deps.Logger.Error("Failed to publish MdaiEvent", zap.Error(err))
 			http.Error(w, fmt.Sprintf("Failed to publish event: %v", err), http.StatusInternalServerError)
 			return
@@ -241,7 +242,7 @@ func handlePromAlertsPost(deps HandlerDeps) http.HandlerFunc {
 }
 
 // Handle Prometheus Alertmanager alerts.
-func handlePrometheusAlerts(ctx context.Context, logger *zap.Logger, w http.ResponseWriter, alertData template.Data, publisher eventing.Publisher, auditAdapter *audit.AuditAdapter, deduper *adapter.Deduper) {
+func handlePrometheusAlerts(ctx context.Context, logger *zap.Logger, w http.ResponseWriter, alertData template.Data, p publisher.Publisher, auditAdapter *audit.AuditAdapter, deduper *adapter.Deduper) {
 	logger.Debug("Processing Prometheus alert",
 		zap.String("receiver", alertData.Receiver),
 		zap.String("status", alertData.Status),
@@ -255,7 +256,7 @@ func handlePrometheusAlerts(ctx context.Context, logger *zap.Logger, w http.Resp
 		return
 	}
 
-	successCount, err := nats.PublishEvents(ctx, logger, publisher, eventPerSubjects, auditAdapter)
+	successCount, err := nats.PublishEvents(ctx, logger, p, eventPerSubjects, auditAdapter)
 	switch {
 	case err != nil:
 		w.WriteHeader(http.StatusAccepted)
@@ -277,7 +278,7 @@ func handlePrometheusAlerts(ctx context.Context, logger *zap.Logger, w http.Resp
 func subjectFromVarsEvent(event eventing.MdaiEvent, varkey string) string {
 	return strings.Join([]string{
 		"var",
-		enats.SafeToken(event.HubName),
-		enats.SafeToken(varkey),
+		config.SafeToken(event.HubName),
+		config.SafeToken(varkey),
 	}, ".")
 }
