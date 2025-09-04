@@ -10,7 +10,6 @@ import (
 	"github.com/decisiveai/mdai-data-core/eventing/publisher"
 	datacorekube "github.com/decisiveai/mdai-data-core/kube"
 	"github.com/decisiveai/mdai-gateway/internal/adapter"
-	"github.com/decisiveai/mdai-gateway/internal/opamp"
 	"github.com/valkey-io/valkey-go"
 	"go.uber.org/zap"
 )
@@ -22,7 +21,6 @@ type HandlerDeps struct {
 	EventPublisher      publisher.Publisher
 	ConfigMapController *datacorekube.ConfigMapController
 	Deduper             *adapter.Deduper
-	OpAMPControlServer  *opamp.OpAMPControlServer
 	OpAMPHandler        http.HandlerFunc
 	OpAMPConnCtx        func(ctx context.Context, c net.Conn) context.Context
 }
