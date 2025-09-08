@@ -24,6 +24,8 @@ spec:
           value: "{{ .Values.deployment.containerPort }}"
         - name: VALKEY_AUDIT_STREAM_EXPIRY_MS
           value: "{{ .Values.auditStreamExpiryMs }}"
+        - name: VALKEY_AUDIT_STREAM_RETENTION
+          value: "{{ .Values.auditStreamRetention }}"
         - name: OTEL_EXPORTER_OTLP_ENDPOINT
           value: "{{ .Values.otelExporterOtlpEndpoint }}"
         - name: OTEL_SDK_DISABLED
@@ -45,3 +47,5 @@ spec:
             secretKeyRef:
               name: nats-secret
               key: NATS_PASSWORD
+        - name: LOG_LEVEL
+          value: "{{ .Values.logLevel }}"
