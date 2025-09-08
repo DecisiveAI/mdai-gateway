@@ -7,6 +7,8 @@ import (
 	"github.com/decisiveai/mdai-data-core/audit"
 	"github.com/decisiveai/mdai-data-core/eventing"
 	"github.com/decisiveai/mdai-data-core/eventing/publisher"
+	"github.com/decisiveai/mdai-gateway/internal/adapter"
+	"github.com/decisiveai/mdai-gateway/internal/nats"
 	"github.com/open-telemetry/opamp-go/protobufs"
 	"github.com/open-telemetry/opamp-go/server"
 	"github.com/open-telemetry/opamp-go/server/types"
@@ -20,28 +22,36 @@ const (
 	ingestStatusAttributeKey           = "ingest_status"
 	ingestStatusCompleted              = "completed"
 	replayIdNonIdentifyingAttributeKey = "replay_id"
+	hubNameNonIdentifyingAttributeKey  = "hub_name"
+	instanceIdIdentifyingAttributeKey  = "service.instance.id"
 )
+
+type OpAMPAgent struct {
+	instanceId string
+	replayId   string
+	hubName    string
+}
 
 type OpAMPControlServer struct {
 	logger         *zap.Logger
 	auditAdapter   *audit.AuditAdapter
 	eventPublisher publisher.Publisher
 
-	agentConnections   map[string]types.Connection
-	agentUIDToReplayId map[string]string
-	srv                server.OpAMPServer
-	logUnmarshaler     plog.ProtoUnmarshaler
+	agentConnections map[string]types.Connection
+	agentUidInfoMap  map[string]OpAMPAgent
+	srv              server.OpAMPServer
+	logUnmarshaler   plog.ProtoUnmarshaler
 }
 
 func NewOpAMPControlServer(logger *zap.Logger, auditAdapter *audit.AuditAdapter, eventPublisher publisher.Publisher) *OpAMPControlServer {
 	ctrl := &OpAMPControlServer{
-		logger:             logger,
-		auditAdapter:       auditAdapter,
-		eventPublisher:     eventPublisher,
-		agentUIDToReplayId: make(map[string]string),
-		agentConnections:   make(map[string]types.Connection),
-		srv:                server.New(nil),
-		logUnmarshaler:     plog.ProtoUnmarshaler{},
+		logger:           logger,
+		auditAdapter:     auditAdapter,
+		eventPublisher:   eventPublisher,
+		agentUidInfoMap:  make(map[string]OpAMPAgent),
+		agentConnections: make(map[string]types.Connection),
+		srv:              server.New(nil),
+		logUnmarshaler:   plog.ProtoUnmarshaler{},
 	}
 	return ctrl
 }
@@ -69,7 +79,7 @@ func (ctrl *OpAMPControlServer) OnMessage(ctx context.Context, conn types.Connec
 	ctrl.agentConnections[uid] = conn
 
 	if msg.AgentDescription != nil {
-		ctrl.TryHarvestReplayIdFromAgentDescription(msg, uid)
+		ctrl.TryHarvestAgentInfoesFromAgentDescription(msg, uid)
 	}
 
 	if msg.CustomMessage != nil && msg.CustomMessage.Capability == s3ReceiverCapabilityKey {
@@ -78,12 +88,22 @@ func (ctrl *OpAMPControlServer) OnMessage(ctx context.Context, conn types.Connec
 	return &protobufs.ServerToAgent{}
 }
 
-func (ctrl *OpAMPControlServer) TryHarvestReplayIdFromAgentDescription(msg *protobufs.AgentToServer, uid string) {
-	for _, attr := range (*msg.AgentDescription).NonIdentifyingAttributes {
-		if attr.GetKey() == replayIdNonIdentifyingAttributeKey {
-			ctrl.agentUIDToReplayId[uid] = attr.GetValue().GetStringValue()
+func (ctrl *OpAMPControlServer) TryHarvestAgentInfoesFromAgentDescription(msg *protobufs.AgentToServer, uid string) {
+	agent := OpAMPAgent{}
+	for _, attr := range (*msg.AgentDescription).IdentifyingAttributes {
+		if attr.GetKey() == instanceIdIdentifyingAttributeKey {
+			agent.instanceId = attr.GetValue().GetStringValue()
 		}
 	}
+	for _, attr := range (*msg.AgentDescription).NonIdentifyingAttributes {
+		if attr.GetKey() == replayIdNonIdentifyingAttributeKey {
+			agent.replayId = attr.GetValue().GetStringValue()
+		}
+		if attr.GetKey() == hubNameNonIdentifyingAttributeKey {
+			agent.hubName = attr.GetValue().GetStringValue()
+		}
+	}
+	ctrl.agentUidInfoMap[uid] = agent
 }
 
 func (ctrl *OpAMPControlServer) HandleS3ReceiverMessage(ctx context.Context, agentID string, msg *protobufs.AgentToServer) {
@@ -104,25 +124,39 @@ func (ctrl *OpAMPControlServer) TryDigForCompletionAndExecuteHandler(ctx context
 				attributes := logRecord.Attributes().All()
 				for key, val := range attributes {
 					if key == ingestStatusAttributeKey && val.AsString() == ingestStatusCompleted {
-						ctrl.logger.Info("Replay DONE", zap.String("replay_id", ctrl.agentUIDToReplayId[agentID]))
-						// Do the execute handler part
-						subject := "replay.success"
-						event := eventing.MdaiEvent{
-							Name:     subject,
-							Source:   "Replay Collector",
-							SourceID: agentID,
-							Payload:  fmt.Sprintf(`{"replayId": "%s"}`, ctrl.agentUIDToReplayId[agentID]),
-						}
-						event.ApplyDefaults()
-						if err := ctrl.eventPublisher.Publish(ctx, event, subject); err != nil {
-							ctrl.logger.Error("Failed to publish event", zap.Error(err), zap.String("replay_id", ctrl.agentUIDToReplayId[agentID]), zap.String("subject", subject))
-						}
-
+						ctrl.PublishCompletionEvent(ctx, agentID)
 						continue
 					}
 				}
 			}
 		}
+	}
+}
+
+func (ctrl *OpAMPControlServer) PublishCompletionEvent(ctx context.Context, agentID string) {
+	agent := ctrl.agentUidInfoMap[agentID]
+	subject := eventing.NewMdaiEventSubject(eventing.ReplayEventType, fmt.Sprintf("%s.%s", agent.hubName, "complete"))
+	event := eventing.MdaiEvent{
+		Name:     "Replay Complete",
+		Source:   eventing.BufferReplaySource,
+		SourceID: agent.instanceId,
+		Payload:  fmt.Sprintf(`{"replayId": "%s"}`, agent.replayId),
+		HubName:  agent.hubName,
+	}
+	event.ApplyDefaults()
+	eventsPerSubject := []adapter.EventPerSubject{
+		{
+			Event:   event,
+			Subject: subject,
+		},
+	}
+	if _, err := nats.PublishEvents(ctx, ctrl.logger, ctrl.eventPublisher, eventsPerSubject, ctrl.auditAdapter); err != nil {
+		ctrl.logger.Error(
+			"Failed to publish event",
+			zap.Error(err),
+			zap.String("replay_id", agent.replayId),
+			zap.String("subject", subject.String()),
+		)
 	}
 }
 

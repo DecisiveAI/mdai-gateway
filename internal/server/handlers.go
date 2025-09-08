@@ -178,7 +178,7 @@ func handleSetDeleteVariables(ctx context.Context, deps HandlerDeps) http.Handle
 			zap.String("id", event.ID),
 			zap.String("name", event.Name),
 			zap.String("source", event.Source),
-			zap.String("subject", subject),
+			zap.String("subject", subject.String()),
 		)
 
 		if _, err := nats.PublishEvents(ctx, deps.Logger, deps.EventPublisher, []adapter.EventPerSubject{{Event: *event, Subject: subject}}, deps.AuditAdapter); err != nil {
@@ -275,10 +275,12 @@ func handlePrometheusAlerts(ctx context.Context, logger *zap.Logger, w http.Resp
 }
 
 // subjectFromAlert creates a subject from a mdai event and variable key. Prefix has to be added later at eventing package.
-func subjectFromVarsEvent(event eventing.MdaiEvent, varkey string) string {
-	return strings.Join([]string{
-		"var",
-		config.SafeToken(event.HubName),
-		config.SafeToken(varkey),
-	}, ".")
+func subjectFromVarsEvent(event eventing.MdaiEvent, varkey string) eventing.MdaiEventSubject {
+	return eventing.MdaiEventSubject{
+		Stream: eventing.VarEventType,
+		Path: strings.Join([]string{
+			config.SafeToken(event.HubName),
+			config.SafeToken(varkey),
+		}, "."),
+	}
 }

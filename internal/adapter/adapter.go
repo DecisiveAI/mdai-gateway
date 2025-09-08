@@ -8,5 +8,5 @@ type EventAdapter interface {
 
 type EventPerSubject struct {
 	Event   eventing.MdaiEvent
-	Subject string
+	Subject eventing.MdaiEventSubject
 }

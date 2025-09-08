@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 	"github.com/decisiveai/mdai-data-core/audit"
+	datacorepublisher "github.com/decisiveai/mdai-data-core/eventing/publisher"
 	datacorekube "github.com/decisiveai/mdai-data-core/kube"
 	"github.com/decisiveai/mdai-data-core/valkey"
 	"github.com/decisiveai/mdai-gateway/internal/adapter"
-	"github.com/decisiveai/mdai-gateway/internal/nats"
 	"github.com/decisiveai/mdai-gateway/internal/opamp"
 	"github.com/decisiveai/mdai-gateway/internal/server"
 	"go.uber.org/zap"
@@ -37,7 +37,10 @@ func initDependencies(ctx context.Context, cfg *Config, logger *zap.Logger) (dep
 
 	auditAdapter := audit.NewAuditAdapter(logger, valkeyClient)
 
-	publisher := nats.Init(ctx, logger, publisherClientName)
+	publisher, err := datacorepublisher.NewPublisher(ctx, logger, publisherClientName)
+	if err != nil {
+		logger.Fatal("failed to start NATS publisher", zap.Error(err))
+	}
 
 	cmController, err := startConfigMapControllerWithClient(logger, datacorekube.ManualEnvConfigMapType, corev1.NamespaceAll)
 	if err != nil {

@@ -62,7 +62,7 @@ func (w *PromAlertWrapper) ToMdaiEvents() ([]EventPerSubject, int, error) {
 		}
 
 		subj := subjectFromAlert(alert, event.HubName)
-		w.Logger.Debug("subject for alert", zap.String("alert_name", alert.Annotations[AlertName]), zap.String("subject", subj))
+		w.Logger.Debug("subject for alert", zap.String("alert_name", alert.Annotations[AlertName]), zap.String("subject", subj.String()))
 
 		eventPerSubject := EventPerSubject{
 			Event:   event,
@@ -76,12 +76,14 @@ func (w *PromAlertWrapper) ToMdaiEvents() ([]EventPerSubject, int, error) {
 }
 
 // subjectFromAlert creates a subject from an alert. Prefix has to be added later at eventing package.
-func subjectFromAlert(alert template.Alert, hubName string) string {
-	return strings.Join([]string{
-		"alert",
-		hubName,
-		config.SafeToken(alert.Fingerprint),
-	}, ".")
+func subjectFromAlert(alert template.Alert, hubName string) eventing.MdaiEventSubject {
+	return eventing.MdaiEventSubject{
+		Stream: eventing.AlertEventType,
+		Path: strings.Join([]string{
+			hubName,
+			config.SafeToken(alert.Fingerprint),
+		}, "."),
+	}
 }
 
 func (w *PromAlertWrapper) toMdaiEvent(alert template.Alert) (eventing.MdaiEvent, error) {
