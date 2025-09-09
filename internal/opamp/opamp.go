@@ -115,18 +115,22 @@ func (ctrl *OpAMPControlServer) HandleS3ReceiverMessage(ctx context.Context, age
 }
 
 func (ctrl *OpAMPControlServer) TryDigForCompletionAndExecuteHandler(ctx context.Context, agentID string, logMessage plog.Logs) {
-	resourceLogs := logMessage.ResourceLogs().All()
-	for _, resourceLog := range resourceLogs {
-		scopeLogs := resourceLog.ScopeLogs().All()
-		for _, scopeLog := range scopeLogs {
-			logRecords := scopeLog.LogRecords().All()
-			for _, logRecord := range logRecords {
-				attributes := logRecord.Attributes().All()
-				for key, val := range attributes {
-					if key == ingestStatusAttributeKey && val.AsString() == ingestStatusCompleted {
-						ctrl.PublishCompletionEvent(ctx, agentID)
-						continue
-					}
+	foundCompletionLog := false
+	resourceLogs := logMessage.ResourceLogs()
+	for i := 0; i < resourceLogs.Len() && !foundCompletionLog; i++ {
+		resourceLog := resourceLogs.At(i)
+		scopeLogs := resourceLog.ScopeLogs()
+		for j := 0; i < scopeLogs.Len() && !foundCompletionLog; i++ {
+			scopeLog := scopeLogs.At(j)
+			logRecords := scopeLog.LogRecords()
+			rlen := logRecords.Len()
+			for k := 0; k < rlen; k++ {
+				logRecord := logRecords.At(k)
+				attributes := logRecord.Attributes()
+				if attribute, ok := attributes.Get(ingestStatusAttributeKey); ok && attribute.AsString() == ingestStatusCompleted {
+					ctrl.PublishCompletionEvent(ctx, agentID)
+					foundCompletionLog = true
+					break
 				}
 			}
 		}
