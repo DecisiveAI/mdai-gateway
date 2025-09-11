@@ -277,7 +277,7 @@ func handlePrometheusAlerts(ctx context.Context, logger *zap.Logger, w http.Resp
 // subjectFromAlert creates a subject from a mdai event and variable key. Prefix has to be added later at eventing package.
 func subjectFromVarsEvent(event eventing.MdaiEvent, varkey string) eventing.MdaiEventSubject {
 	return eventing.MdaiEventSubject{
-		Stream: eventing.VarEventType,
+		Type: eventing.VarEventType,
 		Path: strings.Join([]string{
 			config.SafeToken(event.HubName),
 			config.SafeToken(varkey),

@@ -78,7 +78,7 @@ func (w *PromAlertWrapper) ToMdaiEvents() ([]EventPerSubject, int, error) {
 // subjectFromAlert creates a subject from an alert. Prefix has to be added later at eventing package.
 func subjectFromAlert(alert template.Alert, hubName string) eventing.MdaiEventSubject {
 	return eventing.MdaiEventSubject{
-		Stream: eventing.AlertEventType,
+		Type: eventing.AlertEventType,
 		Path: strings.Join([]string{
 			hubName,
 			config.SafeToken(alert.Fingerprint),
