@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"testing"
 	"time"
 
@@ -178,6 +179,7 @@ func setupMocks(t *testing.T, clientset kubernetes.Interface) HandlerDeps {
 		EventPublisher:      eventPublisher,
 		ConfigMapController: cmController,
 		Deduper:             adapter.NewDeduper(),
+		OpAMPHandler:        func(writer http.ResponseWriter, request *http.Request) {},
 	}
 	return deps
 }

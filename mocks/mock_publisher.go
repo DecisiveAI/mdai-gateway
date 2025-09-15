@@ -11,7 +11,7 @@ type MockPublisher struct {
 	mock.Mock
 }
 
-func (m *MockPublisher) Publish(ctx context.Context, event eventing.MdaiEvent, subject string) error {
+func (m *MockPublisher) Publish(ctx context.Context, event eventing.MdaiEvent, subject eventing.MdaiEventSubject) error {
 	args := m.Called(ctx, event, subject)
 	return args.Error(0)
 }
