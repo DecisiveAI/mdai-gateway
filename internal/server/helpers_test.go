@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
+	"github.com/decisiveai/mdai-gateway/internal/opamp"
 	"testing"
 	"time"
 
@@ -172,6 +172,9 @@ func setupMocks(t *testing.T, clientset kubernetes.Interface) HandlerDeps {
 	require.NotNil(t, cmController)
 	t.Cleanup(func() { cmController.Stop() })
 
+	opampServer := opamp.NewOpAMPControlServer(zap.NewNop(), auditAdapter, eventPublisher)
+	opampHandler, _, err := opampServer.GetOpAMPHTTPHandler()
+
 	deps := HandlerDeps{
 		Logger:              zap.NewNop(),
 		ValkeyClient:        valkeyClient,
@@ -179,7 +182,7 @@ func setupMocks(t *testing.T, clientset kubernetes.Interface) HandlerDeps {
 		EventPublisher:      eventPublisher,
 		ConfigMapController: cmController,
 		Deduper:             adapter.NewDeduper(),
-		OpAMPHandler:        func(writer http.ResponseWriter, request *http.Request) {},
+		OpAMPHandler:        opampHandler,
 	}
 	return deps
 }
