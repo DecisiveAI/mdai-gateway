@@ -28,15 +28,6 @@ func initDependencies(ctx context.Context) (deps server.HandlerDeps, cleanup fun
 
 	auditAdapter := audit.NewAuditAdapter(app, valkeyClient)
 
-	publisher := nats.Init(ctx, app, publisherClientName)
-
-	cmController, err := startConfigMapControllerWithClient(app, datacorekube.ManualEnvConfigMapType, corev1.NamespaceAll)
-	if err != nil {
-		app.Fatal("failed to initialize valkey client", zap.Error(err))
-	}
-
-	auditAdapter := audit.NewAuditAdapter(app, valkeyClient)
-
 	publisher, err := datacorepublisher.NewPublisher(ctx, app, publisherClientName)
 	if err != nil {
 		app.Fatal("failed to start NATS publisher", zap.Error(err))
