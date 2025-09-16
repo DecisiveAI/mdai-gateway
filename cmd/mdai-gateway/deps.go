@@ -6,6 +6,7 @@ import (
 	"github.com/decisiveai/mdai-data-core/audit"
 	datacorepublisher "github.com/decisiveai/mdai-data-core/eventing/publisher"
 	datacorekube "github.com/decisiveai/mdai-data-core/kube"
+	"github.com/decisiveai/mdai-data-core/service"
 	"github.com/decisiveai/mdai-data-core/valkey"
 	"github.com/decisiveai/mdai-gateway/internal/adapter"
 	"github.com/decisiveai/mdai-gateway/internal/opamp"
@@ -17,46 +18,45 @@ import (
 
 const publisherClientName = "publisher-mdai-gateway"
 
-func initDependencies(ctx context.Context, cfg *Config, logger *zap.Logger) (deps server.HandlerDeps, cleanup func()) { //nolint:nonamedreturns
-	var (
-		otelShutdown shutdownFunc
-		err          error
-	)
+func initDependencies(ctx context.Context) (deps server.HandlerDeps, cleanup func()) { //nolint:nonamedreturns
+	sys, app, teardown := service.InitLogger(ctx, serviceName)
 
-	if !cfg.OTelDisabled {
-		otelShutdown, err = setupOTelSDK(ctx, logger)
-		if err != nil {
-			logger.Fatal("Error setting up OpenTelemetry SDK", zap.Error(err))
-		}
+	valkeyClient, err := valkey.Init(ctx, app, valkey.NewConfig())
+	if err != nil {
+		app.Fatal("failed to initialize valkey client", zap.Error(err))
 	}
 
-	valkeyClient, err := valkey.Init(ctx, logger, valkey.NewConfig())
+	auditAdapter := audit.NewAuditAdapter(app, valkeyClient)
+
+	publisher := nats.Init(ctx, app, publisherClientName)
+
+	cmController, err := startConfigMapControllerWithClient(app, datacorekube.ManualEnvConfigMapType, corev1.NamespaceAll)
 	if err != nil {
-		logger.Fatal("failed to initialize valkey client", zap.Error(err))
+		app.Fatal("failed to initialize valkey client", zap.Error(err))
 	}
 
-	auditAdapter := audit.NewAuditAdapter(logger, valkeyClient)
+	auditAdapter := audit.NewAuditAdapter(app, valkeyClient)
 
-	publisher, err := datacorepublisher.NewPublisher(ctx, logger, publisherClientName)
+	publisher, err := datacorepublisher.NewPublisher(ctx, app, publisherClientName)
 	if err != nil {
-		logger.Fatal("failed to start NATS publisher", zap.Error(err))
+		app.Fatal("failed to start NATS publisher", zap.Error(err))
 	}
 
-	cmController, err := startConfigMapControllerWithClient(logger, datacorekube.ManualEnvConfigMapType, corev1.NamespaceAll)
+	cmController, err := startConfigMapControllerWithClient(app, datacorekube.ManualEnvConfigMapType, corev1.NamespaceAll)
 	if err != nil {
-		logger.Fatal("failed to start config map controller", zap.Error(err))
+		app.Fatal("failed to start config map controller", zap.Error(err))
 	}
 
 	deduper := adapter.NewDeduper()
 
-	opampServer := opamp.NewOpAMPControlServer(logger, auditAdapter, publisher)
+	opampServer := opamp.NewOpAMPControlServer(app, auditAdapter, publisher)
 	opampHandler, connCtx, err := opampServer.GetOpAMPHTTPHandler()
 	if err != nil {
-		logger.Fatal("failed to start OpAMP server", zap.Error(err))
+		app.Fatal("failed to start OpAMP server", zap.Error(err))
 	}
 
 	deps = server.HandlerDeps{
-		Logger:              logger,
+		Logger:              app,
 		ValkeyClient:        valkeyClient,
 		EventPublisher:      publisher,
 		ConfigMapController: cmController,
@@ -67,16 +67,12 @@ func initDependencies(ctx context.Context, cfg *Config, logger *zap.Logger) (dep
 	}
 
 	cleanup = func() {
-		logger.Info("Closing client connections...")
+		app.Info("Closing client connections...")
 		valkeyClient.Close()
 		_ = publisher.Close()
-		if otelShutdown != nil {
-			if err := otelShutdown(ctx); err != nil {
-				logger.Error("OTEL SDK did not shut down gracefully!", zap.Error(err))
-			}
-		}
 		cmController.Stop()
-		logger.Info("Cleanup complete.")
+		sys.Info("Cleanup complete.")
+		teardown()
 	}
 
 	return deps, cleanup

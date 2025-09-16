@@ -4,27 +4,26 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/decisiveai/mdai-data-core/helpers"
 	"github.com/decisiveai/mdai-gateway/internal/server"
 	"go.uber.org/zap"
 )
 
+const serviceName = "github.com/decisiveai/mdai-gateway"
+
 func main() {
 	ctx := context.Background()
 
-	_, logger, teardown := initLogger()
-	defer teardown()
-
-	cfg := loadConfig(logger)
-
-	deps, cleanup := initDependencies(ctx, cfg, logger)
+	deps, cleanup := initDependencies(ctx)
 	defer cleanup()
 
 	router := server.NewRouter(ctx, deps)
 
-	logger.Info("Starting server", zap.String("address", ":"+cfg.HTTPPort))
+	httpPort := helpers.GetEnvVariableWithDefault(httpPortEnvVarKey, defaultHTTPPort)
+	deps.Logger.Info("Starting server", zap.String("address", ":"+httpPort))
 
 	httpServer := &http.Server{
-		Addr:              ":" + cfg.HTTPPort,
+		Addr:              ":" + httpPort,
 		Handler:           router,
 		ReadHeaderTimeout: defaultReadHeaderTimeout,
 		ReadTimeout:       defaultReadTimeout,
@@ -33,5 +32,5 @@ func main() {
 		ConnContext:       deps.OpAMPConnCtx,
 	}
 
-	logger.Fatal("failed to start server", zap.Error(httpServer.ListenAndServe()))
+	deps.Logger.Fatal("failed to start server", zap.Error(httpServer.ListenAndServe()))
 }
