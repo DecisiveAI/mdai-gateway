@@ -139,12 +139,12 @@ func (ctrl *OpAMPControlServer) DigForCompletionAndPublish(ctx context.Context, 
 				logRecord := logRecords.At(k)
 				attributes := logRecord.Attributes()
 				if attribute, ok := attributes.Get(ingestStatusAttributeKey); ok {
-					attrValue := attribute.AsString()
-					switch attrValue {
+					statusAttrValue := attribute.AsString()
+					switch statusAttrValue {
 					case ingestStatusCompleted:
 						fallthrough
 					case ingestStatusFailed:
-						ctrl.PublishCompletionEvent(ctx, agentID, attrValue)
+						ctrl.PublishCompletionEvent(ctx, agentID, statusAttrValue)
 						foundCompletionLog = true
 						break
 					}

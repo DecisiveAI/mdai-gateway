@@ -3,41 +3,40 @@ package opamp
 import (
 	"context"
 	"github.com/decisiveai/mdai-data-core/audit"
-	"github.com/decisiveai/mdai-data-core/eventing/publisher"
-	natsserver "github.com/nats-io/nats-server/v2/server"
+	"github.com/decisiveai/mdai-data-core/eventing"
 	"github.com/open-telemetry/opamp-go/protobufs"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	valkeymock "github.com/valkey-io/valkey-go/mock"
+	"go.opentelemetry.io/collector/pdata/plog"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 	"testing"
-	"time"
 )
 
 type OpampDeps struct {
-	Logger         *zap.Logger
-	EventPublisher publisher.Publisher
-	OpAmpServer    OpAMPControlServer
+	MockPublisher MockPublisher
+	OpAmpServer   OpAMPControlServer
 }
 
-func runJetStream(t *testing.T) *natsserver.Server {
-	t.Helper()
-	tempDir := t.TempDir()
-	ns, err := natsserver.NewServer(&natsserver.Options{
-		JetStream: true,
-		StoreDir:  tempDir,
-		Port:      -1, // pick a random free port
-	})
-	if err != nil {
-		t.Fatalf("new server: %v", err)
+type MockPublisher struct {
+	received *[]map[string]string
+}
+
+func (mockPublisher MockPublisher) Publish(ctx context.Context, event eventing.MdaiEvent, subject eventing.MdaiEventSubject) error {
+	newReceived := map[string]string{
+		"subject":  subject.String(),
+		"name":     event.Name,
+		"payload":  event.Payload,
+		"source":   event.Source,
+		"sourceId": event.SourceID,
+		"hubName":  event.HubName,
 	}
-	go ns.Start()
-	if !ns.ReadyForConnections(5 * time.Second) {
-		t.Fatal("nats-server did not start")
-	}
-	t.Setenv("NATS_URL", ns.ClientURL())
-	return ns
+	*mockPublisher.received = append(*mockPublisher.received, newReceived)
+	return nil
+}
+
+func (MockPublisher MockPublisher) Close() error {
+	return nil
 }
 
 func setupMocks(t *testing.T) OpampDeps {
@@ -45,21 +44,19 @@ func setupMocks(t *testing.T) OpampDeps {
 
 	ctrl := gomock.NewController(t)
 	valkeyClient := valkeymock.NewClient(ctrl)
+	// We are not testing valkey here; that is a concern outside of our scope.
+	valkeyClient.EXPECT().Do(gomock.Any(), gomock.Any()).Return(valkeymock.Result(valkeymock.ValkeyString("sgood"))).AnyTimes()
 	auditAdapter := audit.NewAuditAdapter(zap.NewNop(), valkeyClient)
 
-	srv := runJetStream(t)
-	t.Cleanup(func() { srv.Shutdown() })
-	eventPublisher, err := publisher.NewPublisher(context.Background(), zap.NewNop(), "foo-publisher")
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = eventPublisher.Close() })
+	eventPublisher := MockPublisher{
+		received: &[]map[string]string{},
+	}
 
 	opampServer := NewOpAMPControlServer(zap.NewNop(), auditAdapter, eventPublisher)
-	//opampHandler, _, err := opampServer.GetOpAMPHTTPHandler()
 
 	deps := OpampDeps{
-		Logger:         zap.NewNop(),
-		EventPublisher: eventPublisher,
-		OpAmpServer:    *opampServer,
+		MockPublisher: eventPublisher,
+		OpAmpServer:   *opampServer,
 	}
 	return deps
 }
@@ -198,3 +195,65 @@ func TestHarvestAgentInfoesFromAgentDescription(t *testing.T) {
 	}
 }
 
+func MakeLogsWithAttributes(attributes map[string]any) plog.Logs {
+	logs := plog.NewLogs()
+	resourceLogs := logs.ResourceLogs().AppendEmpty()
+	scopeLogs := resourceLogs.ScopeLogs().AppendEmpty()
+	logRecord := scopeLogs.LogRecords().AppendEmpty()
+	logRecord.Attributes().FromRaw(attributes)
+	return logs
+}
+
+func TestDigForCompletionAndExecuteHandler(t *testing.T) {
+	deps := setupMocks(t)
+	opampServer := deps.OpAmpServer
+	agentId := "agent1"
+	opampServer.agentUidInfoMap = map[string]OpAMPAgent{
+		agentId: {
+			instanceId: "instance1",
+			replayId:   "replay1",
+			hubName:    "hub1",
+		},
+	}
+	tests := []struct {
+		description   string
+		logs          plog.Logs
+		expectedEvent map[string]string
+	}{
+		{
+			description: "complete has all attributes",
+			logs: MakeLogsWithAttributes(map[string]any{
+				ingestStatusAttributeKey: ingestStatusCompleted,
+			}),
+			expectedEvent: map[string]string{
+				"subject":  "replay.hub1.completed",
+				"name":     "replay-complete",
+				"payload":  "{\"replayId\":\"replay1\",\"replayResult\":\"completed\",\"replayerInstanceId\":\"instance1\"}",
+				"source":   "buffer-replay",
+				"sourceId": "instance1",
+				"hubName":  "hub1",
+			},
+		},
+		{
+			description: "failure all attributes",
+			logs: MakeLogsWithAttributes(map[string]any{
+				ingestStatusAttributeKey: ingestStatusFailed,
+			}),
+			expectedEvent: map[string]string{
+				"subject":  "replay.hub1.failed",
+				"name":     "replay-complete",
+				"payload":  "{\"replayId\":\"replay1\",\"replayResult\":\"failed\",\"replayerInstanceId\":\"instance1\"}",
+				"source":   "buffer-replay",
+				"sourceId": "instance1",
+				"hubName":  "hub1",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.description, func(t *testing.T) {
+			opampServer.DigForCompletionAndPublish(t.Context(), agentId, tt.logs)
+			assert.Contains(t, *(deps.MockPublisher.received), tt.expectedEvent)
+		})
+	}
+}
