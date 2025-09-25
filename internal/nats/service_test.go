@@ -109,7 +109,10 @@ func TestPublishEvents(t *testing.T) {
 		HubName: "hub",
 	}
 
-	subject := "test.subject"
+	subject := eventing.MdaiEventSubject{
+		Type: "test",
+		Path: "subject",
+	}
 
 	t.Run("all success", func(t *testing.T) {
 		mockPub := &mocks.MockPublisher{}
