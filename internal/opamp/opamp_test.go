@@ -8,6 +8,7 @@ import (
 	"github.com/decisiveai/mdai-data-core/eventing"
 	"github.com/open-telemetry/opamp-go/protobufs"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	valkeymock "github.com/valkey-io/valkey-go/mock"
 	"go.opentelemetry.io/collector/pdata/plog"
 	"go.uber.org/mock/gomock"
@@ -210,20 +211,23 @@ func MakeLogsWithAttributes(attributes map[string]any) plog.Logs {
 func TestDigForCompletionAndExecuteHandler(t *testing.T) {
 	deps := setupMocks(t)
 	opampServer := deps.OpAmpServer
-	agentID := "agent1"
-	opampServer.agentUIDInfoMap = map[string]OpAMPAgent{
-		agentID: {
-			instanceID: "instance1",
-			replayID:   "replay1",
-			hubName:    "hub1",
-		},
-	}
 	tests := []struct {
+		agentID       string
+		agentInfoes   map[string]OpAMPAgent
 		description   string
 		logs          plog.Logs
+		expectErr     bool
 		expectedEvent map[string]string
 	}{
 		{
+			agentID: "agent1",
+			agentInfoes: map[string]OpAMPAgent{
+				"agent1": {
+					instanceID: "instance1",
+					replayID:   "replay1",
+					hubName:    "hub1",
+				},
+			},
 			description: "complete has all attributes",
 			logs: MakeLogsWithAttributes(map[string]any{
 				ingestStatusAttributeKey: ingestStatusCompleted,
@@ -238,6 +242,14 @@ func TestDigForCompletionAndExecuteHandler(t *testing.T) {
 			},
 		},
 		{
+			agentID: "agent1",
+			agentInfoes: map[string]OpAMPAgent{
+				"agent1": {
+					instanceID: "instance1",
+					replayID:   "replay1",
+					hubName:    "hub1",
+				},
+			},
 			description: "failure all attributes",
 			logs: MakeLogsWithAttributes(map[string]any{
 				ingestStatusAttributeKey: ingestStatusFailed,
@@ -251,12 +263,54 @@ func TestDigForCompletionAndExecuteHandler(t *testing.T) {
 				"hubName":  "hub1",
 			},
 		},
+		{
+			agentID: "agent1",
+			agentInfoes: map[string]OpAMPAgent{
+				"agent1": {
+					instanceID: "instance1",
+					replayID:   "replay1",
+				},
+			},
+			description: "missing hub name",
+			logs: MakeLogsWithAttributes(map[string]any{
+				ingestStatusAttributeKey: ingestStatusFailed,
+			}),
+			expectErr: true,
+		},
+		{
+			agentID: "agent1",
+			agentInfoes: map[string]OpAMPAgent{
+				"agent1": {
+					instanceID: "instance1",
+					hubName:    "hub1",
+				},
+			},
+			description: "missing replay id",
+			logs: MakeLogsWithAttributes(map[string]any{
+				ingestStatusAttributeKey: ingestStatusFailed,
+			}),
+			expectErr: true,
+		},
+		{
+			agentInfoes: map[string]OpAMPAgent{},
+			description: "missing agent",
+			logs: MakeLogsWithAttributes(map[string]any{
+				ingestStatusAttributeKey: ingestStatusFailed,
+			}),
+			expectErr: true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.description, func(t *testing.T) {
-			opampServer.DigForCompletionAndPublish(t.Context(), agentID, tt.logs)
-			assert.Contains(t, *(deps.MockPublisher.received), tt.expectedEvent)
+			opampServer.agentUIDInfoMap = tt.agentInfoes
+			err := opampServer.DigForCompletionAndPublish(t.Context(), tt.agentID, tt.logs)
+			if tt.expectErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				assert.Contains(t, *(deps.MockPublisher.received), tt.expectedEvent)
+			}
 		})
 	}
 }
