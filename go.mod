@@ -5,7 +5,7 @@ go 1.24.0
 toolchain go1.24.3
 
 require (
-	github.com/decisiveai/mdai-data-core v0.2.5
+	github.com/decisiveai/mdai-data-core v0.2.7
 	github.com/google/uuid v1.6.0
 	github.com/nats-io/nats-server/v2 v2.11.8
 	github.com/open-telemetry/opamp-go v0.22.0
