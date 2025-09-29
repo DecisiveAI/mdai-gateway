@@ -36,7 +36,9 @@ func (mockPublisher MockPublisher) Publish(ctx context.Context, event eventing.M
 	return nil
 }
 
-func (MockPublisher MockPublisher) Close() error {
+// (sigh) Linter, it's a mock method, okay?
+// nolint:revive
+func (mockPublisher MockPublisher) Close() error {
 	return nil
 }
 
@@ -75,13 +77,13 @@ func TestHarvestAgentInfoesFromAgentDescription(t *testing.T) {
 				AgentDescription: &protobufs.AgentDescription{
 					IdentifyingAttributes: []*protobufs.KeyValue{
 						{
-							Key:   instanceIdIdentifyingAttributeKey,
+							Key:   instanceIDIdentifyingAttributeKey,
 							Value: &(protobufs.AnyValue{Value: &protobufs.AnyValue_StringValue{StringValue: "instance1"}}),
 						},
 					},
 					NonIdentifyingAttributes: []*protobufs.KeyValue{
 						{
-							Key:   replayIdNonIdentifyingAttributeKey,
+							Key:   replayIDNonIdentifyingAttributeKey,
 							Value: &(protobufs.AnyValue{Value: &protobufs.AnyValue_StringValue{StringValue: "replay1"}}),
 						},
 						{
@@ -92,8 +94,8 @@ func TestHarvestAgentInfoesFromAgentDescription(t *testing.T) {
 				},
 			},
 			expected: OpAMPAgent{
-				instanceId: "instance1",
-				replayId:   "replay1",
+				instanceID: "instance1",
+				replayID:   "replay1",
 				hubName:    "hub1",
 			},
 			expectFound: true,
@@ -104,11 +106,11 @@ func TestHarvestAgentInfoesFromAgentDescription(t *testing.T) {
 				AgentDescription: &protobufs.AgentDescription{
 					IdentifyingAttributes: []*protobufs.KeyValue{
 						{
-							Key:   instanceIdIdentifyingAttributeKey,
+							Key:   instanceIDIdentifyingAttributeKey,
 							Value: &(protobufs.AnyValue{Value: &protobufs.AnyValue_StringValue{StringValue: "instance1"}}),
 						},
 						{
-							Key:   replayIdNonIdentifyingAttributeKey,
+							Key:   replayIDNonIdentifyingAttributeKey,
 							Value: &(protobufs.AnyValue{Value: &protobufs.AnyValue_StringValue{StringValue: "replay1"}}),
 						},
 						{
@@ -126,7 +128,7 @@ func TestHarvestAgentInfoesFromAgentDescription(t *testing.T) {
 							Value: &(protobufs.AnyValue{Value: &protobufs.AnyValue_StringValue{StringValue: "hub1"}}),
 						},
 						{
-							Key:   replayIdNonIdentifyingAttributeKey,
+							Key:   replayIDNonIdentifyingAttributeKey,
 							Value: &(protobufs.AnyValue{Value: &protobufs.AnyValue_StringValue{StringValue: "replay1"}}),
 						},
 						{
@@ -137,8 +139,8 @@ func TestHarvestAgentInfoesFromAgentDescription(t *testing.T) {
 				},
 			},
 			expected: OpAMPAgent{
-				instanceId: "instance1",
-				replayId:   "replay1",
+				instanceID: "instance1",
+				replayID:   "replay1",
 				hubName:    "hub1",
 			},
 			expectFound: true,
@@ -201,18 +203,18 @@ func MakeLogsWithAttributes(attributes map[string]any) plog.Logs {
 	resourceLogs := logs.ResourceLogs().AppendEmpty()
 	scopeLogs := resourceLogs.ScopeLogs().AppendEmpty()
 	logRecord := scopeLogs.LogRecords().AppendEmpty()
-	logRecord.Attributes().FromRaw(attributes)
+	_ = logRecord.Attributes().FromRaw(attributes)
 	return logs
 }
 
 func TestDigForCompletionAndExecuteHandler(t *testing.T) {
 	deps := setupMocks(t)
 	opampServer := deps.OpAmpServer
-	agentId := "agent1"
-	opampServer.agentUidInfoMap = map[string]OpAMPAgent{
-		agentId: {
-			instanceId: "instance1",
-			replayId:   "replay1",
+	agentID := "agent1"
+	opampServer.agentUIDInfoMap = map[string]OpAMPAgent{
+		agentID: {
+			instanceID: "instance1",
+			replayID:   "replay1",
 			hubName:    "hub1",
 		},
 	}
@@ -229,7 +231,7 @@ func TestDigForCompletionAndExecuteHandler(t *testing.T) {
 			expectedEvent: map[string]string{
 				"subject":  "replay.hub1.completed",
 				"name":     "replay-complete",
-				"payload":  `{"replayId":"replay1","replayResult":"completed","replayerInstanceId":"instance1"}`,
+				"payload":  `{"replay_id":"replay1","replay_result":"completed","replayer_instance_id":"instance1"}`,
 				"source":   "buffer-replay",
 				"sourceId": "instance1",
 				"hubName":  "hub1",
@@ -243,7 +245,7 @@ func TestDigForCompletionAndExecuteHandler(t *testing.T) {
 			expectedEvent: map[string]string{
 				"subject":  "replay.hub1.failed",
 				"name":     "replay-complete",
-				"payload":  `{"replayId":"replay1","replayResult":"failed","replayerInstanceId":"instance1"}`,
+				"payload":  `{"replay_id":"replay1","replay_result":"failed","replayer_instance_id":"instance1"}`,
 				"source":   "buffer-replay",
 				"sourceId": "instance1",
 				"hubName":  "hub1",
@@ -253,7 +255,7 @@ func TestDigForCompletionAndExecuteHandler(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.description, func(t *testing.T) {
-			opampServer.DigForCompletionAndPublish(t.Context(), agentId, tt.logs)
+			opampServer.DigForCompletionAndPublish(t.Context(), agentID, tt.logs)
 			assert.Contains(t, *(deps.MockPublisher.received), tt.expectedEvent)
 		})
 	}

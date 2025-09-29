@@ -23,14 +23,14 @@ const (
 	ingestStatusAttributeKey           = "ingest_status"
 	ingestStatusCompleted              = "completed"
 	ingestStatusFailed                 = "failed"
-	replayIdNonIdentifyingAttributeKey = "replay_id"
+	replayIDNonIdentifyingAttributeKey = "replay_id"
 	hubNameNonIdentifyingAttributeKey  = "hub_name"
-	instanceIdIdentifyingAttributeKey  = "service.instance.id"
+	instanceIDIdentifyingAttributeKey  = "service.instance.id"
 )
 
 type OpAMPAgent struct {
-	instanceId string
-	replayId   string
+	instanceID string
+	replayID   string
 	hubName    string
 }
 
@@ -40,7 +40,7 @@ type OpAMPControlServer struct {
 	eventPublisher publisher.Publisher
 
 	agentConnections map[string]types.Connection
-	agentUidInfoMap  map[string]OpAMPAgent
+	agentUIDInfoMap  map[string]OpAMPAgent
 	srv              server.OpAMPServer
 	logUnmarshaler   plog.ProtoUnmarshaler
 }
@@ -50,7 +50,7 @@ func NewOpAMPControlServer(logger *zap.Logger, auditAdapter *audit.AuditAdapter,
 		logger:           logger,
 		auditAdapter:     auditAdapter,
 		eventPublisher:   eventPublisher,
-		agentUidInfoMap:  make(map[string]OpAMPAgent),
+		agentUIDInfoMap:  make(map[string]OpAMPAgent),
 		agentConnections: make(map[string]types.Connection),
 		srv:              server.New(nil),
 		logUnmarshaler:   plog.ProtoUnmarshaler{},
@@ -82,7 +82,7 @@ func (ctrl *OpAMPControlServer) OnMessage(ctx context.Context, conn types.Connec
 
 	foundAgent, ok := harvestAgentInfoesFromAgentDescription(msg)
 	if ok {
-		ctrl.agentUidInfoMap[uid] = foundAgent
+		ctrl.agentUIDInfoMap[uid] = foundAgent
 	}
 
 	if msg.GetCustomMessage() != nil && msg.GetCustomMessage().GetCapability() == s3ReceiverCapabilityKey {
@@ -100,14 +100,14 @@ func harvestAgentInfoesFromAgentDescription(msg *protobufs.AgentToServer) (OpAMP
 	agent := OpAMPAgent{}
 	hasAgentAttributes := false
 	for _, attr := range agentDescription.GetIdentifyingAttributes() {
-		if attr.GetKey() == instanceIdIdentifyingAttributeKey {
-			agent.instanceId = attr.GetValue().GetStringValue()
+		if attr.GetKey() == instanceIDIdentifyingAttributeKey {
+			agent.instanceID = attr.GetValue().GetStringValue()
 			hasAgentAttributes = true
 		}
 	}
 	for _, attr := range agentDescription.GetNonIdentifyingAttributes() {
-		if attr.GetKey() == replayIdNonIdentifyingAttributeKey {
-			agent.replayId = attr.GetValue().GetStringValue()
+		if attr.GetKey() == replayIDNonIdentifyingAttributeKey {
+			agent.replayID = attr.GetValue().GetStringValue()
 			hasAgentAttributes = true
 		}
 		if attr.GetKey() == hubNameNonIdentifyingAttributeKey {
@@ -143,11 +143,11 @@ func (ctrl *OpAMPControlServer) DigForCompletionAndPublish(ctx context.Context, 
 					statusAttrValue := attribute.AsString()
 					switch statusAttrValue {
 					case ingestStatusCompleted:
-						fallthrough
+						ctrl.PublishCompletionEvent(ctx, agentID, statusAttrValue)
+						foundCompletionLog = true
 					case ingestStatusFailed:
 						ctrl.PublishCompletionEvent(ctx, agentID, statusAttrValue)
 						foundCompletionLog = true
-						break
 					}
 				}
 			}
@@ -156,38 +156,38 @@ func (ctrl *OpAMPControlServer) DigForCompletionAndPublish(ctx context.Context, 
 }
 
 type ReplayCompletionEventPayload struct {
-	ReplayId           string `json:"replayId"`
-	ReplayResult       string `json:"replayResult"`
-	ReplayerInstanceId string `json:"replayerInstanceId"`
+	ReplayID           string `json:"replay_id"`
+	ReplayResult       string `json:"replay_result"`
+	ReplayerInstanceID string `json:"replayer_instance_id"`
 }
 
 func (ctrl *OpAMPControlServer) PublishCompletionEvent(ctx context.Context, agentID string, outcome string) {
-	agent := ctrl.agentUidInfoMap[agentID]
+	agent := ctrl.agentUIDInfoMap[agentID]
 	subject := eventing.NewMdaiEventSubject(eventing.ReplayEventType, fmt.Sprintf("%s.%s", agent.hubName, outcome))
 
 	if agent.hubName == "" {
 		ctrl.logger.Error(
 			"Got replay completion event but have no hubName for OpAMP agent! Unable to publish completion event!",
-			zap.String("instanceId", agent.instanceId),
-			zap.String("replayId", agent.replayId),
+			zap.String("instanceId", agent.instanceID),
+			zap.String("replayId", agent.replayID),
 			zap.String("replayOutcome", outcome),
 		)
 		return
 	}
 
-	if agent.replayId == "" {
+	if agent.replayID == "" {
 		ctrl.logger.Warn(
 			"Got replay completion event but have no replay ID for OpAMP agent!",
-			zap.String("instanceId", agent.instanceId),
+			zap.String("instanceId", agent.instanceID),
 			zap.String("hubName", agent.hubName),
 			zap.String("replayOutcome", outcome),
 		)
 	}
 
 	payload := ReplayCompletionEventPayload{
-		ReplayId:           agent.replayId,
+		ReplayID:           agent.replayID,
 		ReplayResult:       outcome,
-		ReplayerInstanceId: agent.instanceId,
+		ReplayerInstanceID: agent.instanceID,
 	}
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
@@ -196,7 +196,7 @@ func (ctrl *OpAMPControlServer) PublishCompletionEvent(ctx context.Context, agen
 	event := eventing.MdaiEvent{
 		Name:     "replay-complete",
 		Source:   eventing.BufferReplaySource,
-		SourceID: agent.instanceId,
+		SourceID: agent.instanceID,
 		Payload:  string(payloadBytes),
 		HubName:  agent.hubName,
 	}
@@ -211,8 +211,8 @@ func (ctrl *OpAMPControlServer) PublishCompletionEvent(ctx context.Context, agen
 		ctrl.logger.Error(
 			"Failed to publish replay completion event",
 			zap.Error(err),
-			zap.String("instanceId", agent.instanceId),
-			zap.String("replayId", agent.replayId),
+			zap.String("instanceId", agent.instanceID),
+			zap.String("replayId", agent.replayID),
 			zap.String("replayOutcome", outcome),
 			zap.String("subject", subject.String()),
 		)
