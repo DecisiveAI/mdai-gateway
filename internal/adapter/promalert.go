@@ -79,10 +79,7 @@ func (w *PromAlertWrapper) ToMdaiEvents() ([]EventPerSubject, int, error) {
 func subjectFromAlert(alert template.Alert, hubName string) eventing.MdaiEventSubject {
 	return eventing.MdaiEventSubject{
 		Type: eventing.AlertEventType,
-		Path: strings.Join([]string{
-			hubName,
-			config.SafeToken(alert.Fingerprint),
-		}, "."),
+		Path: hubName + "." + config.SafeToken(alert.Fingerprint),
 	}
 }
 

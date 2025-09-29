@@ -1,11 +1,9 @@
 package server
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/decisiveai/mdai-gateway/internal/opamp"
 	"testing"
 	"time"
 
@@ -13,6 +11,7 @@ import (
 	"github.com/decisiveai/mdai-data-core/eventing/publisher"
 	datacorekube "github.com/decisiveai/mdai-data-core/kube"
 	"github.com/decisiveai/mdai-gateway/internal/adapter"
+	"github.com/decisiveai/mdai-gateway/internal/opamp"
 	natsserver "github.com/nats-io/nats-server/v2/server"
 	"github.com/stretchr/testify/require"
 	valkeymock "github.com/valkey-io/valkey-go/mock"
@@ -163,7 +162,7 @@ func setupMocks(t *testing.T, clientset kubernetes.Interface) HandlerDeps {
 
 	srv := runJetStream(t)
 	t.Cleanup(func() { srv.Shutdown() })
-	eventPublisher, err := publisher.NewPublisher(context.Background(), zap.NewNop(), publisherClientName)
+	eventPublisher, err := publisher.NewPublisher(t.Context(), zap.NewNop(), publisherClientName)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = eventPublisher.Close() })
 

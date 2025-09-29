@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+
 	"github.com/decisiveai/mdai-data-core/audit"
 	"github.com/decisiveai/mdai-data-core/eventing"
 	"github.com/decisiveai/mdai-data-core/eventing/publisher"
@@ -14,7 +16,6 @@ import (
 	"github.com/open-telemetry/opamp-go/server/types"
 	"go.opentelemetry.io/collector/pdata/plog"
 	"go.uber.org/zap"
-	"net/http"
 )
 
 const (
@@ -76,7 +77,7 @@ func (ctrl *OpAMPControlServer) GetOpAMPHTTPHandler() (http.HandlerFunc, server.
 }
 
 func (ctrl *OpAMPControlServer) OnMessage(ctx context.Context, conn types.Connection, msg *protobufs.AgentToServer) *protobufs.ServerToAgent {
-	uid := string(msg.InstanceUid)
+	uid := string(msg.GetInstanceUid())
 	ctrl.agentConnections[uid] = conn
 
 	foundAgent, ok := harvestAgentInfoesFromAgentDescription(msg)
@@ -84,27 +85,27 @@ func (ctrl *OpAMPControlServer) OnMessage(ctx context.Context, conn types.Connec
 		ctrl.agentUidInfoMap[uid] = foundAgent
 	}
 
-	if msg.CustomMessage != nil && msg.CustomMessage.Capability == s3ReceiverCapabilityKey {
+	if msg.GetCustomMessage() != nil && msg.GetCustomMessage().GetCapability() == s3ReceiverCapabilityKey {
 		ctrl.HandleS3ReceiverMessage(ctx, uid, msg)
 	}
 	return &protobufs.ServerToAgent{}
 }
 
 func harvestAgentInfoesFromAgentDescription(msg *protobufs.AgentToServer) (OpAMPAgent, bool) {
-	agentDescription := msg.AgentDescription
+	agentDescription := msg.GetAgentDescription()
 	if agentDescription == nil {
 		return OpAMPAgent{}, false
 	}
 
 	agent := OpAMPAgent{}
 	hasAgentAttributes := false
-	for _, attr := range agentDescription.IdentifyingAttributes {
+	for _, attr := range agentDescription.GetIdentifyingAttributes() {
 		if attr.GetKey() == instanceIdIdentifyingAttributeKey {
 			agent.instanceId = attr.GetValue().GetStringValue()
 			hasAgentAttributes = true
 		}
 	}
-	for _, attr := range agentDescription.NonIdentifyingAttributes {
+	for _, attr := range agentDescription.GetNonIdentifyingAttributes() {
 		if attr.GetKey() == replayIdNonIdentifyingAttributeKey {
 			agent.replayId = attr.GetValue().GetStringValue()
 			hasAgentAttributes = true
@@ -118,7 +119,7 @@ func harvestAgentInfoesFromAgentDescription(msg *protobufs.AgentToServer) (OpAMP
 }
 
 func (ctrl *OpAMPControlServer) HandleS3ReceiverMessage(ctx context.Context, agentID string, msg *protobufs.AgentToServer) {
-	logMessage, err := ctrl.logUnmarshaler.UnmarshalLogs(msg.CustomMessage.Data)
+	logMessage, err := ctrl.logUnmarshaler.UnmarshalLogs(msg.GetCustomMessage().GetData())
 	if err != nil {
 		ctrl.logger.Error("Failed to unmarshal OpAMP AWSS3 Receiver custom message logs.", zap.Error(err))
 	}
@@ -135,7 +136,7 @@ func (ctrl *OpAMPControlServer) DigForCompletionAndPublish(ctx context.Context, 
 			scopeLog := scopeLogs.At(j)
 			logRecords := scopeLog.LogRecords()
 			rlen := logRecords.Len()
-			for k := 0; k < rlen; k++ {
+			for k := range rlen {
 				logRecord := logRecords.At(k)
 				attributes := logRecord.Attributes()
 				if attribute, ok := attributes.Get(ingestStatusAttributeKey); ok {

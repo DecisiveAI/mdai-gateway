@@ -2,6 +2,8 @@ package opamp
 
 import (
 	"context"
+	"testing"
+
 	"github.com/decisiveai/mdai-data-core/audit"
 	"github.com/decisiveai/mdai-data-core/eventing"
 	"github.com/open-telemetry/opamp-go/protobufs"
@@ -10,7 +12,6 @@ import (
 	"go.opentelemetry.io/collector/pdata/plog"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
-	"testing"
 )
 
 type OpampDeps struct {

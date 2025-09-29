@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 
 	"github.com/decisiveai/mdai-data-core/audit"
 	"github.com/decisiveai/mdai-data-core/eventing"
@@ -278,9 +277,6 @@ func handlePrometheusAlerts(ctx context.Context, logger *zap.Logger, w http.Resp
 func subjectFromVarsEvent(event eventing.MdaiEvent, varkey string) eventing.MdaiEventSubject {
 	return eventing.MdaiEventSubject{
 		Type: eventing.VarEventType,
-		Path: strings.Join([]string{
-			config.SafeToken(event.HubName),
-			config.SafeToken(varkey),
-		}, "."),
+		Path: config.SafeToken(event.HubName) + "." + config.SafeToken(varkey),
 	}
 }
