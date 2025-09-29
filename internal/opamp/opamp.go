@@ -141,13 +141,10 @@ func (ctrl *OpAMPControlServer) DigForCompletionAndPublish(ctx context.Context, 
 				attributes := logRecord.Attributes()
 				if attribute, ok := attributes.Get(ingestStatusAttributeKey); ok {
 					statusAttrValue := attribute.AsString()
-					switch statusAttrValue {
-					case ingestStatusCompleted:
+					if statusAttrValue == ingestStatusCompleted || statusAttrValue == ingestStatusFailed {
 						ctrl.PublishCompletionEvent(ctx, agentID, statusAttrValue)
 						foundCompletionLog = true
-					case ingestStatusFailed:
-						ctrl.PublishCompletionEvent(ctx, agentID, statusAttrValue)
-						foundCompletionLog = true
+						break
 					}
 				}
 			}
