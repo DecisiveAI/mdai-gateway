@@ -152,7 +152,7 @@ func TestHandleGetVariables(t *testing.T) {
 				t.Helper()
 				key := "variable/mdaihub-sample/data_int"
 				m.EXPECT().
-					Do(t.Context(), valkeymock.Match("GET", key)).
+					Do(gomock.Any(), valkeymock.Match("GET", key)).
 					Return(valkeymock.Result(
 						valkeymock.ValkeyBlobString("3"),
 					))
@@ -168,7 +168,7 @@ func TestHandleGetVariables(t *testing.T) {
 				t.Helper()
 				key := "variable/mdaihub-sample/data_boolean"
 				m.EXPECT().
-					Do(t.Context(), valkeymock.Match("GET", key)).
+					Do(gomock.Any(), valkeymock.Match("GET", key)).
 					Return(valkeymock.Result(
 						valkeymock.ValkeyBlobString("true"),
 					))
@@ -184,7 +184,7 @@ func TestHandleGetVariables(t *testing.T) {
 				t.Helper()
 				key := "variable/mdaihub-sample/data_string"
 				m.EXPECT().
-					Do(t.Context(), valkeymock.Match("GET", key)).
+					Do(gomock.Any(), valkeymock.Match("GET", key)).
 					Return(valkeymock.Result(
 						valkeymock.ValkeyBlobString("foo"),
 					))
@@ -206,7 +206,7 @@ func TestHandleGetVariables(t *testing.T) {
 				t.Helper()
 				key := "variable/mdaihub-sample/data_set"
 				m.EXPECT().
-					Do(t.Context(), valkeymock.Match("SMEMBERS", key)).
+					Do(gomock.Any(), valkeymock.Match("SMEMBERS", key)).
 					Return(valkeymock.Result(
 						valkeymock.ValkeyArray(
 							valkeymock.ValkeyBlobString("manual_service_1"),
@@ -231,7 +231,7 @@ func TestHandleGetVariables(t *testing.T) {
 				t.Helper()
 				key := "variable/mdaihub-sample/data_map"
 				m.EXPECT().
-					Do(t.Context(), valkeymock.Match("HGETALL", key)).
+					Do(gomock.Any(), valkeymock.Match("HGETALL", key)).
 					Return(valkeymock.Result(valkeymock.ValkeyMap(map[string]valkey.ValkeyMessage{
 						"attrib.1": valkeymock.ValkeyBlobString("value1"),
 						"attrib.2": valkeymock.ValkeyBlobString("value2"),
@@ -249,7 +249,7 @@ func TestHandleGetVariables(t *testing.T) {
 				t.Helper()
 				key := "variable/mdaihub-sample/data_string"
 				m.EXPECT().
-					Do(t.Context(), valkeymock.Match("GET", key)).
+					Do(gomock.Any(), valkeymock.Match("GET", key)).
 					Return(valkeymock.Result(
 						valkeymock.ValkeyNil(),
 					))
@@ -804,8 +804,8 @@ func TestAudit_Success(t *testing.T) {
 	mux := NewRouter(t.Context(), deps)
 
 	deps.ValkeyClient.(*valkeymock.Client).EXPECT(). //nolint:forcetypeassert
-								Do(gomock.Any(), valkeymock.Match("XREVRANGE", audit.MdaiHubEventHistoryStreamName, "+", "-")).
-								Return(
+		Do(gomock.Any(), valkeymock.Match("XREVRANGE", audit.MdaiHubEventHistoryStreamName, "+", "-")).
+		Return(
 			valkeymock.Result(
 				valkeymock.ValkeyArray([]valkey.ValkeyMessage{ // Wrap outer result array
 					valkeymock.ValkeyArray([]valkey.ValkeyMessage{ // One entry
@@ -835,8 +835,8 @@ func TestAudit_Fail(t *testing.T) {
 	mux := NewRouter(t.Context(), deps)
 
 	deps.ValkeyClient.(*valkeymock.Client).EXPECT(). //nolint:forcetypeassert
-								Do(gomock.Any(), valkeymock.Match("XREVRANGE", audit.MdaiHubEventHistoryStreamName, "+", "-")).
-								Return(valkeymock.Result(valkeymock.ValkeyBlobString("foo"))).Times(1)
+		Do(gomock.Any(), valkeymock.Match("XREVRANGE", audit.MdaiHubEventHistoryStreamName, "+", "-")).
+		Return(valkeymock.Result(valkeymock.ValkeyBlobString("foo"))).Times(1)
 
 	req := httptest.NewRequest(http.MethodGet, "/audit", http.NoBody)
 	rr := httptest.NewRecorder()
