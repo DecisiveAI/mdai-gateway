@@ -804,8 +804,8 @@ func TestAudit_Success(t *testing.T) {
 	mux := NewRouter(t.Context(), deps)
 
 	deps.ValkeyClient.(*valkeymock.Client).EXPECT(). //nolint:forcetypeassert
-		Do(gomock.Any(), valkeymock.Match("XREVRANGE", audit.MdaiHubEventHistoryStreamName, "+", "-")).
-		Return(
+								Do(gomock.Any(), valkeymock.Match("XREVRANGE", audit.MdaiHubEventHistoryStreamName, "+", "-")).
+								Return(
 			valkeymock.Result(
 				valkeymock.ValkeyArray([]valkey.ValkeyMessage{ // Wrap outer result array
 					valkeymock.ValkeyArray([]valkey.ValkeyMessage{ // One entry
@@ -835,8 +835,8 @@ func TestAudit_Fail(t *testing.T) {
 	mux := NewRouter(t.Context(), deps)
 
 	deps.ValkeyClient.(*valkeymock.Client).EXPECT(). //nolint:forcetypeassert
-		Do(gomock.Any(), valkeymock.Match("XREVRANGE", audit.MdaiHubEventHistoryStreamName, "+", "-")).
-		Return(valkeymock.Result(valkeymock.ValkeyBlobString("foo"))).Times(1)
+								Do(gomock.Any(), valkeymock.Match("XREVRANGE", audit.MdaiHubEventHistoryStreamName, "+", "-")).
+								Return(valkeymock.Result(valkeymock.ValkeyBlobString("foo"))).Times(1)
 
 	req := httptest.NewRequest(http.MethodGet, "/audit", http.NoBody)
 	rr := httptest.NewRecorder()
