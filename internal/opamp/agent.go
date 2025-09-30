@@ -1,15 +1,15 @@
 package opamp
 
 import (
-	"github.com/open-telemetry/opamp-go/server/types"
 	"sync"
+
+	"github.com/open-telemetry/opamp-go/server/types"
 )
 
 type opAMPAgentInfo struct {
 	instanceID string
 	replayID   string
 	hubName    string
-	connection types.Connection
 }
 
 type opAMPConnectedAgents struct {
@@ -47,6 +47,8 @@ func (ca *opAMPConnectedAgents) setConnection(id string, connection types.Connec
 	ca.connections[id] = connection
 }
 
+// The concrete type for this in the OpAMP library is private
+// nolint:ireturn
 func (ca *opAMPConnectedAgents) getConnection(id string) (types.Connection, bool) {
 	ca.mu.Lock()
 	defer ca.mu.Unlock()
