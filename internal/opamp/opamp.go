@@ -29,32 +29,24 @@ const (
 	instanceIDIdentifyingAttributeKey  = "service.instance.id"
 )
 
-type OpAMPAgent struct {
-	instanceID string
-	replayID   string
-	hubName    string
-}
-
 type OpAMPControlServer struct {
 	logger         *zap.Logger
 	auditAdapter   *audit.AuditAdapter
 	eventPublisher publisher.Publisher
 
-	agentConnections map[string]types.Connection
-	agentUIDInfoMap  map[string]OpAMPAgent
-	srv              server.OpAMPServer
-	logUnmarshaler   plog.ProtoUnmarshaler
+	connectedAgents *opAMPConnectedAgents
+	srv             server.OpAMPServer
+	logUnmarshaler  plog.ProtoUnmarshaler
 }
 
 func NewOpAMPControlServer(logger *zap.Logger, auditAdapter *audit.AuditAdapter, eventPublisher publisher.Publisher) *OpAMPControlServer {
 	ctrl := &OpAMPControlServer{
-		logger:           logger,
-		auditAdapter:     auditAdapter,
-		eventPublisher:   eventPublisher,
-		agentUIDInfoMap:  make(map[string]OpAMPAgent),
-		agentConnections: make(map[string]types.Connection),
-		srv:              server.New(nil),
-		logUnmarshaler:   plog.ProtoUnmarshaler{},
+		logger:          logger,
+		auditAdapter:    auditAdapter,
+		eventPublisher:  eventPublisher,
+		connectedAgents: newOpAMPConnectedAgents(),
+		srv:             server.New(nil),
+		logUnmarshaler:  plog.ProtoUnmarshaler{},
 	}
 	return ctrl
 }
@@ -79,11 +71,11 @@ func (ctrl *OpAMPControlServer) GetOpAMPHTTPHandler() (http.HandlerFunc, server.
 
 func (ctrl *OpAMPControlServer) OnMessage(ctx context.Context, conn types.Connection, msg *protobufs.AgentToServer) *protobufs.ServerToAgent {
 	uid := string(msg.GetInstanceUid())
-	ctrl.agentConnections[uid] = conn
+	ctrl.connectedAgents.setConnection(uid, conn)
 
 	foundAgent, ok := harvestAgentInfoesFromAgentDescription(msg)
 	if ok {
-		ctrl.agentUIDInfoMap[uid] = foundAgent
+		ctrl.connectedAgents.setAgentDescription(uid, foundAgent)
 	}
 
 	if msg.GetCustomMessage() != nil && msg.GetCustomMessage().GetCapability() == s3ReceiverCapabilityKey {
@@ -94,13 +86,13 @@ func (ctrl *OpAMPControlServer) OnMessage(ctx context.Context, conn types.Connec
 	return &protobufs.ServerToAgent{}
 }
 
-func harvestAgentInfoesFromAgentDescription(msg *protobufs.AgentToServer) (OpAMPAgent, bool) {
+func harvestAgentInfoesFromAgentDescription(msg *protobufs.AgentToServer) (opAMPAgentInfo, bool) {
 	agentDescription := msg.GetAgentDescription()
 	if agentDescription == nil {
-		return OpAMPAgent{}, false
+		return opAMPAgentInfo{}, false
 	}
 
-	agent := OpAMPAgent{}
+	agent := opAMPAgentInfo{}
 	hasAgentAttributes := false
 	for _, attr := range agentDescription.GetIdentifyingAttributes() {
 		if attr.GetKey() == instanceIDIdentifyingAttributeKey {
@@ -135,7 +127,7 @@ func (ctrl *OpAMPControlServer) DigForCompletionAndPublish(ctx context.Context, 
 	for i := 0; i < resourceLogs.Len() && !foundCompletionLog; i++ {
 		resourceLog := resourceLogs.At(i)
 		scopeLogs := resourceLog.ScopeLogs()
-		for j := 0; i < scopeLogs.Len() && !foundCompletionLog; i++ {
+		for j := 0; j < scopeLogs.Len() && !foundCompletionLog; j++ {
 			scopeLog := scopeLogs.At(j)
 			logRecords := scopeLog.LogRecords()
 			rlen := logRecords.Len()
@@ -145,7 +137,11 @@ func (ctrl *OpAMPControlServer) DigForCompletionAndPublish(ctx context.Context, 
 				if attribute, ok := attributes.Get(ingestStatusAttributeKey); ok {
 					statusAttrValue := attribute.AsString()
 					if statusAttrValue == ingestStatusCompleted || statusAttrValue == ingestStatusFailed {
-						agent := ctrl.agentUIDInfoMap[agentID]
+						agent, ok := ctrl.connectedAgents.getAgentDescription(agentID)
+						if !ok {
+							ctrl.logger.Error("Got completion event for unknown agent", zap.String("agentID", agentID))
+							return errors.New("unknown agent")
+						}
 						if err := ctrl.PublishCompletionEvent(ctx, agentID, statusAttrValue); err != nil {
 							ctrl.logger.Error(
 								"Unable to publish replay completion event!",
@@ -173,7 +169,10 @@ type ReplayCompletionEventPayload struct {
 }
 
 func (ctrl *OpAMPControlServer) PublishCompletionEvent(ctx context.Context, agentID string, outcome string) error {
-	agent := ctrl.agentUIDInfoMap[agentID]
+	agent, ok := ctrl.connectedAgents.getAgentDescription(agentID)
+	if !ok {
+		return errors.New("unknown agent")
+	}
 	subject := eventing.NewMdaiEventSubject(eventing.ReplayEventType, fmt.Sprintf("%s.%s", agent.hubName, outcome))
 
 	if agent.hubName == "" {
@@ -212,12 +211,7 @@ func (ctrl *OpAMPControlServer) PublishCompletionEvent(ctx context.Context, agen
 }
 
 func (ctrl *OpAMPControlServer) OnDisconnect(conn types.Connection) {
-	for uid, agent := range ctrl.agentConnections {
-		if agent == conn {
-			delete(ctrl.agentConnections, uid)
-			break
-		}
-	}
+	ctrl.connectedAgents.disconnectAgentsForConnection(conn)
 }
 
 func (ctrl *OpAMPControlServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -235,7 +229,7 @@ func (ctrl *OpAMPControlServer) ServeHTTP(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	_, ok := ctrl.agentConnections[body.InstanceUID]
+	_, ok := ctrl.connectedAgents.getConnection(body.InstanceUID)
 	if !ok {
 		http.Error(w, "agent not connected", http.StatusNotFound)
 		return

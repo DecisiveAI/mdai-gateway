@@ -69,7 +69,7 @@ func TestHarvestAgentInfoesFromAgentDescription(t *testing.T) {
 	tests := []struct {
 		description string
 		msg         *protobufs.AgentToServer
-		expected    OpAMPAgent
+		expected    opAMPAgentInfo
 		expectFound bool
 	}{
 		{
@@ -94,7 +94,7 @@ func TestHarvestAgentInfoesFromAgentDescription(t *testing.T) {
 					},
 				},
 			},
-			expected: OpAMPAgent{
+			expected: opAMPAgentInfo{
 				instanceID: "instance1",
 				replayID:   "replay1",
 				hubName:    "hub1",
@@ -139,7 +139,7 @@ func TestHarvestAgentInfoesFromAgentDescription(t *testing.T) {
 					},
 				},
 			},
-			expected: OpAMPAgent{
+			expected: opAMPAgentInfo{
 				instanceID: "instance1",
 				replayID:   "replay1",
 				hubName:    "hub1",
@@ -154,13 +154,13 @@ func TestHarvestAgentInfoesFromAgentDescription(t *testing.T) {
 					NonIdentifyingAttributes: []*protobufs.KeyValue{},
 				},
 			},
-			expected:    OpAMPAgent{},
+			expected:    opAMPAgentInfo{},
 			expectFound: false,
 		},
 		{
 			description: "no agent description",
 			msg:         &protobufs.AgentToServer{},
-			expected:    OpAMPAgent{},
+			expected:    opAMPAgentInfo{},
 			expectFound: false,
 		},
 		{
@@ -185,7 +185,7 @@ func TestHarvestAgentInfoesFromAgentDescription(t *testing.T) {
 					},
 				},
 			},
-			expected:    OpAMPAgent{},
+			expected:    opAMPAgentInfo{},
 			expectFound: false,
 		},
 	}
@@ -213,7 +213,7 @@ func TestDigForCompletionAndExecuteHandler(t *testing.T) {
 	opampServer := deps.OpAmpServer
 	tests := []struct {
 		agentID       string
-		agentInfoes   map[string]OpAMPAgent
+		agentInfoes   map[string]opAMPAgentInfo
 		description   string
 		logs          plog.Logs
 		expectErr     bool
@@ -221,7 +221,7 @@ func TestDigForCompletionAndExecuteHandler(t *testing.T) {
 	}{
 		{
 			agentID: "agent1",
-			agentInfoes: map[string]OpAMPAgent{
+			agentInfoes: map[string]opAMPAgentInfo{
 				"agent1": {
 					instanceID: "instance1",
 					replayID:   "replay1",
@@ -243,7 +243,7 @@ func TestDigForCompletionAndExecuteHandler(t *testing.T) {
 		},
 		{
 			agentID: "agent1",
-			agentInfoes: map[string]OpAMPAgent{
+			agentInfoes: map[string]opAMPAgentInfo{
 				"agent1": {
 					instanceID: "instance1",
 					replayID:   "replay1",
@@ -265,7 +265,7 @@ func TestDigForCompletionAndExecuteHandler(t *testing.T) {
 		},
 		{
 			agentID: "agent1",
-			agentInfoes: map[string]OpAMPAgent{
+			agentInfoes: map[string]opAMPAgentInfo{
 				"agent1": {
 					instanceID: "instance1",
 					replayID:   "replay1",
@@ -279,7 +279,7 @@ func TestDigForCompletionAndExecuteHandler(t *testing.T) {
 		},
 		{
 			agentID: "agent1",
-			agentInfoes: map[string]OpAMPAgent{
+			agentInfoes: map[string]opAMPAgentInfo{
 				"agent1": {
 					instanceID: "instance1",
 					hubName:    "hub1",
@@ -292,7 +292,7 @@ func TestDigForCompletionAndExecuteHandler(t *testing.T) {
 			expectErr: true,
 		},
 		{
-			agentInfoes: map[string]OpAMPAgent{},
+			agentInfoes: map[string]opAMPAgentInfo{},
 			description: "missing agent",
 			logs: MakeLogsWithAttributes(map[string]any{
 				ingestStatusAttributeKey: ingestStatusFailed,
@@ -303,7 +303,7 @@ func TestDigForCompletionAndExecuteHandler(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.description, func(t *testing.T) {
-			opampServer.agentUIDInfoMap = tt.agentInfoes
+			opampServer.connectedAgents.setAgentDescription(tt.agentID, tt.agentInfoes[tt.agentID])
 			err := opampServer.DigForCompletionAndPublish(t.Context(), tt.agentID, tt.logs)
 			if tt.expectErr {
 				require.Error(t, err)
