@@ -116,17 +116,17 @@ func (ctrl *OpAMPControlServer) HandleS3ReceiverMessage(ctx context.Context, age
 	logMessage, err := ctrl.logUnmarshaler.UnmarshalLogs(msg.GetCustomMessage().GetData())
 	if err != nil {
 		ctrl.logger.Error("Failed to unmarshal OpAMP AWSS3 Receiver custom message logs.", zap.Error(err))
+		return err
 	}
 	return ctrl.DigForCompletionAndPublish(ctx, agentID, logMessage)
 }
 
 func (ctrl *OpAMPControlServer) DigForCompletionAndPublish(ctx context.Context, agentID string, logMessage plog.Logs) error {
-	foundCompletionLog := false
 	resourceLogs := logMessage.ResourceLogs()
-	for i := 0; i < resourceLogs.Len() && !foundCompletionLog; i++ {
+	for i := 0; i < resourceLogs.Len(); i++ {
 		resourceLog := resourceLogs.At(i)
 		scopeLogs := resourceLog.ScopeLogs()
-		for j := 0; j < scopeLogs.Len() && !foundCompletionLog; j++ {
+		for j := 0; j < scopeLogs.Len(); j++ {
 			scopeLog := scopeLogs.At(j)
 			logRecords := scopeLog.LogRecords()
 			rlen := logRecords.Len()
@@ -136,11 +136,7 @@ func (ctrl *OpAMPControlServer) DigForCompletionAndPublish(ctx context.Context, 
 				if attribute, ok := attributes.Get(ingestStatusAttributeKey); ok {
 					statusAttrValue := attribute.AsString()
 					if statusAttrValue == ingestStatusCompleted || statusAttrValue == ingestStatusFailed {
-						foundCompletionLog = true
-						if err := ctrl.PublishCompletionEvent(ctx, agentID, statusAttrValue); err != nil {
-							return err
-						}
-						break
+						return ctrl.PublishCompletionEvent(ctx, agentID, statusAttrValue)
 					}
 				}
 			}
@@ -154,16 +150,14 @@ func (ctrl *OpAMPControlServer) PublishCompletionEvent(ctx context.Context, agen
 	if !ok {
 		return errors.New("unknown agent")
 	}
-	subject := eventing.NewMdaiEventSubject(eventing.ReplayEventType, fmt.Sprintf("%s.%s", agent.hubName, statusAttrValue))
-
 	if agent.hubName == "" {
 		return errors.New("missing hubName")
 	}
-
 	if agent.replayID == "" {
 		return errors.New("missing replay ID")
 	}
 
+	subject := eventing.NewMdaiEventSubject(eventing.ReplayEventType, fmt.Sprintf("%s.%s", agent.hubName, statusAttrValue))
 	payload := ReplayCompletionEventPayload{
 		ReplayID:           agent.replayID,
 		ReplayResult:       statusAttrValue,
