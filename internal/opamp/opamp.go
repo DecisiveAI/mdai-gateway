@@ -73,8 +73,7 @@ func (ctrl *OpAMPControlServer) OnMessage(ctx context.Context, conn types.Connec
 	uid := string(msg.GetInstanceUid())
 	ctrl.connectedAgents.setConnection(uid, conn)
 
-	foundAgent, ok := harvestAgentInfoesFromAgentDescription(msg)
-	if ok {
+	if foundAgent, ok := harvestAgentInfoesFromAgentDescription(msg); ok {
 		ctrl.connectedAgents.setAgentDescription(uid, foundAgent)
 	}
 
@@ -137,11 +136,10 @@ func (ctrl *OpAMPControlServer) DigForCompletionAndPublish(ctx context.Context, 
 				if attribute, ok := attributes.Get(ingestStatusAttributeKey); ok {
 					statusAttrValue := attribute.AsString()
 					if statusAttrValue == ingestStatusCompleted || statusAttrValue == ingestStatusFailed {
-						err := ctrl.PublishCompletionEvent(ctx, agentID, statusAttrValue)
-						if err != nil {
+						foundCompletionLog = true
+						if err := ctrl.PublishCompletionEvent(ctx, agentID, statusAttrValue); err != nil {
 							return err
 						}
-						foundCompletionLog = true
 						break
 					}
 				}
