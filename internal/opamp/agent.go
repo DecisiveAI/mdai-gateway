@@ -47,15 +47,6 @@ func (ca *opAMPConnectedAgents) setConnection(id string, connection types.Connec
 	ca.connections[id] = connection
 }
 
-// The concrete type for this in the OpAMP library is private
-// nolint:ireturn
-func (ca *opAMPConnectedAgents) getConnection(id string) (types.Connection, bool) {
-	ca.mu.Lock()
-	defer ca.mu.Unlock()
-	connection, ok := ca.connections[id]
-	return connection, ok
-}
-
 func (ca *opAMPConnectedAgents) disconnectAgentsForConnection(conn types.Connection) {
 	ca.mu.Lock()
 	defer ca.mu.Unlock()

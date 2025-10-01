@@ -30,10 +30,6 @@ const (
 	instanceIDIdentifyingAttributeKey  = "service.instance.id"
 )
 
-var (
-	completionStatuses []string = []string{ingestStatusCompleted, ingestStatusFailed}
-)
-
 type OpAMPControlServer struct {
 	logger         *zap.Logger
 	auditAdapter   *audit.AuditAdapter
@@ -98,7 +94,7 @@ func (ctrl *OpAMPControlServer) onDisconnect(conn types.Connection) {
 	ctrl.connectedAgents.disconnectAgentsForConnection(conn)
 }
 
-// TODO: Write tests for this if it sticks around in this form
+// TODO: Write tests for this if it sticks around in this form.
 func (ctrl *OpAMPControlServer) onMessage(ctx context.Context, conn types.Connection, msg *protobufs.AgentToServer) *protobufs.ServerToAgent {
 	uid := string(msg.GetInstanceUid())
 	ctrl.connectedAgents.setConnection(uid, conn)
@@ -108,7 +104,7 @@ func (ctrl *OpAMPControlServer) onMessage(ctx context.Context, conn types.Connec
 	}
 
 	if msg.GetCustomMessage() != nil && msg.GetCustomMessage().GetCapability() == s3ReceiverCapabilityKey {
-		if err := ctrl.HandleS3ReceiverMessage(ctx, uid, msg); err != nil {
+		if err := ctrl.handleS3ReceiverMessage(ctx, uid, msg); err != nil {
 			ctrl.logger.Warn("Failed to handle S3 receiver message", zap.Error(err))
 		}
 	}
@@ -143,23 +139,24 @@ func harvestAgentInfoesFromAgentDescription(msg *protobufs.AgentToServer) (opAMP
 	return agent, hasAgentAttributes
 }
 
-func (ctrl *OpAMPControlServer) HandleS3ReceiverMessage(ctx context.Context, agentID string, msg *protobufs.AgentToServer) error {
+func (ctrl *OpAMPControlServer) handleS3ReceiverMessage(ctx context.Context, agentID string, msg *protobufs.AgentToServer) error {
 	logMessage, err := ctrl.logUnmarshaler.UnmarshalLogs(msg.GetCustomMessage().GetData())
 	if err != nil {
 		ctrl.logger.Error("Failed to unmarshal OpAMP AWSS3 Receiver custom message logs.", zap.Error(err))
 		return err
 	}
-	return ctrl.DigForCompletionAndPublish(ctx, agentID, logMessage)
+	return ctrl.digForCompletionAndPublish(ctx, agentID, logMessage)
 }
 
-func (ctrl *OpAMPControlServer) DigForCompletionAndPublish(ctx context.Context, agentID string, log plog.Logs) error {
+func (ctrl *OpAMPControlServer) digForCompletionAndPublish(ctx context.Context, agentID string, log plog.Logs) error {
+	completionStatuses := []string{ingestStatusCompleted, ingestStatusFailed}
 	for _, resourceLog := range log.ResourceLogs().All() {
 		for _, scopeLog := range resourceLog.ScopeLogs().All() {
 			for _, logRecord := range scopeLog.LogRecords().All() {
 				if attribute, ok := logRecord.Attributes().Get(ingestStatusAttributeKey); ok {
 					statusAttrValue := attribute.AsString()
 					if slices.Contains(completionStatuses, statusAttrValue) {
-						return ctrl.PublishCompletionEvent(ctx, agentID, statusAttrValue)
+						return ctrl.publishCompletionEvent(ctx, agentID, statusAttrValue)
 					}
 				}
 			}
@@ -168,7 +165,7 @@ func (ctrl *OpAMPControlServer) DigForCompletionAndPublish(ctx context.Context, 
 	return nil
 }
 
-func (ctrl *OpAMPControlServer) PublishCompletionEvent(ctx context.Context, agentID string, statusAttrValue string) error {
+func (ctrl *OpAMPControlServer) publishCompletionEvent(ctx context.Context, agentID string, statusAttrValue string) error {
 	agent, ok := ctrl.connectedAgents.getAgentDescription(agentID)
 	if !ok {
 		return errors.New("unknown agent")

@@ -304,7 +304,7 @@ func TestDigForCompletionAndExecuteHandler(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.description, func(t *testing.T) {
 			opampServer.connectedAgents.setAgentDescription(tt.agentID, tt.agentInfoes[tt.agentID])
-			err := opampServer.DigForCompletionAndPublish(t.Context(), tt.agentID, tt.logs)
+			err := opampServer.digForCompletionAndPublish(t.Context(), tt.agentID, tt.logs)
 			if tt.expectErr {
 				require.Error(t, err)
 			} else {
