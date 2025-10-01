@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 
 	"github.com/decisiveai/mdai-data-core/audit"
 	"github.com/decisiveai/mdai-data-core/eventing"
@@ -27,6 +28,10 @@ const (
 	replayIDNonIdentifyingAttributeKey = "replay_id"
 	hubNameNonIdentifyingAttributeKey  = "hub_name"
 	instanceIDIdentifyingAttributeKey  = "service.instance.id"
+)
+
+var (
+	completionStatuses []string = []string{ingestStatusCompleted, ingestStatusFailed}
 )
 
 type OpAMPControlServer struct {
@@ -58,8 +63,8 @@ func NewOpAMPControlServer(logger *zap.Logger, auditAdapter *audit.AuditAdapter,
 				return types.ConnectionResponse{
 					Accept: true,
 					ConnectionCallbacks: types.ConnectionCallbacks{
-						OnMessage:         ctrl.OnMessage,
-						OnConnectionClose: ctrl.OnDisconnect,
+						OnMessage:         ctrl.onMessage,
+						OnConnectionClose: ctrl.onDisconnect,
 					},
 				}
 			},
@@ -78,8 +83,8 @@ func (ctrl *OpAMPControlServer) GetOpAMPHTTPHandler() (http.HandlerFunc, server.
 				return types.ConnectionResponse{
 					Accept: true,
 					ConnectionCallbacks: types.ConnectionCallbacks{
-						OnMessage:         ctrl.OnMessage,
-						OnConnectionClose: ctrl.OnDisconnect,
+						OnMessage:         ctrl.onMessage,
+						OnConnectionClose: ctrl.onDisconnect,
 					},
 				}
 			},
@@ -89,11 +94,12 @@ func (ctrl *OpAMPControlServer) GetOpAMPHTTPHandler() (http.HandlerFunc, server.
 	return http.HandlerFunc(handler), connCtx, err
 }
 
-func (ctrl *OpAMPControlServer) OnDisconnect(conn types.Connection) {
+func (ctrl *OpAMPControlServer) onDisconnect(conn types.Connection) {
 	ctrl.connectedAgents.disconnectAgentsForConnection(conn)
 }
 
-func (ctrl *OpAMPControlServer) OnMessage(ctx context.Context, conn types.Connection, msg *protobufs.AgentToServer) *protobufs.ServerToAgent {
+// TODO: Write tests for this if it sticks around in this form
+func (ctrl *OpAMPControlServer) onMessage(ctx context.Context, conn types.Connection, msg *protobufs.AgentToServer) *protobufs.ServerToAgent {
 	uid := string(msg.GetInstanceUid())
 	ctrl.connectedAgents.setConnection(uid, conn)
 
@@ -152,7 +158,7 @@ func (ctrl *OpAMPControlServer) DigForCompletionAndPublish(ctx context.Context, 
 			for _, logRecord := range scopeLog.LogRecords().All() {
 				if attribute, ok := logRecord.Attributes().Get(ingestStatusAttributeKey); ok {
 					statusAttrValue := attribute.AsString()
-					if statusAttrValue == ingestStatusCompleted || statusAttrValue == ingestStatusFailed {
+					if slices.Contains(completionStatuses, statusAttrValue) {
 						return ctrl.PublishCompletionEvent(ctx, agentID, statusAttrValue)
 					}
 				}
@@ -200,25 +206,4 @@ func (ctrl *OpAMPControlServer) PublishCompletionEvent(ctx context.Context, agen
 	}
 	_, publishErr := nats.PublishEvents(ctx, ctrl.logger, ctrl.eventPublisher, eventsPerSubject, ctrl.auditAdapter)
 	return publishErr
-}
-
-func (ctrl *OpAMPControlServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	var body opAMPRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid body", http.StatusBadRequest)
-		return
-	}
-
-	_, ok := ctrl.connectedAgents.getConnection(body.InstanceUID)
-	if !ok {
-		http.Error(w, "agent not connected", http.StatusNotFound)
-		return
-	}
-
-	w.WriteHeader(http.StatusNoContent)
 }
