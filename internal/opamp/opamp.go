@@ -59,8 +59,7 @@ func NewOpAMPControlServer(logger *zap.Logger, auditAdapter *audit.AuditAdapter,
 				return types.ConnectionResponse{
 					Accept: true,
 					ConnectionCallbacks: types.ConnectionCallbacks{
-						OnMessage:         ctrl.onMessage,
-						OnConnectionClose: ctrl.onDisconnect,
+						OnMessage: ctrl.onMessage,
 					},
 				}
 			},
@@ -72,32 +71,9 @@ func NewOpAMPControlServer(logger *zap.Logger, auditAdapter *audit.AuditAdapter,
 	return ctrl, err
 }
 
-func (ctrl *OpAMPControlServer) GetOpAMPHTTPHandler() (http.HandlerFunc, server.ConnContext, error) {
-	settings := server.Settings{
-		Callbacks: types.Callbacks{
-			OnConnecting: func(r *http.Request) types.ConnectionResponse {
-				return types.ConnectionResponse{
-					Accept: true,
-					ConnectionCallbacks: types.ConnectionCallbacks{
-						OnMessage:         ctrl.onMessage,
-						OnConnectionClose: ctrl.onDisconnect,
-					},
-				}
-			},
-		},
-	}
-	handler, connCtx, err := ctrl.srv.Attach(settings)
-	return http.HandlerFunc(handler), connCtx, err
-}
-
-func (ctrl *OpAMPControlServer) onDisconnect(conn types.Connection) {
-	ctrl.connectedAgents.disconnectAgentsForConnection(conn)
-}
-
 // TODO: Write tests for this if it sticks around in this form.
 func (ctrl *OpAMPControlServer) onMessage(ctx context.Context, conn types.Connection, msg *protobufs.AgentToServer) *protobufs.ServerToAgent {
 	uid := string(msg.GetInstanceUid())
-	ctrl.connectedAgents.setConnection(uid, conn)
 
 	if foundAgent, ok := harvestAgentInfoesFromAgentDescription(msg); ok {
 		ctrl.connectedAgents.setAgentDescription(uid, foundAgent)
