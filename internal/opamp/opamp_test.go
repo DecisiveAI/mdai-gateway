@@ -56,7 +56,7 @@ func setupMocks(t *testing.T) OpampDeps {
 		received: &[]map[string]string{},
 	}
 
-	opampServer := NewOpAMPControlServer(zap.NewNop(), auditAdapter, eventPublisher)
+	opampServer, _ := NewOpAMPControlServer(zap.NewNop(), auditAdapter, eventPublisher)
 
 	deps := OpampDeps{
 		MockPublisher: eventPublisher,

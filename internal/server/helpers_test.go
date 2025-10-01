@@ -171,8 +171,7 @@ func setupMocks(t *testing.T, clientset kubernetes.Interface) HandlerDeps {
 	require.NotNil(t, cmController)
 	t.Cleanup(func() { cmController.Stop() })
 
-	opampServer := opamp.NewOpAMPControlServer(zap.NewNop(), auditAdapter, eventPublisher)
-	opampHandler, _, _ := opampServer.GetOpAMPHTTPHandler()
+	opampServer, _ := opamp.NewOpAMPControlServer(zap.NewNop(), auditAdapter, eventPublisher)
 
 	deps := HandlerDeps{
 		Logger:              zap.NewNop(),
@@ -181,7 +180,7 @@ func setupMocks(t *testing.T, clientset kubernetes.Interface) HandlerDeps {
 		EventPublisher:      eventPublisher,
 		ConfigMapController: cmController,
 		Deduper:             adapter.NewDeduper(),
-		OpAMPHandler:        opampHandler,
+		OpAMPServer:         opampServer,
 	}
 	return deps
 }

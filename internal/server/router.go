@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"net"
 	"net/http"
 	"strings"
 
@@ -10,6 +9,7 @@ import (
 	"github.com/decisiveai/mdai-data-core/eventing/publisher"
 	datacorekube "github.com/decisiveai/mdai-data-core/kube"
 	"github.com/decisiveai/mdai-gateway/internal/adapter"
+	"github.com/decisiveai/mdai-gateway/internal/opamp"
 	"github.com/valkey-io/valkey-go"
 	"go.uber.org/zap"
 )
@@ -21,8 +21,7 @@ type HandlerDeps struct {
 	EventPublisher      publisher.Publisher
 	ConfigMapController *datacorekube.ConfigMapController
 	Deduper             *adapter.Deduper
-	OpAMPHandler        http.HandlerFunc
-	OpAMPConnCtx        func(ctx context.Context, c net.Conn) context.Context
+	OpAMPServer         *opamp.OpAMPControlServer
 }
 
 func NewRouter(ctx context.Context, deps HandlerDeps) *http.ServeMux {
@@ -35,7 +34,7 @@ func NewRouter(ctx context.Context, deps HandlerDeps) *http.ServeMux {
 	router.Handle("GET /variables/values/hub/{hubName}/var/{varName}", handleGetVariables(ctx, deps))
 	router.Handle("POST /variables/hub/{hubName}/var/{varName}", handleSetDeleteVariables(ctx, deps))
 	router.Handle("DELETE /variables/hub/{hubName}/var/{varName}", handleSetDeleteVariables(ctx, deps))
-	router.Handle("POST /opamp", deps.OpAMPHandler)
+	router.Handle("POST /opamp", deps.OpAMPServer.HandlerFunc)
 
 	return router
 }

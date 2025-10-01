@@ -41,8 +41,7 @@ func initDependencies(ctx context.Context) (deps server.HandlerDeps, cleanup fun
 
 	deduper := adapter.NewDeduper()
 
-	opampServer := opamp.NewOpAMPControlServer(app, auditAdapter, publisher)
-	opampHandler, connCtx, err := opampServer.GetOpAMPHTTPHandler()
+	opampServer, err := opamp.NewOpAMPControlServer(app, auditAdapter, publisher)
 	if err != nil {
 		app.Fatal("failed to start OpAMP server", zap.Error(err))
 	}
@@ -54,8 +53,7 @@ func initDependencies(ctx context.Context) (deps server.HandlerDeps, cleanup fun
 		ConfigMapController: cmController,
 		AuditAdapter:        auditAdapter,
 		Deduper:             deduper,
-		OpAMPHandler:        opampHandler,
-		OpAMPConnCtx:        connCtx,
+		OpAMPServer:         opampServer,
 	}
 
 	cleanup = func() {

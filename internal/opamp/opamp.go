@@ -37,18 +37,38 @@ type OpAMPControlServer struct {
 	connectedAgents *opAMPConnectedAgents
 	srv             server.OpAMPServer
 	logUnmarshaler  plog.ProtoUnmarshaler
+
+	HandlerFunc http.HandlerFunc
+	ConnContext server.ConnContext
 }
 
-func NewOpAMPControlServer(logger *zap.Logger, auditAdapter *audit.AuditAdapter, eventPublisher publisher.Publisher) *OpAMPControlServer {
+func NewOpAMPControlServer(logger *zap.Logger, auditAdapter *audit.AuditAdapter, eventPublisher publisher.Publisher) (*OpAMPControlServer, error) {
+	opampServer := server.New(nil)
 	ctrl := &OpAMPControlServer{
 		logger:          logger,
 		auditAdapter:    auditAdapter,
 		eventPublisher:  eventPublisher,
 		connectedAgents: newOpAMPConnectedAgents(),
-		srv:             server.New(nil),
+		srv:             opampServer,
 		logUnmarshaler:  plog.ProtoUnmarshaler{},
 	}
-	return ctrl
+	settings := server.Settings{
+		Callbacks: types.Callbacks{
+			OnConnecting: func(r *http.Request) types.ConnectionResponse {
+				return types.ConnectionResponse{
+					Accept: true,
+					ConnectionCallbacks: types.ConnectionCallbacks{
+						OnMessage:         ctrl.OnMessage,
+						OnConnectionClose: ctrl.OnDisconnect,
+					},
+				}
+			},
+		},
+	}
+	handler, connCtx, err := opampServer.Attach(settings)
+	ctrl.ConnContext = connCtx
+	ctrl.HandlerFunc = http.HandlerFunc(handler)
+	return ctrl, err
 }
 
 func (ctrl *OpAMPControlServer) GetOpAMPHTTPHandler() (http.HandlerFunc, server.ConnContext, error) {
@@ -69,6 +89,10 @@ func (ctrl *OpAMPControlServer) GetOpAMPHTTPHandler() (http.HandlerFunc, server.
 	return http.HandlerFunc(handler), connCtx, err
 }
 
+func (ctrl *OpAMPControlServer) OnDisconnect(conn types.Connection) {
+	ctrl.connectedAgents.disconnectAgentsForConnection(conn)
+}
+
 func (ctrl *OpAMPControlServer) OnMessage(ctx context.Context, conn types.Connection, msg *protobufs.AgentToServer) *protobufs.ServerToAgent {
 	uid := string(msg.GetInstanceUid())
 	ctrl.connectedAgents.setConnection(uid, conn)
@@ -82,6 +106,7 @@ func (ctrl *OpAMPControlServer) OnMessage(ctx context.Context, conn types.Connec
 			ctrl.logger.Warn("Failed to handle S3 receiver message", zap.Error(err))
 		}
 	}
+
 	return &protobufs.ServerToAgent{}
 }
 
@@ -121,19 +146,11 @@ func (ctrl *OpAMPControlServer) HandleS3ReceiverMessage(ctx context.Context, age
 	return ctrl.DigForCompletionAndPublish(ctx, agentID, logMessage)
 }
 
-func (ctrl *OpAMPControlServer) DigForCompletionAndPublish(ctx context.Context, agentID string, logMessage plog.Logs) error {
-	resourceLogs := logMessage.ResourceLogs()
-	for i := 0; i < resourceLogs.Len(); i++ {
-		resourceLog := resourceLogs.At(i)
-		scopeLogs := resourceLog.ScopeLogs()
-		for j := 0; j < scopeLogs.Len(); j++ {
-			scopeLog := scopeLogs.At(j)
-			logRecords := scopeLog.LogRecords()
-			rlen := logRecords.Len()
-			for k := range rlen {
-				logRecord := logRecords.At(k)
-				attributes := logRecord.Attributes()
-				if attribute, ok := attributes.Get(ingestStatusAttributeKey); ok {
+func (ctrl *OpAMPControlServer) DigForCompletionAndPublish(ctx context.Context, agentID string, log plog.Logs) error {
+	for _, resourceLog := range log.ResourceLogs().All() {
+		for _, scopeLog := range resourceLog.ScopeLogs().All() {
+			for _, logRecord := range scopeLog.LogRecords().All() {
+				if attribute, ok := logRecord.Attributes().Get(ingestStatusAttributeKey); ok {
 					statusAttrValue := attribute.AsString()
 					if statusAttrValue == ingestStatusCompleted || statusAttrValue == ingestStatusFailed {
 						return ctrl.PublishCompletionEvent(ctx, agentID, statusAttrValue)
@@ -185,26 +202,13 @@ func (ctrl *OpAMPControlServer) PublishCompletionEvent(ctx context.Context, agen
 	return publishErr
 }
 
-type ReplayCompletionEventPayload struct {
-	ReplayID           string `json:"replay_id"`
-	ReplayResult       string `json:"replay_result"`
-	ReplayerInstanceID string `json:"replayer_instance_id"`
-}
-
-func (ctrl *OpAMPControlServer) OnDisconnect(conn types.Connection) {
-	ctrl.connectedAgents.disconnectAgentsForConnection(conn)
-}
-
 func (ctrl *OpAMPControlServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	type reqBody struct {
-		InstanceUID string `json:"instance_uid"`
-		Reason      string `json:"reason"`
-	}
-	var body reqBody
+
+	var body opAMPRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "invalid body", http.StatusBadRequest)
 		return
