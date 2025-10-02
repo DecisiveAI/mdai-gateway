@@ -5,11 +5,12 @@ import (
 	"fmt"
 
 	"github.com/decisiveai/mdai-data-core/audit"
+	datacorepublisher "github.com/decisiveai/mdai-data-core/eventing/publisher"
 	datacorekube "github.com/decisiveai/mdai-data-core/kube"
 	"github.com/decisiveai/mdai-data-core/service"
 	"github.com/decisiveai/mdai-data-core/valkey"
 	"github.com/decisiveai/mdai-gateway/internal/adapter"
-	"github.com/decisiveai/mdai-gateway/internal/nats"
+	"github.com/decisiveai/mdai-gateway/internal/opamp"
 	"github.com/decisiveai/mdai-gateway/internal/server"
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
@@ -28,7 +29,10 @@ func initDependencies(ctx context.Context) (deps server.HandlerDeps, cleanup fun
 
 	auditAdapter := audit.NewAuditAdapter(app, valkeyClient)
 
-	publisher := nats.Init(ctx, app, publisherClientName)
+	publisher, err := datacorepublisher.NewPublisher(ctx, app, publisherClientName)
+	if err != nil {
+		app.Fatal("failed to start NATS publisher", zap.Error(err))
+	}
 
 	cmController, err := startConfigMapControllerWithClient(app, datacorekube.ManualEnvConfigMapType, corev1.NamespaceAll)
 	if err != nil {
@@ -37,6 +41,11 @@ func initDependencies(ctx context.Context) (deps server.HandlerDeps, cleanup fun
 
 	deduper := adapter.NewDeduper()
 
+	opampServer, err := opamp.NewOpAMPControlServer(app, auditAdapter, publisher)
+	if err != nil {
+		app.Fatal("failed to start OpAMP server", zap.Error(err))
+	}
+
 	deps = server.HandlerDeps{
 		Logger:              app,
 		ValkeyClient:        valkeyClient,
@@ -44,6 +53,7 @@ func initDependencies(ctx context.Context) (deps server.HandlerDeps, cleanup fun
 		ConfigMapController: cmController,
 		AuditAdapter:        auditAdapter,
 		Deduper:             deduper,
+		OpAMPServer:         opampServer,
 	}
 
 	cleanup = func() {

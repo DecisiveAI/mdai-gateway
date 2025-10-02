@@ -1,7 +1,6 @@
 package server
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +11,7 @@ import (
 	"github.com/decisiveai/mdai-data-core/eventing/publisher"
 	datacorekube "github.com/decisiveai/mdai-data-core/kube"
 	"github.com/decisiveai/mdai-gateway/internal/adapter"
+	"github.com/decisiveai/mdai-gateway/internal/opamp"
 	natsserver "github.com/nats-io/nats-server/v2/server"
 	"github.com/stretchr/testify/require"
 	valkeymock "github.com/valkey-io/valkey-go/mock"
@@ -162,7 +162,7 @@ func setupMocks(t *testing.T, clientset kubernetes.Interface) HandlerDeps {
 
 	srv := runJetStream(t)
 	t.Cleanup(func() { srv.Shutdown() })
-	eventPublisher, err := publisher.NewPublisher(context.Background(), zap.NewNop(), publisherClientName)
+	eventPublisher, err := publisher.NewPublisher(t.Context(), zap.NewNop(), publisherClientName)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = eventPublisher.Close() })
 
@@ -171,6 +171,8 @@ func setupMocks(t *testing.T, clientset kubernetes.Interface) HandlerDeps {
 	require.NotNil(t, cmController)
 	t.Cleanup(func() { cmController.Stop() })
 
+	opampServer, _ := opamp.NewOpAMPControlServer(zap.NewNop(), auditAdapter, eventPublisher)
+
 	deps := HandlerDeps{
 		Logger:              zap.NewNop(),
 		ValkeyClient:        valkeyClient,
@@ -178,6 +180,7 @@ func setupMocks(t *testing.T, clientset kubernetes.Interface) HandlerDeps {
 		EventPublisher:      eventPublisher,
 		ConfigMapController: cmController,
 		Deduper:             adapter.NewDeduper(),
+		OpAMPServer:         opampServer,
 	}
 	return deps
 }

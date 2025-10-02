@@ -29,6 +29,7 @@ func main() {
 		ReadTimeout:       defaultReadTimeout,
 		WriteTimeout:      defaultWriteTimeout,
 		IdleTimeout:       defaultIdleTimeout,
+		ConnContext:       deps.OpAMPServer.ConnContext,
 	}
 
 	deps.Logger.Fatal("failed to start server", zap.Error(httpServer.ListenAndServe()))
