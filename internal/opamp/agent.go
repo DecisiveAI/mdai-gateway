@@ -5,9 +5,10 @@ import (
 )
 
 type opAMPAgentInfo struct {
-	instanceID string
-	replayID   string
-	hubName    string
+	instanceID           string
+	replayID             string
+	hubName              string
+	replayStatusVariable string
 }
 
 type opAMPConnectedAgents struct {

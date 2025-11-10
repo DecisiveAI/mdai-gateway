@@ -21,13 +21,14 @@ import (
 )
 
 const (
-	s3ReceiverCapabilityKey            = "org.opentelemetry.collector.receiver.awss3"
-	ingestStatusAttributeKey           = "ingest_status"
-	ingestStatusCompleted              = "completed"
-	ingestStatusFailed                 = "failed"
-	replayIDNonIdentifyingAttributeKey = "replay_id"
-	hubNameNonIdentifyingAttributeKey  = "hub_name"
-	instanceIDIdentifyingAttributeKey  = "service.instance.id"
+	s3ReceiverCapabilityKey                     = "org.opentelemetry.collector.receiver.awss3"
+	ingestStatusAttributeKey                    = "ingest_status"
+	ingestStatusCompleted                       = "completed"
+	ingestStatusFailed                          = "failed"
+	replayIDNonIdentifyingAttributeKey          = "replay_id"
+	hubNameNonIdentifyingAttributeKey           = "hub_name"
+	instanceIDIdentifyingAttributeKey           = "service.instance.id"
+	replayStatusVariableNonIdentifyingAttribute = "replay_status_variable"
 )
 
 type OpAMPControlServer struct {
@@ -111,6 +112,10 @@ func harvestAgentInfoesFromAgentDescription(msg *protobufs.AgentToServer) (opAMP
 			agent.hubName = attr.GetValue().GetStringValue()
 			hasAgentAttributes = true
 		}
+		if attr.GetKey() == replayStatusVariableNonIdentifyingAttribute {
+			agent.replayStatusVariable = attr.GetValue().GetStringValue()
+			hasAgentAttributes = true
+		}
 	}
 	return agent, hasAgentAttributes
 }
@@ -141,6 +146,11 @@ func (ctrl *OpAMPControlServer) digForCompletionAndPublish(ctx context.Context, 
 	return nil
 }
 
+type ReplayCompletion struct {
+	ReplayName   string `json:"replay_name"`
+	ReplayStatus string `json:"replay_status"`
+}
+
 func (ctrl *OpAMPControlServer) publishCompletionEvent(ctx context.Context, agentID string, statusAttrValue string) error {
 	agent, ok := ctrl.connectedAgents.getAgentDescription(agentID)
 	if !ok {
@@ -152,12 +162,27 @@ func (ctrl *OpAMPControlServer) publishCompletionEvent(ctx context.Context, agen
 	if agent.replayID == "" {
 		return errors.New("missing replay ID")
 	}
+	if agent.replayStatusVariable == "" {
+		return errors.New("missing replay status variable ref")
+	}
 
-	subject := eventing.NewMdaiEventSubject(eventing.ReplayEventType, fmt.Sprintf("%s.%s", agent.hubName, statusAttrValue))
-	payload := ReplayCompletionEventPayload{
-		ReplayID:           agent.replayID,
-		ReplayResult:       statusAttrValue,
-		ReplayerInstanceID: agent.instanceID,
+	// eventing.var.mdaihub-sample.replay_a_request
+	subject := eventing.NewMdaiEventSubject(eventing.VarEventType, fmt.Sprintf("%s.%s", agent.hubName, agent.replayStatusVariable))
+
+	dataObj := ReplayCompletion{
+		ReplayName:   agent.replayID,
+		ReplayStatus: statusAttrValue,
+	}
+	dataObjJson, err := json.Marshal(dataObj)
+	if err != nil {
+		return err
+	}
+	ctrl.logger.Info("Publishing replay completion event", zap.String("event", string(dataObjJson)))
+	payload := eventing.ManualVariablesActionPayload{
+		VariableRef: agent.replayStatusVariable,
+		DataType:    "string",
+		Operation:   "add",
+		Data:        string(dataObjJson),
 	}
 	payloadBytes, marshalErr := json.Marshal(payload)
 	if marshalErr != nil {
@@ -165,7 +190,7 @@ func (ctrl *OpAMPControlServer) publishCompletionEvent(ctx context.Context, agen
 	}
 	event := eventing.MdaiEvent{
 		Name:     "replay-complete",
-		Source:   eventing.BufferReplaySource,
+		Source:   eventing.ManualVariablesEventSource,
 		SourceID: agent.instanceID,
 		Payload:  string(payloadBytes),
 		HubName:  agent.hubName,
