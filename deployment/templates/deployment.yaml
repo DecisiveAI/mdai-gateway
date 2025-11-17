@@ -12,6 +12,10 @@ spec:
     metadata:
       labels:
         app: {{ .Values.deployment.name }}
+      {{- with .Values.deployment.annotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
     spec:
       serviceAccountName: {{ .Values.serviceAccount.name }}
       {{- with .Values.deployment.tolerations }}
