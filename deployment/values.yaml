@@ -12,6 +12,10 @@ deployment:
   name: mdai-gateway
   replicas: 1
   containerPort: 8081
+  tolerations: []
+  nodeSelector: {}
+  affinity: {}
+  annotations: {}
 
 otelExporterOtlpEndpoint: http://mdai-collector-service.mdai.svc.cluster.local:4318
 natsUrl: nats://mdai-nats.mdai.svc.cluster.local:4222

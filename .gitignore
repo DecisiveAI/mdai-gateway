@@ -3,7 +3,7 @@ build
 .secrets
 vendor
 .idea
-./mdai-gateway
+/mdai-gateway
 mdai-gateway-*.tgz
 coverage.html
 coverage.out
