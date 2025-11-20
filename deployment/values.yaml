@@ -8,7 +8,6 @@ serviceAccount:
   name: "mdai-operator-controller-manager"
 
 deployment:
-  namespace: mdai
   name: mdai-gateway
   replicas: 1
   containerPort: 8081
@@ -25,7 +24,6 @@ image:
   # tag: 0.0.1
 
 service:
-  namespace: mdai
   name: mdai-gateway
   replicas: 1
   port: 8081
