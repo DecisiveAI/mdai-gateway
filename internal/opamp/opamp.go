@@ -177,8 +177,8 @@ func (ctrl *OpAMPControlServer) publishCompletionEvent(ctx context.Context, agen
 	if err != nil {
 		return err
 	}
-	ctrl.logger.Info("Publishing replay completion event", zap.String("event", string(dataObjJson)))
-	payload := eventing.ManualVariablesActionPayload{
+	ctrl.logger.Info("Publishing replay completion event", zap.String("subject", subject.String()), zap.String("event", string(dataObjJson)))
+	payload := eventing.VariablesActionPayload{
 		VariableRef: agent.replayStatusVariable,
 		DataType:    "string",
 		Operation:   "add",
