@@ -173,16 +173,16 @@ func (ctrl *OpAMPControlServer) publishCompletionEvent(ctx context.Context, agen
 		ReplayName:   agent.replayID,
 		ReplayStatus: statusAttrValue,
 	}
-	dataObjJson, err := json.Marshal(dataObj)
+	dataObjJSON, err := json.Marshal(dataObj)
 	if err != nil {
 		return err
 	}
-	ctrl.logger.Info("Publishing replay completion event", zap.String("subject", subject.String()), zap.String("event", string(dataObjJson)))
+	ctrl.logger.Info("Publishing replay completion event", zap.String("subject", subject.String()), zap.String("event", string(dataObjJSON)))
 	payload := eventing.VariablesActionPayload{
 		VariableRef: agent.replayStatusVariable,
 		DataType:    "string",
 		Operation:   "add",
-		Data:        string(dataObjJson),
+		Data:        string(dataObjJSON),
 	}
 	payloadBytes, marshalErr := json.Marshal(payload)
 	if marshalErr != nil {
