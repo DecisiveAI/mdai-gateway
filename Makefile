@@ -1,4 +1,4 @@
-DOCKER_TAG ?= 0.1.3
+DOCKER_TAG ?= 0.1.5
 CHART_VERSION ?= $(shell git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//')
 REPO_NAME := $(shell basename -s .git `git config --get remote.origin.url`)
 GO_TEST := CGO_ENABLED=0 go test -count=1
