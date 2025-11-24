@@ -133,6 +133,10 @@ func TestHarvestAgentInfoesFromAgentDescription(t *testing.T) {
 							Value: &(protobufs.AnyValue{Value: &protobufs.AnyValue_StringValue{StringValue: "replay1"}}),
 						},
 						{
+							Key:   replayStatusVariableNonIdentifyingAttribute,
+							Value: &(protobufs.AnyValue{Value: &protobufs.AnyValue_StringValue{StringValue: "replay-status"}}),
+						},
+						{
 							Key:   "aklsdjf",
 							Value: &(protobufs.AnyValue{Value: &protobufs.AnyValue_IntValue{IntValue: 1337}}),
 						},
@@ -140,9 +144,10 @@ func TestHarvestAgentInfoesFromAgentDescription(t *testing.T) {
 				},
 			},
 			expected: opAMPAgentInfo{
-				instanceID: "instance1",
-				replayID:   "replay1",
-				hubName:    "hub1",
+				instanceID:           "instance1",
+				replayID:             "replay1",
+				hubName:              "hub1",
+				replayStatusVariable: "replay-status",
 			},
 			expectFound: true,
 		},
@@ -223,9 +228,10 @@ func TestDigForCompletionAndExecuteHandler(t *testing.T) {
 			agentID: "agent1",
 			agentInfoes: map[string]opAMPAgentInfo{
 				"agent1": {
-					instanceID: "instance1",
-					replayID:   "replay1",
-					hubName:    "hub1",
+					instanceID:           "instance1",
+					replayID:             "replay1",
+					hubName:              "hub1",
+					replayStatusVariable: "replay-status",
 				},
 			},
 			description: "complete has all attributes",
@@ -233,10 +239,33 @@ func TestDigForCompletionAndExecuteHandler(t *testing.T) {
 				ingestStatusAttributeKey: ingestStatusCompleted,
 			}),
 			expectedEvent: map[string]string{
-				"subject":  "replay.hub1.completed",
+				"subject":  "var.hub1.replay-status",
 				"name":     "replay-complete",
-				"payload":  `{"replay_id":"replay1","replay_result":"completed","replayer_instance_id":"instance1"}`,
-				"source":   "buffer-replay",
+				"payload":  `{"variableRef":"replay-status","dataType":"string","operation":"add","data":"{\"replay_name\":\"replay1\",\"replay_status\":\"completed\"}"}`,
+				"source":   "manual_variables_api",
+				"sourceId": "instance1",
+				"hubName":  "hub1",
+			},
+		},
+		{
+			agentID: "agent1",
+			agentInfoes: map[string]opAMPAgentInfo{
+				"agent1": {
+					instanceID:           "instance1",
+					replayID:             "replay1",
+					hubName:              "hub1",
+					replayStatusVariable: "replay-status",
+				},
+			},
+			description: "failure all attributes",
+			logs: MakeLogsWithAttributes(map[string]any{
+				ingestStatusAttributeKey: ingestStatusFailed,
+			}),
+			expectedEvent: map[string]string{
+				"subject":  "var.hub1.replay-status",
+				"name":     "replay-complete",
+				"payload":  `{"variableRef":"replay-status","dataType":"string","operation":"add","data":"{\"replay_name\":\"replay1\",\"replay_status\":\"failed\"}"}`,
+				"source":   "manual_variables_api",
 				"sourceId": "instance1",
 				"hubName":  "hub1",
 			},
@@ -250,18 +279,11 @@ func TestDigForCompletionAndExecuteHandler(t *testing.T) {
 					hubName:    "hub1",
 				},
 			},
-			description: "failure all attributes",
+			description: "missing status var attribute",
 			logs: MakeLogsWithAttributes(map[string]any{
-				ingestStatusAttributeKey: ingestStatusFailed,
+				ingestStatusAttributeKey: ingestStatusCompleted,
 			}),
-			expectedEvent: map[string]string{
-				"subject":  "replay.hub1.failed",
-				"name":     "replay-complete",
-				"payload":  `{"replay_id":"replay1","replay_result":"failed","replayer_instance_id":"instance1"}`,
-				"source":   "buffer-replay",
-				"sourceId": "instance1",
-				"hubName":  "hub1",
-			},
+			expectErr: true,
 		},
 		{
 			agentID: "agent1",

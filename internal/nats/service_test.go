@@ -67,7 +67,7 @@ func TestNewMdaiEvent(t *testing.T) {
 			assert.Equal(t, tt.hubName, event.HubName)
 			assert.Equal(t, eventing.ManualVariablesEventSource, event.Source)
 
-			var decoded eventing.ManualVariablesActionPayload
+			var decoded eventing.VariablesActionPayload
 			require.NoError(t, json.Unmarshal([]byte(event.Payload), &decoded), "unmarshal payload")
 
 			assert.Equal(t, tt.varName, decoded.VariableRef)

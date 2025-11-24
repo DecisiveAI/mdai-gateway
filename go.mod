@@ -5,7 +5,7 @@ go 1.24.0
 toolchain go1.24.3
 
 require (
-	github.com/decisiveai/mdai-data-core v0.2.7
+	github.com/decisiveai/mdai-data-core v0.2.9
 	github.com/google/uuid v1.6.0
 	github.com/nats-io/nats-server/v2 v2.11.8
 	github.com/open-telemetry/opamp-go v0.22.0
@@ -31,6 +31,7 @@ require (
 	github.com/coder/quartz v0.1.2 // indirect
 	github.com/coreos/go-systemd/v22 v22.5.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
+	github.com/deckarep/golang-set/v2 v2.8.0 // indirect
 	github.com/emicklei/go-restful/v3 v3.12.1 // indirect
 	github.com/fxamacker/cbor/v2 v2.7.0 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
