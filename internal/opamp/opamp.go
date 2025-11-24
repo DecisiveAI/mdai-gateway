@@ -166,7 +166,7 @@ func (ctrl *OpAMPControlServer) publishCompletionEvent(ctx context.Context, agen
 		return errors.New("missing replay status variable ref")
 	}
 
-	// eventing.var.mdaihub-sample.replay_a_request
+	// Typical subject eventing.var.mdaihub-sample.replay_a_request
 	subject := eventing.NewMdaiEventSubject(eventing.VarEventType, fmt.Sprintf("%s.%s", agent.hubName, agent.replayStatusVariable))
 
 	dataObj := ReplayCompletion{
