@@ -133,6 +133,10 @@ func TestHarvestAgentInfoesFromAgentDescription(t *testing.T) {
 							Value: &(protobufs.AnyValue{Value: &protobufs.AnyValue_StringValue{StringValue: "replay1"}}),
 						},
 						{
+							Key:   replayStatusVariableNonIdentifyingAttribute,
+							Value: &(protobufs.AnyValue{Value: &protobufs.AnyValue_StringValue{StringValue: "replay-status"}}),
+						},
+						{
 							Key:   "aklsdjf",
 							Value: &(protobufs.AnyValue{Value: &protobufs.AnyValue_IntValue{IntValue: 1337}}),
 						},
@@ -140,9 +144,10 @@ func TestHarvestAgentInfoesFromAgentDescription(t *testing.T) {
 				},
 			},
 			expected: opAMPAgentInfo{
-				instanceID: "instance1",
-				replayID:   "replay1",
-				hubName:    "hub1",
+				instanceID:           "instance1",
+				replayID:             "replay1",
+				hubName:              "hub1",
+				replayStatusVariable: "replay-status",
 			},
 			expectFound: true,
 		},
@@ -264,6 +269,21 @@ func TestDigForCompletionAndExecuteHandler(t *testing.T) {
 				"sourceId": "instance1",
 				"hubName":  "hub1",
 			},
+		},
+		{
+			agentID: "agent1",
+			agentInfoes: map[string]opAMPAgentInfo{
+				"agent1": {
+					instanceID: "instance1",
+					replayID:   "replay1",
+					hubName:    "hub1",
+				},
+			},
+			description: "missing status var attribute",
+			logs: MakeLogsWithAttributes(map[string]any{
+				ingestStatusAttributeKey: ingestStatusCompleted,
+			}),
+			expectErr: true,
 		},
 		{
 			agentID: "agent1",
