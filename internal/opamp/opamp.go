@@ -2,10 +2,13 @@ package opamp
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/google/uuid"
 	"net/http"
+	"os"
 	"slices"
 
 	"github.com/decisiveai/mdai-data-core/audit"
@@ -69,24 +72,54 @@ func NewOpAMPControlServer(logger *zap.Logger, auditAdapter *audit.AuditAdapter,
 	handler, connCtx, err := opampServer.Attach(settings)
 	ctrl.ConnContext = connCtx
 	ctrl.HandlerFunc = http.HandlerFunc(handler)
+
 	return ctrl, err
 }
 
 // TODO: Write tests for this if it sticks around in this form.
 func (ctrl *OpAMPControlServer) onMessage(ctx context.Context, conn types.Connection, msg *protobufs.AgentToServer) *protobufs.ServerToAgent {
-	uid := string(msg.GetInstanceUid())
+	theUUID, err := uuid.FromBytes(msg.GetInstanceUid())
+	if err != nil {
+		ctrl.logger.Warn("failed to parse instance uid", zap.Error(err))
+		return &protobufs.ServerToAgent{ErrorResponse: &protobufs.ServerErrorResponse{ErrorMessage: err.Error()}}
+	}
 
 	if foundAgent, ok := harvestAgentInfoesFromAgentDescription(msg); ok {
-		ctrl.connectedAgents.setAgentDescription(uid, foundAgent)
+		ctrl.connectedAgents.setAgentDescription(theUUID.String(), foundAgent)
 	}
 
 	if msg.GetCustomMessage() != nil && msg.GetCustomMessage().GetCapability() == s3ReceiverCapabilityKey {
-		if err := ctrl.handleS3ReceiverMessage(ctx, uid, msg); err != nil {
+		if err := ctrl.handleS3ReceiverMessage(ctx, theUUID.String(), msg); err != nil {
 			ctrl.logger.Warn("Failed to handle S3 receiver message", zap.Error(err))
 		}
 	}
 
-	return &protobufs.ServerToAgent{}
+	configFileBytes, err := os.ReadFile("/Users/trent.vigar/src/mdai-gateway/collector_config.yaml")
+	if err != nil {
+		ctrl.logger.Warn("Failed to read config file", zap.Error(err))
+		return &protobufs.ServerToAgent{ErrorResponse: &protobufs.ServerErrorResponse{ErrorMessage: err.Error()}}
+	}
+
+	hasher := sha256.New()
+	_, err = hasher.Write(configFileBytes)
+	if err != nil {
+		ctrl.logger.Warn("Failed to hash config file", zap.Error(err))
+		return &protobufs.ServerToAgent{ErrorResponse: &protobufs.ServerErrorResponse{ErrorMessage: err.Error()}}
+	}
+
+	return &protobufs.ServerToAgent{
+		RemoteConfig: &protobufs.AgentRemoteConfig{
+			Config: &protobufs.AgentConfigMap{
+				ConfigMap: map[string]*protobufs.AgentConfigFile{
+					"thing": {
+						Body:        configFileBytes,
+						ContentType: "text/yaml",
+					},
+				},
+			},
+			ConfigHash: hasher.Sum(nil),
+		},
+	}
 }
 
 func harvestAgentInfoesFromAgentDescription(msg *protobufs.AgentToServer) (opAMPAgentInfo, bool) {
