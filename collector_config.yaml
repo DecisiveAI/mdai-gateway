@@ -1,0 +1,23 @@
+receivers:
+  fluentforward:
+    endpoint: "0.0.0.0:8006"
+
+processors:
+  memory_limiter:
+    check_interval: 23s
+    limit_percentage: 75
+    spike_limit_percentage: 15
+  batch:
+    send_batch_size: 1000
+    send_batch_max_size: 10000
+    timeout: 13s
+
+exporters:
+  debug: {}
+
+service:
+  pipelines:
+    logs/customer_pipeline:
+      receivers: [fluentforward]
+      processors: [memory_limiter, batch]
+      exporters: [debug]

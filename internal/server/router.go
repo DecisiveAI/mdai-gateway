@@ -34,7 +34,7 @@ func NewRouter(ctx context.Context, deps HandlerDeps) *http.ServeMux {
 	router.Handle("GET /variables/values/hub/{hubName}/var/{varName}", handleGetVariables(ctx, deps))
 	router.Handle("POST /variables/hub/{hubName}/var/{varName}", handleSetDeleteVariables(ctx, deps))
 	router.Handle("DELETE /variables/hub/{hubName}/var/{varName}", handleSetDeleteVariables(ctx, deps))
-	router.Handle("POST /opamp", deps.OpAMPServer.HandlerFunc)
+	router.Handle("GET /opamp", deps.OpAMPServer.HandlerFunc)
 
 	return router
 }
