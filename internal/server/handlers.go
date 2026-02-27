@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/decisiveai/mdai-gateway/internal/integration"
 	"io"
 	"net/http"
 
@@ -103,5 +104,89 @@ func subjectFromVarsEvent(event eventing.MdaiEvent, varkey string) eventing.Mdai
 	return eventing.MdaiEventSubject{
 		Type: eventing.VarEventType,
 		Path: config.SafeToken(event.HubName) + "." + config.SafeToken(varkey),
+	}
+}
+
+func handleGetIntegrationsOfType(ctx context.Context, deps HandlerDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		integrationTypeStr := req.PathValue("integrationType")
+		integrationType := integration.IntegrationType(integrationTypeStr)
+		switch integrationType {
+		case integration.DataDogIntegrationType:
+			ddInt, err := integration.GetIntegrationsFromSecret[integration.DataDogIntegration](ctx, deps.K8sClient, deps.K8sNamespace, integrationType)
+			if err != nil {
+				deps.Logger.Error("Failed to get integration from Secret", zap.Error(err))
+				http.Error(w, "Failed to get integrations", http.StatusBadRequest)
+			}
+			var ddIntList []string
+			for intName := range ddInt {
+				ddIntList = append(ddIntList, intName)
+			}
+			httputil.WriteJSONResponse(w, deps.Logger, http.StatusOK, ddIntList)
+		default:
+			http.Error(w, "Invalid integration type", http.StatusBadRequest)
+		}
+	}
+}
+
+func handlePutIntegrationData(ctx context.Context, deps HandlerDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		integrationName := req.PathValue("integrationName")
+		integrationTypeStr := req.PathValue("integrationType")
+		integrationType := integration.IntegrationType(integrationTypeStr)
+		defer req.Body.Close()
+
+		switch integrationType {
+		case integration.DataDogIntegrationType:
+			var ddInt integration.DataDogIntegration
+			if err := json.NewDecoder(req.Body).Decode(&ddInt); err != nil {
+				http.Error(w, "Invalid JSON format in request payload", http.StatusBadRequest)
+				return
+			}
+			err := integration.SetIntegration[integration.DataDogIntegration](ctx, deps.K8sClient, deps.K8sNamespace, integrationName, integrationType, ddInt)
+			if err != nil {
+				http.Error(w, "Failed to update integration", http.StatusInternalServerError)
+			}
+			httputil.WriteJSONResponse(w, deps.Logger, http.StatusOK, "")
+		default:
+			http.Error(w, "Invalid integration type", http.StatusBadRequest)
+		}
+	}
+}
+
+func handleDeleteIntegration(ctx context.Context, deps HandlerDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		integrationName := req.PathValue("integrationName")
+		integrationTypeStr := req.PathValue("integrationType")
+		integrationType := integration.IntegrationType(integrationTypeStr)
+		switch integrationType {
+		case integration.DataDogIntegrationType:
+			err := integration.DeleteIntegration(ctx, deps.K8sClient, deps.K8sNamespace, integrationName, integrationType)
+			if err != nil {
+				deps.Logger.Error("Failed to get integration from Secret", zap.Error(err))
+				http.Error(w, "Failed to update integration", http.StatusInternalServerError)
+			}
+			httputil.WriteJSONResponse(w, deps.Logger, http.StatusOK, "")
+		default:
+			http.Error(w, "Invalid integration type", http.StatusBadRequest)
+		}
+	}
+}
+
+func handleGetConnections(ctx context.Context, deps HandlerDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		http.Error(w, "NOT YET IMPLEMENTED LMAO", http.StatusTeapot)
+	}
+}
+
+func handlePutConnection(ctx context.Context, deps HandlerDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		http.Error(w, "NOT YET IMPLEMENTED LMAO", http.StatusTeapot)
+	}
+}
+
+func handleDeleteConnection(ctx context.Context, deps HandlerDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		http.Error(w, "NOT YET IMPLEMENTED LMAO", http.StatusTeapot)
 	}
 }
