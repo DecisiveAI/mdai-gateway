@@ -30,6 +30,8 @@ type HandlerDeps struct {
 func NewRouter(ctx context.Context, deps HandlerDeps) *http.ServeMux {
 	router := http.NewServeMux()
 
+	integrationsHandler := NewIntegrationsHandler(deps.K8sClient)
+
 	router.HandleFunc("GET /audit", handleAuditEventsGet(ctx, deps))
 	router.Handle("POST /alerts/alertmanager", requireJSON(handlePromAlertsPost(deps)))
 	router.Handle("GET /variables/list", handleListAllVariables(ctx, deps))
@@ -39,9 +41,9 @@ func NewRouter(ctx context.Context, deps HandlerDeps) *http.ServeMux {
 	router.Handle("DELETE /variables/hub/{hubName}/var/{varName}", handleSetDeleteVariables(ctx, deps))
 	router.Handle("POST /opamp", deps.OpAMPServer.HandlerFunc)
 
-	router.Handle("GET /integrations/{integrationType}", handleGetIntegrationsOfType(ctx, deps))
-	router.Handle("PUT /integrations/{integrationType}/{integrationName}", handlePutIntegrationData(ctx, deps))
-	router.Handle("DELETE /integrations/{integrationType}/{integrationName}", handleDeleteIntegration(ctx, deps))
+	router.Handle("GET /integrations/{integrationType}", integrationsHandler.HandleGetIntegrationsOfType(ctx, deps))
+	router.Handle("PUT /integrations/{integrationType}/{integrationName}", integrationsHandler.HandlePutIntegrationData(ctx, deps))
+	router.Handle("DELETE /integrations/{integrationType}/{integrationName}", integrationsHandler.HandleDeleteIntegration(ctx, deps))
 
 	router.Handle("GET /connections", handleGetConnections(ctx, deps))
 	router.Handle("PUT /connections/{connectionName}", handlePutConnection(ctx, deps))
