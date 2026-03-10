@@ -3,7 +3,7 @@ package manualvariables
 import (
 	"testing"
 
-	"github.com/decisiveai/mdai-gateway/internal/valkey"
+	"github.com/mydecisive/mdai-gateway/internal/valkey"
 	"github.com/stretchr/testify/require"
 )
 

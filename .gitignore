@@ -3,6 +3,7 @@ build
 .secrets
 vendor
 .idea
+.run/
 /mdai-gateway
 mdai-gateway-*.tgz
 coverage.html

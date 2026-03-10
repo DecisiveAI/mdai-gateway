@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/decisiveai/mdai-data-core/eventing"
-	"github.com/decisiveai/mdai-data-core/eventing/config"
 	"github.com/google/uuid"
+	"github.com/mydecisive/mdai-data-core/eventing"
+	"github.com/mydecisive/mdai-data-core/eventing/config"
 	"github.com/prometheus/alertmanager/template"
 	"go.uber.org/zap"
 )

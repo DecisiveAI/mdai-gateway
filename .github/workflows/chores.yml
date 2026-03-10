@@ -56,7 +56,7 @@ jobs:
         uses: golangci/golangci-lint-action@v8
         with:
           install-mode: "binary"
-          version: "latest"
+          version: v2.8
 
       - name: Running Tests
         run: |

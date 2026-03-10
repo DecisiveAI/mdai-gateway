@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/decisiveai/mdai-data-core/eventing"
+	"github.com/mydecisive/mdai-data-core/eventing"
 	"go.uber.org/zap"
 )
 

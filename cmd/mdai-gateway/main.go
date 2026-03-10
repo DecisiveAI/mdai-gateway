@@ -4,12 +4,12 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/decisiveai/mdai-data-core/helpers"
-	"github.com/decisiveai/mdai-gateway/internal/server"
+	"github.com/mydecisive/mdai-data-core/helpers"
+	"github.com/mydecisive/mdai-gateway/internal/server"
 	"go.uber.org/zap"
 )
 
-const serviceName = "github.com/decisiveai/mdai-gateway"
+const serviceName = "github.com/mydecisive/mdai-gateway"
 
 func main() {
 	ctx := context.Background()

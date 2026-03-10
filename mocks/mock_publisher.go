@@ -3,7 +3,7 @@ package mocks
 import (
 	"context"
 
-	"github.com/decisiveai/mdai-data-core/eventing"
+	"github.com/mydecisive/mdai-data-core/eventing"
 	"github.com/stretchr/testify/mock"
 )
 

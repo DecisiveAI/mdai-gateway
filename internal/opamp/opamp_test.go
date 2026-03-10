@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/decisiveai/mdai-data-core/audit"
-	"github.com/decisiveai/mdai-data-core/eventing"
+	"github.com/mydecisive/mdai-data-core/audit"
+	"github.com/mydecisive/mdai-data-core/eventing"
 	"github.com/open-telemetry/opamp-go/protobufs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

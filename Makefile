@@ -76,7 +76,7 @@ helm-package:
 
 .PHONY: helm-publish
 helm-publish: CHART_NAME := $(REPO_NAME)
-helm-publish: CHART_REPO := git@github.com:DecisiveAI/mdai-helm-charts.git
+helm-publish: CHART_REPO := git@github.com:MyDecisive/mdai-helm-charts.git
 helm-publish: CHART_PACKAGE := $(CHART_NAME)-$(CHART_VERSION).tgz
 helm-publish: BASE_BRANCH := gh-pages
 helm-publish: TARGET_BRANCH := $(CHART_NAME)-v$(CHART_VERSION)

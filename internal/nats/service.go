@@ -5,10 +5,10 @@ import (
 	"errors"
 	"strconv"
 
-	"github.com/decisiveai/mdai-data-core/audit"
-	"github.com/decisiveai/mdai-data-core/eventing/publisher"
-	"github.com/decisiveai/mdai-gateway/internal/adapter"
-	auditutils "github.com/decisiveai/mdai-gateway/internal/audit"
+	"github.com/mydecisive/mdai-data-core/audit"
+	"github.com/mydecisive/mdai-data-core/eventing/publisher"
+	"github.com/mydecisive/mdai-gateway/internal/adapter"
+	auditutils "github.com/mydecisive/mdai-gateway/internal/audit"
 	"go.uber.org/zap"
 )
 

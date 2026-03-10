@@ -7,11 +7,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/decisiveai/mdai-data-core/audit"
-	"github.com/decisiveai/mdai-data-core/eventing/publisher"
-	datacorekube "github.com/decisiveai/mdai-data-core/kube"
-	"github.com/decisiveai/mdai-gateway/internal/adapter"
-	"github.com/decisiveai/mdai-gateway/internal/opamp"
+	"github.com/mydecisive/mdai-data-core/audit"
+	"github.com/mydecisive/mdai-data-core/eventing/publisher"
+	datacorekube "github.com/mydecisive/mdai-data-core/kube"
+	"github.com/mydecisive/mdai-gateway/internal/adapter"
+	"github.com/mydecisive/mdai-gateway/internal/opamp"
 	natsserver "github.com/nats-io/nats-server/v2/server"
 	"github.com/stretchr/testify/require"
 	valkeymock "github.com/valkey-io/valkey-go/mock"
@@ -80,7 +80,7 @@ func newFakeConfigMapController(t *testing.T, clientset kubernetes.Interface, na
 		return nil, err
 	}
 
-	c, err := datacorekube.NewConfigMapController(datacorekube.ManualEnvConfigMapType, namespace, clientset, zap.NewNop())
+	c, err := datacorekube.NewConfigMapController([]string{datacorekube.ManualEnvConfigMapType}, namespace, clientset, zap.NewNop())
 	if err != nil {
 		return nil, err
 	}

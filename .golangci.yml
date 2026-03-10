@@ -14,6 +14,7 @@ linters:
     - paralleltest
     - prealloc
     - testpackage
+    - unqueryvet
     - varnamelen
     - wrapcheck
     - wsl
@@ -37,8 +38,8 @@ linters:
         - fieldalignment
     exhaustruct:
       include:
-        - github.com/decisiveai/mdai-gateway/internal/
-        - github.com/decisiveai/mdai-operator/internal/
+        - github.com/mydecisive/mdai-gateway/internal/
+        - github.com/mydecisive/mdai-operator/internal/
     testifylint:
       enable-all: true
     revive:

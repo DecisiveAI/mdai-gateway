@@ -3,7 +3,7 @@ package manualvariables
 import (
 	"net/http"
 
-	"github.com/decisiveai/mdai-gateway/internal/valkey"
+	"github.com/mydecisive/mdai-gateway/internal/valkey"
 )
 
 type ByHub map[string]map[string]string

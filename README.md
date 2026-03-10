@@ -1,5 +1,5 @@
-[![Chores](https://github.com/DecisiveAI/mdai-gateway/actions/workflows/chores.yml/badge.svg)](https://github.com/DecisiveAI/mdai-gateway/actions/workflows/chores.yml)
-[![codecov](https://codecov.io/gh/DecisiveAI/mdai-gateway/graph/badge.svg?token=UPHRBSXOON)](https://codecov.io/gh/DecisiveAI/mdai-gateway)
+[![Chores](https://github.com/mydecisive/mdai-gateway/actions/workflows/chores.yml/badge.svg)](https://github.com/mydecisive/mdai-gateway/actions/workflows/chores.yml)
+[![codecov](https://codecov.io/gh/MyDecisive/mdai-gateway/graph/badge.svg?token=UPHRBSXOON)](https://codecov.io/gh/MyDecisive/mdai-gateway)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/mdai-gateway)](https://artifacthub.io/packages/search?repo=mdai-gateway)
 
 # MDAI Gateway

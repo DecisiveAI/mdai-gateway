@@ -3,7 +3,7 @@ package nats
 import (
 	"context"
 
-	"github.com/decisiveai/mdai-data-core/eventing/publisher"
+	"github.com/mydecisive/mdai-data-core/eventing/publisher"
 	"go.uber.org/zap"
 )
 
