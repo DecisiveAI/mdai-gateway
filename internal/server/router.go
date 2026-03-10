@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"github.com/decisiveai/mdai-gateway/internal/integration"
 	"k8s.io/client-go/kubernetes"
 	"net/http"
 	"strings"
@@ -28,28 +29,29 @@ type HandlerDeps struct {
 }
 
 func NewRouter(ctx context.Context, deps HandlerDeps) *http.ServeMux {
-	router := http.NewServeMux()
+	mainRouter := http.NewServeMux()
 
-	integrationsHandler := NewIntegrationsHandler(deps.K8sClient)
+	mainRouter.HandleFunc("GET /audit", handleAuditEventsGet(ctx, deps))
+	mainRouter.Handle("POST /alerts/alertmanager", requireJSON(handlePromAlertsPost(deps)))
+	mainRouter.Handle("GET /variables/list", handleListAllVariables(ctx, deps))
+	mainRouter.Handle("GET /variables/list/hub/{hubName}", handleListHubVariables(ctx, deps))
+	mainRouter.Handle("GET /variables/values/hub/{hubName}/var/{varName}", handleGetVariables(ctx, deps))
+	mainRouter.Handle("POST /variables/hub/{hubName}/var/{varName}", handleSetDeleteVariables(ctx, deps))
+	mainRouter.Handle("DELETE /variables/hub/{hubName}/var/{varName}", handleSetDeleteVariables(ctx, deps))
+	mainRouter.Handle("POST /opamp", deps.OpAMPServer.HandlerFunc)
 
-	router.HandleFunc("GET /audit", handleAuditEventsGet(ctx, deps))
-	router.Handle("POST /alerts/alertmanager", requireJSON(handlePromAlertsPost(deps)))
-	router.Handle("GET /variables/list", handleListAllVariables(ctx, deps))
-	router.Handle("GET /variables/list/hub/{hubName}", handleListHubVariables(ctx, deps))
-	router.Handle("GET /variables/values/hub/{hubName}/var/{varName}", handleGetVariables(ctx, deps))
-	router.Handle("POST /variables/hub/{hubName}/var/{varName}", handleSetDeleteVariables(ctx, deps))
-	router.Handle("DELETE /variables/hub/{hubName}/var/{varName}", handleSetDeleteVariables(ctx, deps))
-	router.Handle("POST /opamp", deps.OpAMPServer.HandlerFunc)
+	integrationsHandler := NewDatadogHandler(&integration.DataDogIntegration{
+		K8sClient: deps.K8sClient,
+	})
 
-	router.Handle("GET /integrations/{integrationType}", integrationsHandler.HandleGetIntegrationsOfType(ctx, deps))
-	router.Handle("PUT /integrations/{integrationType}/{integrationName}", integrationsHandler.HandlePutIntegrationData(ctx, deps))
-	router.Handle("DELETE /integrations/{integrationType}/{integrationName}", integrationsHandler.HandleDeleteIntegration(ctx, deps))
+	datadogRouter := http.NewServeMux()
+	mainRouter.Handle("GET /", integrationsHandler.GetIntegrations(ctx, deps))
+	mainRouter.Handle("PUT /{integrationName}", integrationsHandler.PutIntegrationData(ctx, deps))
+	mainRouter.Handle("DELETE /{integrationName}", integrationsHandler.DeleteIntegration(ctx, deps))
 
-	router.Handle("GET /connections", handleGetConnections(ctx, deps))
-	router.Handle("PUT /connections/{connectionName}", handlePutConnection(ctx, deps))
-	router.Handle("DELETE /connections/{connectionName}", handleDeleteConnection(ctx, deps))
+	mainRouter.Handle("/integrations/datadog", datadogRouter)
 
-	return router
+	return mainRouter
 }
 
 func requireJSON(next http.Handler) http.Handler {
