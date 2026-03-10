@@ -7,6 +7,6 @@ pkgname: '{{.SrcPackageName}}mock'
 recursive: false
 template: testify
 packages:
-  github.com/MyDecisive/mdai-gateway/internal/integration:
+  github.com/mydecisive/mdai-gateway/internal/integration:
     interfaces:
       Integration:

@@ -2,7 +2,7 @@ package server
 
 import (
 	"context"
-	"github.com/decisiveai/mdai-gateway/internal/integration"
+	"github.com/mydecisive/mdai-gateway/internal/integration"
 	"k8s.io/client-go/kubernetes"
 	"net/http"
 	"strings"
@@ -45,9 +45,9 @@ func NewRouter(ctx context.Context, deps HandlerDeps) *http.ServeMux {
 	})
 
 	datadogRouter := http.NewServeMux()
-	mainRouter.Handle("GET /", integrationsHandler.GetIntegrations(ctx, deps))
-	mainRouter.Handle("PUT /{integrationName}", integrationsHandler.PutIntegrationData(ctx, deps))
-	mainRouter.Handle("DELETE /{integrationName}", integrationsHandler.DeleteIntegration(ctx, deps))
+	mainRouter.Handle("GET /integrations/datadog", integrationsHandler.GetIntegrations(ctx, deps))
+	mainRouter.Handle("PUT /integrations/datadog/{integrationName}", integrationsHandler.PutIntegrationData(ctx, deps))
+	mainRouter.Handle("DELETE /integrations/datadog/{integrationName}", integrationsHandler.DeleteIntegration(ctx, deps))
 
 	mainRouter.Handle("/integrations/datadog", datadogRouter)
 

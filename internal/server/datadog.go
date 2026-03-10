@@ -3,8 +3,8 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"github.com/decisiveai/mdai-gateway/internal/httputil"
-	"github.com/decisiveai/mdai-gateway/internal/integration"
+	"github.com/mydecisive/mdai-gateway/internal/httputil"
+	"github.com/mydecisive/mdai-gateway/internal/integration"
 	"go.uber.org/zap"
 	"net/http"
 )
@@ -19,16 +19,17 @@ func NewDatadogHandler(integration integration.Integration) *DatadogHandler {
 
 func (dh *DatadogHandler) GetIntegrations(ctx context.Context, deps HandlerDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		ddInt, err := dh.datadogIntegration.GetIntegrationsFromSecret(ctx, deps.K8sNamespace)
+		ddInt, err := dh.datadogIntegration.GetIntegrations(ctx, deps.K8sNamespace)
 		if err != nil {
 			deps.Logger.Error("Failed to get integration from Secret", zap.Error(err))
 			http.Error(w, "Failed to get integrations", http.StatusBadRequest)
 		}
-		var ddIntList []string
+
+		integrationList := make([]string, 0, len(ddInt))
 		for intName := range ddInt {
-			ddIntList = append(ddIntList, intName)
+			integrationList = append(integrationList, intName)
 		}
-		httputil.WriteJSONResponse(w, deps.Logger, http.StatusOK, ddIntList)
+		httputil.WriteJSONResponse(w, deps.Logger, http.StatusOK, integrationList)
 	}
 }
 
