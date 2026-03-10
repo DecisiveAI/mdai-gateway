@@ -24,8 +24,8 @@ type DataDogIntegration struct {
 var _ Integration = (*DataDogIntegration)(nil)
 
 // GetIntegrationsFromSecret TODO
-func (ddi *DataDogIntegration) GetIntegrationsFromSecret(ctx context.Context, namespace string) (map[string]any, error) {
-	secret, err := ddi.k8sClient.CoreV1().Secrets(namespace).Get(ctx, "mdai-datadog-integration", metav1.GetOptions{})
+func (ddi *DataDogIntegration) GetIntegrations(ctx context.Context, namespace string) (map[string]any, error) {
+	secret, err := ddi.K8sClient.CoreV1().Secrets(namespace).Get(ctx, "mdai-datadog-integration", metav1.GetOptions{})
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			return nil, nil
@@ -52,7 +52,7 @@ func (ddi *DataDogIntegration) SetIntegration(ctx context.Context, namespace, in
 		return fmt.Errorf("failed to marshal integration data: %w", err)
 	}
 
-	secret, err := ddi.k8sClient.CoreV1().Secrets(namespace).Get(ctx, "mdai-datadog-integration", metav1.GetOptions{})
+	secret, err := ddi.K8sClient.CoreV1().Secrets(namespace).Get(ctx, "mdai-datadog-integration", metav1.GetOptions{})
 	isNotFound := k8serrors.IsNotFound(err)
 	if err != nil && !isNotFound {
 		return fmt.Errorf("failed to fetch secret %s: %w", "mdai-datadog-integration", err)
@@ -60,17 +60,17 @@ func (ddi *DataDogIntegration) SetIntegration(ctx context.Context, namespace, in
 
 	if isNotFound {
 		// Create the secret if it does not exist
-		return createIntegrationSecret(ctx, ddi.k8sClient, namespace, "mdai-datadog-integration", integrationName, jsonData)
+		return createIntegrationSecret(ctx, ddi.K8sClient, namespace, "mdai-datadog-integration", integrationName, jsonData)
 	} else {
 		// Update the secret if it already exists
-		return updateSecretWithIntegration(ctx, ddi.k8sClient, namespace, secret, integrationName, jsonData)
+		return updateSecretWithIntegration(ctx, ddi.K8sClient, namespace, secret, integrationName, jsonData)
 	}
 }
 
 // DeleteIntegration removes a named integration from the specific integration type's secret.
 // Note: This doesn't need a generic type parameter because it only removes a byte array by its map key.
 func (ddi *DataDogIntegration) DeleteIntegration(ctx context.Context, namespace, integrationName string) error {
-	secret, err := ddi.k8sClient.CoreV1().Secrets(namespace).Get(ctx, "mdai-datadog-integration", metav1.GetOptions{})
+	secret, err := ddi.K8sClient.CoreV1().Secrets(namespace).Get(ctx, "mdai-datadog-integration", metav1.GetOptions{})
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			return nil
@@ -87,7 +87,7 @@ func (ddi *DataDogIntegration) DeleteIntegration(ctx context.Context, namespace,
 
 	delete(secret.Data, integrationName)
 
-	_, err = ddi.k8sClient.CoreV1().Secrets(namespace).Update(ctx, secret, metav1.UpdateOptions{})
+	_, err = ddi.K8sClient.CoreV1().Secrets(namespace).Update(ctx, secret, metav1.UpdateOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to update secret %s after deletion: %w", "mdai-datadog-integration", err)
 	}
