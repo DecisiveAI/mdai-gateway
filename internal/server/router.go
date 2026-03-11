@@ -42,12 +42,12 @@ func NewRouter(ctx context.Context, deps HandlerDeps) *http.ServeMux {
 
 	integrationsHandler := NewDatadogHandler(&integration.DataDogIntegration{
 		K8sClient: deps.K8sClient,
-	})
+	}, deps.K8sNamespace, deps.Logger)
 
 	datadogRouter := http.NewServeMux()
-	mainRouter.Handle("GET /integrations/datadog", integrationsHandler.GetIntegrations(ctx, deps))
-	mainRouter.Handle("PUT /integrations/datadog/{integrationName}", integrationsHandler.PutIntegrationData(ctx, deps))
-	mainRouter.Handle("DELETE /integrations/datadog/{integrationName}", integrationsHandler.DeleteIntegration(ctx, deps))
+	mainRouter.Handle("GET /integrations/datadog", integrationsHandler.GetIntegrations(ctx))
+	mainRouter.Handle("PUT /integrations/datadog/{integrationName}", integrationsHandler.PutIntegrationData(ctx))
+	mainRouter.Handle("DELETE /integrations/datadog/{integrationName}", integrationsHandler.DeleteIntegration(ctx))
 
 	mainRouter.Handle("/integrations/datadog", datadogRouter)
 

@@ -11,17 +11,19 @@ import (
 
 type DatadogHandler struct {
 	datadogIntegration integration.Integration
+	k8sNamespace       string
+	logger             *zap.Logger
 }
 
-func NewDatadogHandler(integration integration.Integration) *DatadogHandler {
-	return &DatadogHandler{datadogIntegration: integration}
+func NewDatadogHandler(integration integration.Integration, k8sNamespace string, logger *zap.Logger) *DatadogHandler {
+	return &DatadogHandler{datadogIntegration: integration, k8sNamespace: k8sNamespace, logger: logger}
 }
 
-func (dh *DatadogHandler) GetIntegrations(ctx context.Context, deps HandlerDeps) http.HandlerFunc {
+func (dh *DatadogHandler) GetIntegrations(ctx context.Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		ddInt, err := dh.datadogIntegration.GetIntegrations(ctx, deps.K8sNamespace)
+		ddInt, err := dh.datadogIntegration.GetIntegrations(ctx, dh.k8sNamespace)
 		if err != nil {
-			deps.Logger.Error("Failed to get integration from Secret", zap.Error(err))
+			dh.logger.Error("Failed to get integration from Secret", zap.Error(err))
 			http.Error(w, "Failed to get integrations", http.StatusBadRequest)
 		}
 
@@ -29,11 +31,11 @@ func (dh *DatadogHandler) GetIntegrations(ctx context.Context, deps HandlerDeps)
 		for intName := range ddInt {
 			integrationList = append(integrationList, intName)
 		}
-		httputil.WriteJSONResponse(w, deps.Logger, http.StatusOK, integrationList)
+		httputil.WriteJSONResponse(w, dh.logger, http.StatusOK, integrationList)
 	}
 }
 
-func (dh *DatadogHandler) PutIntegrationData(ctx context.Context, deps HandlerDeps) http.HandlerFunc {
+func (dh *DatadogHandler) PutIntegrationData(ctx context.Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		integrationName := req.PathValue("integrationName")
 		defer req.Body.Close()
@@ -44,22 +46,22 @@ func (dh *DatadogHandler) PutIntegrationData(ctx context.Context, deps HandlerDe
 			return
 		}
 
-		err := dh.datadogIntegration.SetIntegration(ctx, deps.K8sNamespace, integrationName, ddInt)
+		err := dh.datadogIntegration.SetIntegration(ctx, dh.k8sNamespace, integrationName, ddInt)
 		if err != nil {
 			http.Error(w, "Failed to update integration", http.StatusInternalServerError)
 		}
-		httputil.WriteJSONResponse(w, deps.Logger, http.StatusOK, "")
+		httputil.WriteJSONResponse(w, dh.logger, http.StatusOK, "")
 	}
 }
 
-func (dh *DatadogHandler) DeleteIntegration(ctx context.Context, deps HandlerDeps) http.HandlerFunc {
+func (dh *DatadogHandler) DeleteIntegration(ctx context.Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		integrationName := req.PathValue("integrationName")
-		err := dh.datadogIntegration.DeleteIntegration(ctx, deps.K8sNamespace, integrationName)
+		err := dh.datadogIntegration.DeleteIntegration(ctx, dh.k8sNamespace, integrationName)
 		if err != nil {
-			deps.Logger.Error("Failed to get integration from Secret", zap.Error(err))
+			dh.logger.Error("Failed to get integration from Secret", zap.Error(err))
 			http.Error(w, "Failed to update integration", http.StatusInternalServerError)
 		}
-		httputil.WriteJSONResponse(w, deps.Logger, http.StatusOK, "")
+		httputil.WriteJSONResponse(w, dh.logger, http.StatusOK, "")
 	}
 }
