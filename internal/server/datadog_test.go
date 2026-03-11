@@ -21,7 +21,7 @@ func TestGetIntegrations(t *testing.T) {
 	t.Run("error retrieving integrations", func(t *testing.T) {
 		t.Parallel()
 
-		integrationMock := integrationmock.NewMockIntegration(t)
+		integrationMock := integrationmock.NewMockIntegration[integration.DataDogIntegrationData](t)
 		integrationMock.EXPECT().GetIntegrations(mock.Anything, "default").Return(nil, assert.AnError).Times(1)
 
 		req := httptest.NewRequest(http.MethodGet, "/getIntegrations", http.NoBody)
@@ -36,18 +36,18 @@ func TestGetIntegrations(t *testing.T) {
 	t.Run("happy path", func(t *testing.T) {
 		t.Parallel()
 
-		expectedIntegrations := map[string]any{
-			"integration1": integration.DataDogIntegrationData{
+		expectedIntegrations := map[string]integration.DataDogIntegrationData{
+			"integration1": {
 				APIKey: "abc123",
 				DDUrl:  "http://datadog.example.com",
 			},
-			"integration2": integration.DataDogIntegrationData{
+			"integration2": {
 				APIKey: "xyz999",
 				DDUrl:  "http://datadog.example.com",
 			},
 		}
 
-		integrationMock := integrationmock.NewMockIntegration(t)
+		integrationMock := integrationmock.NewMockIntegration[integration.DataDogIntegrationData](t)
 		integrationMock.EXPECT().GetIntegrations(mock.Anything, "default").Return(expectedIntegrations, nil).Times(1)
 
 		req := httptest.NewRequest(http.MethodGet, "/getIntegrations", http.NoBody)
@@ -71,7 +71,7 @@ func TestPutIntegrationData(t *testing.T) {
 	t.Run("invalid request payload", func(t *testing.T) {
 		t.Parallel()
 
-		integrationMock := integrationmock.NewMockIntegration(t)
+		integrationMock := integrationmock.NewMockIntegration[integration.DataDogIntegrationData](t)
 
 		invalidPayoad, err := json.Marshal("not valid json")
 		require.NoError(t, err)
@@ -95,7 +95,7 @@ func TestPutIntegrationData(t *testing.T) {
 		serializedIntegration, err := json.Marshal(integrationToSave)
 		require.NoError(t, err)
 
-		integrationMock := integrationmock.NewMockIntegration(t)
+		integrationMock := integrationmock.NewMockIntegration[integration.DataDogIntegrationData](t)
 		integrationMock.EXPECT().
 			SetIntegration(mock.Anything, "default", "coolIntegration", mock.MatchedBy(func(integrationData any) bool {
 				ddIntegrationData, ok := integrationData.(integration.DataDogIntegrationData)
@@ -123,7 +123,7 @@ func TestPutIntegrationData(t *testing.T) {
 		serializedIntegration, err := json.Marshal(integrationToSave)
 		require.NoError(t, err)
 
-		integrationMock := integrationmock.NewMockIntegration(t)
+		integrationMock := integrationmock.NewMockIntegration[integration.DataDogIntegrationData](t)
 		integrationMock.EXPECT().
 			SetIntegration(mock.Anything, "default", "coolIntegration", mock.MatchedBy(func(integrationData any) bool {
 				ddIntegrationData, ok := integrationData.(integration.DataDogIntegrationData)
@@ -148,7 +148,7 @@ func TestDeleteIntegration(t *testing.T) {
 	t.Run("error deleting integration", func(t *testing.T) {
 		t.Parallel()
 
-		integrationMock := integrationmock.NewMockIntegration(t)
+		integrationMock := integrationmock.NewMockIntegration[integration.DataDogIntegrationData](t)
 		integrationMock.EXPECT().DeleteIntegration(mock.Anything, "default", "coolIntegration").Return(assert.AnError).Times(1)
 
 		req := httptest.NewRequest(http.MethodDelete, "/deleteIntegration/coolIntegration", http.NoBody)
@@ -163,7 +163,7 @@ func TestDeleteIntegration(t *testing.T) {
 	t.Run("happy path", func(t *testing.T) {
 		t.Parallel()
 
-		integrationMock := integrationmock.NewMockIntegration(t)
+		integrationMock := integrationmock.NewMockIntegration[integration.DataDogIntegrationData](t)
 		integrationMock.EXPECT().DeleteIntegration(mock.Anything, "default", "coolIntegration").Return(nil).Times(1)
 
 		req := httptest.NewRequest(http.MethodGet, "/deleteIntegration/coolIntegration", http.NoBody)
@@ -176,7 +176,7 @@ func TestDeleteIntegration(t *testing.T) {
 	})
 }
 
-func setupRouter(t *testing.T, theIntegration integration.Integration) *http.ServeMux {
+func setupRouter(t *testing.T, theIntegration integration.Integration[integration.DataDogIntegrationData]) *http.ServeMux {
 	t.Helper()
 
 	ddh := NewDatadogHandler(theIntegration, "default", zaptest.NewLogger(t))

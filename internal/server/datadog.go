@@ -11,12 +11,12 @@ import (
 )
 
 type DatadogHandler struct {
-	datadogIntegration integration.Integration
+	datadogIntegration integration.Integration[integration.DataDogIntegrationData]
 	k8sNamespace       string
 	logger             *zap.Logger
 }
 
-func NewDatadogHandler(theIntegration integration.Integration, k8sNamespace string, logger *zap.Logger) *DatadogHandler {
+func NewDatadogHandler(theIntegration integration.Integration[integration.DataDogIntegrationData], k8sNamespace string, logger *zap.Logger) *DatadogHandler {
 	return &DatadogHandler{datadogIntegration: theIntegration, k8sNamespace: k8sNamespace, logger: logger}
 }
 
