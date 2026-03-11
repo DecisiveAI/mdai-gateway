@@ -54,7 +54,7 @@ func TestGetIntegrations(t *testing.T) {
 		actual, err := datadogIntegration.GetIntegrations(t.Context(), defaultNamespace)
 		require.NoError(t, err)
 
-		require.True(t, assert.ObjectsAreEqual(map[string]any{
+		require.True(t, assert.ObjectsAreEqual(map[string]DataDogIntegrationData{
 			"team-a": validInt,
 		}, actual), "expected and actual don't match")
 	})
@@ -79,7 +79,7 @@ func TestGetIntegrations(t *testing.T) {
 
 		actual, err := datadogIntegration.GetIntegrations(t.Context(), defaultNamespace)
 		require.NoError(t, err)
-		require.True(t, assert.ObjectsAreEqual(map[string]any{
+		require.True(t, assert.ObjectsAreEqual(map[string]DataDogIntegrationData{
 			"team-a": validInt,
 		}, actual), "expected and actual don't match")
 	})
@@ -117,35 +117,6 @@ func TestSetIntegration(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, newIntegration, teamData)
-	})
-
-	t.Run("error - marshaling integration data", func(t *testing.T) {
-		t.Parallel()
-
-		existingObjects := []runtime.Object{
-			&corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{Name: dataDogIntegrationSecretName, Namespace: defaultNamespace},
-				Data: map[string][]byte{
-					"team-a": []byte(`{"api_key":"old-key","dd_url":"old-url"}`),
-				},
-			},
-		}
-		mockK8sClient := fake.NewClientset(existingObjects...)
-		datadogIntegration := &DataDogIntegration{
-			K8sClient: mockK8sClient,
-		}
-
-		// Verify the secret DOES exist already
-		existingSecret, err := mockK8sClient.CoreV1().Secrets(defaultNamespace).Get(t.Context(), dataDogIntegrationSecretName, metav1.GetOptions{})
-		require.NoError(t, err)
-		require.NotNil(t, existingSecret.Data)
-		require.Len(t, existingSecret.Data, 1)
-		require.Contains(t, existingSecret.Data, "team-a")
-
-		// can't marshal a channel, so this will error the marshal.
-		integrationData := make(chan int)
-		err = datadogIntegration.SetIntegration(t.Context(), defaultNamespace, "team-b", integrationData)
-		require.ErrorContains(t, err, "failed to marshal integration data")
 	})
 
 	t.Run("happy path", func(t *testing.T) {

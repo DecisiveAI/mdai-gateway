@@ -26,10 +26,10 @@ type DataDogIntegration struct {
 	K8sClient kubernetes.Interface
 }
 
-var _ Integration = (*DataDogIntegration)(nil)
+var _ Integration[DataDogIntegrationData] = (*DataDogIntegration)(nil)
 
 // GetIntegrations retrieves any existing integrations in the provided namespace for the "mdai-datadog-integration" secret.
-func (ddi *DataDogIntegration) GetIntegrations(ctx context.Context, namespace string) (map[string]any, error) {
+func (ddi *DataDogIntegration) GetIntegrations(ctx context.Context, namespace string) (map[string]DataDogIntegrationData, error) {
 	secret, err := ddi.K8sClient.CoreV1().Secrets(namespace).Get(ctx, dataDogIntegrationSecretName, metav1.GetOptions{})
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
@@ -38,7 +38,7 @@ func (ddi *DataDogIntegration) GetIntegrations(ctx context.Context, namespace st
 		return nil, fmt.Errorf("failed to get secret %s: %w", dataDogIntegrationSecretName, err)
 	}
 
-	integrations := make(map[string]any)
+	integrations := make(map[string]DataDogIntegrationData)
 	for name, data := range secret.Data {
 		var payload DataDogIntegrationData
 		if unmarshalErr := json.Unmarshal(data, &payload); unmarshalErr != nil {
@@ -51,7 +51,7 @@ func (ddi *DataDogIntegration) GetIntegrations(ctx context.Context, namespace st
 }
 
 // SetIntegration adds or updates the "mdai-datadog-integration" secret for the provided namespace.
-func (ddi *DataDogIntegration) SetIntegration(ctx context.Context, namespace, integrationName string, integrationData any) error {
+func (ddi *DataDogIntegration) SetIntegration(ctx context.Context, namespace, integrationName string, integrationData DataDogIntegrationData) error {
 	jsonData, err := json.Marshal(integrationData)
 	if err != nil {
 		return fmt.Errorf("failed to marshal integration data: %w", err)
