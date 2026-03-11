@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/mydecisive/mdai-data-core/audit"
 	datacorepublisher "github.com/mydecisive/mdai-data-core/eventing/publisher"
@@ -15,8 +17,6 @@ import (
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
-	"os"
-	"strings"
 )
 
 const (

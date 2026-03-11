@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -13,11 +14,11 @@ import (
 const (
 	DataDogIntegrationType Type = "datadog"
 
-	dataDogIntegrationSecretName string = "mdai-datadog-integration"
+	dataDogIntegrationSecretName string = "mdai-datadog-integration" // nolint: gosec
 )
 
 type DataDogIntegrationData struct {
-	ApiKey string `json:"api_key"`
+	APIKey string `json:"api_key"`
 	DDUrl  string `json:"dd_url"`
 }
 
@@ -32,7 +33,7 @@ func (ddi *DataDogIntegration) GetIntegrations(ctx context.Context, namespace st
 	secret, err := ddi.K8sClient.CoreV1().Secrets(namespace).Get(ctx, dataDogIntegrationSecretName, metav1.GetOptions{})
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			return nil, nil
+			return nil, nil // nolint: nilnil
 		}
 		return nil, fmt.Errorf("failed to get secret %s: %w", dataDogIntegrationSecretName, err)
 	}
@@ -65,10 +66,9 @@ func (ddi *DataDogIntegration) SetIntegration(ctx context.Context, namespace, in
 	if isNotFound {
 		// Create the secret if it does not exist
 		return createIntegrationSecret(ctx, ddi.K8sClient, namespace, dataDogIntegrationSecretName, integrationName, jsonData)
-	} else {
-		// Update the secret if it already exists
-		return updateSecretWithIntegration(ctx, ddi.K8sClient, namespace, secret, integrationName, jsonData)
 	}
+	// Update the secret if it already exists
+	return updateSecretWithIntegration(ctx, ddi.K8sClient, namespace, secret, integrationName, jsonData)
 }
 
 // DeleteIntegration removes a named integration from the "mdai-datadog-integration" secret in the provided namespace.

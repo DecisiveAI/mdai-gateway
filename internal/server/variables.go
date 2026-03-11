@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+
 	"github.com/mydecisive/mdai-data-core/eventing"
 	datacore "github.com/mydecisive/mdai-data-core/variables"
 	"github.com/mydecisive/mdai-gateway/internal/adapter"
@@ -14,7 +16,6 @@ import (
 	"github.com/mydecisive/mdai-gateway/internal/stringutil"
 	"github.com/mydecisive/mdai-gateway/internal/valkey"
 	"go.uber.org/zap"
-	"net/http"
 )
 
 func handleListAllVariables(_ context.Context, deps HandlerDeps) http.HandlerFunc {
