@@ -4,7 +4,7 @@ import (
 	"context"
 )
 
-type Type string
+const integrationSecretName = "mdai-gateway-integration"
 
 type Integration[T any] interface {
 	GetIntegrations(ctx context.Context, namespace string) (map[string]T, error)
