@@ -6,3 +6,4 @@ coverage:
 ignore:
   - "mocks/"
   - "internal/mock/"
+  - "cmd/"
