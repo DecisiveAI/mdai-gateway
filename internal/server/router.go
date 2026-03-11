@@ -2,18 +2,18 @@ package server
 
 import (
 	"context"
-	"github.com/mydecisive/mdai-gateway/internal/integration"
-	"k8s.io/client-go/kubernetes"
 	"net/http"
 	"strings"
 
-	"github.com/decisiveai/mdai-data-core/audit"
-	"github.com/decisiveai/mdai-data-core/eventing/publisher"
-	datacorekube "github.com/decisiveai/mdai-data-core/kube"
-	"github.com/decisiveai/mdai-gateway/internal/adapter"
-	"github.com/decisiveai/mdai-gateway/internal/opamp"
+	"github.com/mydecisive/mdai-data-core/audit"
+	"github.com/mydecisive/mdai-data-core/eventing/publisher"
+	datacorekube "github.com/mydecisive/mdai-data-core/kube"
+	"github.com/mydecisive/mdai-gateway/internal/adapter"
+	"github.com/mydecisive/mdai-gateway/internal/integration"
+	"github.com/mydecisive/mdai-gateway/internal/opamp"
 	"github.com/valkey-io/valkey-go"
 	"go.uber.org/zap"
+	"k8s.io/client-go/kubernetes"
 )
 
 type HandlerDeps struct {
