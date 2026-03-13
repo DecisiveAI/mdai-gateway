@@ -2,7 +2,7 @@
 # auditStreamRetention: 30d
 
 serviceAccount:
-  create: false
+  create: true
   automount: true
   annotations: {}
   name: "mdai-gateway"
