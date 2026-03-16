@@ -1,9 +1,12 @@
 DOCKER_TAG ?= 0.1.6
 CHART_VERSION ?= $(shell git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//')
 REPO_NAME := $(shell basename -s .git `git config --get remote.origin.url`)
-GO_TEST := CGO_ENABLED=0 go test -count=1
+BUILD_PLATFORMS ?= linux/arm64,linux/amd64
+GOTOOLCHAIN ?= go1.25.0
+GO := CGO_ENABLED=0 GOTOOLCHAIN=$(GOTOOLCHAIN) go
+GO_TEST := $(GO) test -count=1
 
-docker-login docker-build docker-push: AWS_ECR_REPO := public.ecr.aws/p3k6k6h3
+docker-login docker-build docker-push: AWS_ECR_REPO := public.ecr.aws/decisiveai
 docker-build docker-push: DOCKER_IMAGE := $(AWS_ECR_REPO)/$(REPO_NAME):$(DOCKER_TAG)
 
 .PHONY: docker-login
@@ -12,15 +15,15 @@ docker-login:
 
 .PHONY: docker-build
 docker-build: tidy vendor
-	docker buildx build --platform linux/arm64,linux/amd64 -t $(DOCKER_IMAGE) . --load
+	docker buildx build --platform $(BUILD_PLATFORMS) -t $(DOCKER_IMAGE) . --load
 
 .PHONY: docker-push
 docker-push: tidy vendor docker-login
-	docker buildx build --platform linux/arm64,linux/amd64 -t $(DOCKER_IMAGE) . --push
+	docker buildx build --platform $(BUILD_PLATFORMS) -t $(DOCKER_IMAGE) . --push
 
 .PHONY: build
 build: tidy vendor
-	CGO_ENABLED=0 go build -ldflags="-w -s" -o mdai-gateway ./cmd/mdai-gateway
+	$(GO) build -trimpath -ldflags="-w -s" -o mdai-gateway ./cmd/mdai-gateway
 
 .PHONY: test
 test: tidy vendor
@@ -41,25 +44,25 @@ coverv: tidy vendor
 .PHONY: coverhtml
 coverhtml:
 	@trap 'rm -f coverage.out' EXIT; \
-	go test -count=1 -coverprofile=coverage.out ./... && \
-	go tool cover -html=coverage.out -o coverage.html && \
+	$(GO_TEST) -coverprofile=coverage.out ./... && \
+	$(GO) tool cover -html=coverage.out -o coverage.html && \
 	( open coverage.html || xdg-open coverage.html )
 
 .PHONY: clean-coverage
 clean-coverage:
-	rm -f coverage.out coverage.html
+	@rm -f coverage.out coverage.html
 
 .PHONY: tidy
 tidy:
-	@go mod tidy
+	@$(GO) mod tidy
 
 .PHONY: tidy-check
 tidy-check: tidy
-	@git diff --quiet --exit-code go.mod go.sum || { echo >&2 "go.mod or go.sum is out of sync. Run 'make tidy'."; exit 1; }
+	@$(GO) mod tidy -diff
 
 .PHONY: vendor
 vendor:
-	@go mod vendor
+	@$(GO) mod vendor
 
 .PHONY: helm
 helm:

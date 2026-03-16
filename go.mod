@@ -1,8 +1,6 @@
 module github.com/mydecisive/mdai-gateway
 
-go 1.24.0
-
-toolchain go1.24.3
+go 1.25.0
 
 require (
 	github.com/google/uuid v1.6.0
