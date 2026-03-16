@@ -3,3 +3,7 @@ coverage:
     patch:
       default:
         target: 75%
+ignore:
+  - "mocks/"
+  - "internal/mock/"
+  - "cmd/"

@@ -9,9 +9,11 @@ import (
 	"github.com/mydecisive/mdai-data-core/eventing/publisher"
 	datacorekube "github.com/mydecisive/mdai-data-core/kube"
 	"github.com/mydecisive/mdai-gateway/internal/adapter"
+	"github.com/mydecisive/mdai-gateway/internal/integration"
 	"github.com/mydecisive/mdai-gateway/internal/opamp"
 	"github.com/valkey-io/valkey-go"
 	"go.uber.org/zap"
+	"k8s.io/client-go/kubernetes"
 )
 
 type HandlerDeps struct {
@@ -22,21 +24,34 @@ type HandlerDeps struct {
 	ConfigMapController *datacorekube.ConfigMapController
 	Deduper             *adapter.Deduper
 	OpAMPServer         *opamp.OpAMPControlServer
+	K8sClient           kubernetes.Interface
+	K8sNamespace        string
 }
 
 func NewRouter(ctx context.Context, deps HandlerDeps) *http.ServeMux {
-	router := http.NewServeMux()
+	mainRouter := http.NewServeMux()
 
-	router.HandleFunc("GET /audit", handleAuditEventsGet(ctx, deps))
-	router.Handle("POST /alerts/alertmanager", requireJSON(handlePromAlertsPost(deps)))
-	router.Handle("GET /variables/list", handleListAllVariables(ctx, deps))
-	router.Handle("GET /variables/list/hub/{hubName}", handleListHubVariables(ctx, deps))
-	router.Handle("GET /variables/values/hub/{hubName}/var/{varName}", handleGetVariables(ctx, deps))
-	router.Handle("POST /variables/hub/{hubName}/var/{varName}", handleSetDeleteVariables(ctx, deps))
-	router.Handle("DELETE /variables/hub/{hubName}/var/{varName}", handleSetDeleteVariables(ctx, deps))
-	router.Handle("POST /opamp", deps.OpAMPServer.HandlerFunc)
+	mainRouter.HandleFunc("GET /audit", handleAuditEventsGet(ctx, deps))
+	mainRouter.Handle("POST /alerts/alertmanager", requireJSON(handlePromAlertsPost(deps)))
+	mainRouter.Handle("GET /variables/list", handleListAllVariables(ctx, deps))
+	mainRouter.Handle("GET /variables/list/hub/{hubName}", handleListHubVariables(ctx, deps))
+	mainRouter.Handle("GET /variables/values/hub/{hubName}/var/{varName}", handleGetVariables(ctx, deps))
+	mainRouter.Handle("POST /variables/hub/{hubName}/var/{varName}", handleSetDeleteVariables(ctx, deps))
+	mainRouter.Handle("DELETE /variables/hub/{hubName}/var/{varName}", handleSetDeleteVariables(ctx, deps))
+	mainRouter.Handle("POST /opamp", deps.OpAMPServer.HandlerFunc)
 
-	return router
+	integrationsHandler := NewDatadogHandler(&integration.DataDogIntegration{
+		K8sClient: deps.K8sClient,
+	}, deps.K8sNamespace, deps.Logger)
+
+	datadogRouter := http.NewServeMux()
+	mainRouter.Handle("GET /integrations/datadog", integrationsHandler.GetIntegrations(ctx))
+	mainRouter.Handle("PUT /integrations/datadog/{integrationName}", integrationsHandler.PutIntegrationData(ctx))
+	mainRouter.Handle("DELETE /integrations/datadog/{integrationName}", integrationsHandler.DeleteIntegration(ctx))
+
+	mainRouter.Handle("/integrations/datadog", datadogRouter)
+
+	return mainRouter
 }
 
 func requireJSON(next http.Handler) http.Handler {
