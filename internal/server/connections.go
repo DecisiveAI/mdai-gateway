@@ -35,6 +35,12 @@ func (ch *ConnectionsHandler) GetConnectionByName(ctx context.Context) http.Hand
 			return
 		}
 
+		if theConnection == nil {
+			ch.logger.Warn("connection not found", zap.String("connectionName", connectionName))
+			http.Error(w, "connection not found", http.StatusNotFound)
+			return
+		}
+
 		httputil.WriteJSONResponse(w, ch.logger, http.StatusOK, theConnection)
 	}
 }
