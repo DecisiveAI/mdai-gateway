@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"github.com/mydecisive/mdai-gateway/internal/connection"
 	"net/http"
 	"strings"
 
@@ -48,17 +49,28 @@ func NewRouter(ctx context.Context, deps HandlerDeps) *http.ServeMux {
 	}, deps.K8sNamespace, deps.Logger)
 
 	datadogRouter := http.NewServeMux()
-	datadogRouter.Handle("GET /integrations/datadog", ddIntegrationHandler.GetIntegrations(ctx))
-	datadogRouter.Handle("PUT /integrations/datadog/{integrationName}", ddIntegrationHandler.PutIntegrationData(ctx))
-	datadogRouter.Handle("DELETE /integrations/datadog/{integrationName}", ddIntegrationHandler.DeleteIntegration(ctx))
+	datadogRouter.Handle("GET /", ddIntegrationHandler.GetIntegrations(ctx))
+	datadogRouter.Handle("PUT /{integrationName}", ddIntegrationHandler.PutIntegrationData(ctx))
+	datadogRouter.Handle("DELETE /{integrationName}", ddIntegrationHandler.DeleteIntegration(ctx))
 
 	argocdRouter := http.NewServeMux()
-	argocdRouter.Handle("GET /integrations/argocd", argocdIntegrationHandler.GetIntegrations(ctx))
-	argocdRouter.Handle("PUT /integrations/argocd/{integrationName}", argocdIntegrationHandler.PutIntegrationData(ctx))
-	argocdRouter.Handle("DELETE /integrations/argocd/{integrationName}", argocdIntegrationHandler.DeleteIntegration(ctx))
+	argocdRouter.Handle("GET /", argocdIntegrationHandler.GetIntegrations(ctx))
+	argocdRouter.Handle("PUT /{integrationName}", argocdIntegrationHandler.PutIntegrationData(ctx))
+	argocdRouter.Handle("DELETE /{integrationName}", argocdIntegrationHandler.DeleteIntegration(ctx))
 
-	mainRouter.Handle("/integrations/datadog", datadogRouter)
-	mainRouter.Handle("/integrations/argocd", argocdRouter)
+	mainRouter.Handle("/integrations/datadog/", http.StripPrefix("/integrations/datadog", datadogRouter))
+	mainRouter.Handle("/integrations/argocd/", http.StripPrefix("/integrations/argocd", argocdRouter))
+
+	connectionsHandler := NewConnectionsHandler(&connection.OctantConnection{
+		K8sClient: deps.K8sClient,
+	}, deps.K8sNamespace, deps.Logger)
+
+	connectionsRouter := http.NewServeMux()
+	connectionsRouter.Handle("GET /{connectionName}", connectionsHandler.GetConnectionByName(ctx))
+	connectionsRouter.Handle("PUT /{connectionName}", connectionsHandler.SaveConnectionData(ctx))
+	connectionsRouter.Handle("DELETE /{connectionName}", connectionsHandler.DeleteConnectionByName(ctx))
+
+	mainRouter.Handle("/connections/", http.StripPrefix("/connections", connectionsRouter))
 
 	return mainRouter
 }
