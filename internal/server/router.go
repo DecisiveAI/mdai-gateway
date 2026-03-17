@@ -40,16 +40,25 @@ func NewRouter(ctx context.Context, deps HandlerDeps) *http.ServeMux {
 	mainRouter.Handle("DELETE /variables/hub/{hubName}/var/{varName}", handleSetDeleteVariables(ctx, deps))
 	mainRouter.Handle("POST /opamp", deps.OpAMPServer.HandlerFunc)
 
-	integrationsHandler := NewDatadogHandler(&integration.DataDogIntegration{
+	ddIntegrationHandler := NewDatadogHandler(&integration.DataDogIntegration{
+		K8sClient: deps.K8sClient,
+	}, deps.K8sNamespace, deps.Logger)
+	argocdIntegrationHandler := NewArgoCDHandler(&integration.ArgoCDIntegration{
 		K8sClient: deps.K8sClient,
 	}, deps.K8sNamespace, deps.Logger)
 
 	datadogRouter := http.NewServeMux()
-	mainRouter.Handle("GET /integrations/datadog", integrationsHandler.GetIntegrations(ctx))
-	mainRouter.Handle("PUT /integrations/datadog/{integrationName}", integrationsHandler.PutIntegrationData(ctx))
-	mainRouter.Handle("DELETE /integrations/datadog/{integrationName}", integrationsHandler.DeleteIntegration(ctx))
+	datadogRouter.Handle("GET /integrations/datadog", ddIntegrationHandler.GetIntegrations(ctx))
+	datadogRouter.Handle("PUT /integrations/datadog/{integrationName}", ddIntegrationHandler.PutIntegrationData(ctx))
+	datadogRouter.Handle("DELETE /integrations/datadog/{integrationName}", ddIntegrationHandler.DeleteIntegration(ctx))
+
+	argocdRouter := http.NewServeMux()
+	argocdRouter.Handle("GET /integrations/argocd", argocdIntegrationHandler.GetIntegrations(ctx))
+	argocdRouter.Handle("PUT /integrations/argocd/{integrationName}", argocdIntegrationHandler.PutIntegrationData(ctx))
+	argocdRouter.Handle("DELETE /integrations/argocd/{integrationName}", argocdIntegrationHandler.DeleteIntegration(ctx))
 
 	mainRouter.Handle("/integrations/datadog", datadogRouter)
+	mainRouter.Handle("/integrations/argocd", argocdRouter)
 
 	return mainRouter
 }
