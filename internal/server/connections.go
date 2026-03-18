@@ -3,9 +3,9 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"github.com/mydecisive/mdai-gateway/internal/connection"
 	"net/http"
 
+	"github.com/mydecisive/mdai-gateway/internal/connection"
 	"github.com/mydecisive/mdai-gateway/internal/httputil"
 	"go.uber.org/zap"
 )

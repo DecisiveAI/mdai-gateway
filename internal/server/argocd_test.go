@@ -15,19 +15,19 @@ import (
 	"go.uber.org/zap/zaptest"
 )
 
-func TestGetIntegrations(t *testing.T) {
+func TestArgoCD_GetIntegrations(t *testing.T) {
 	t.Parallel()
 
 	t.Run("error retrieving integrations", func(t *testing.T) {
 		t.Parallel()
 
-		integrationMock := integrationmock.NewMockIntegration[integration.DataDogIntegrationData](t)
+		integrationMock := integrationmock.NewMockIntegration[integration.ArgoCDIntegrationData](t)
 		integrationMock.EXPECT().GetIntegrations(mock.Anything, "default").Return(nil, assert.AnError).Times(1)
 
 		req := httptest.NewRequest(http.MethodGet, "/getIntegrations", http.NoBody)
 		resp := httptest.NewRecorder()
 
-		router := setupDatadogRouter(t, integrationMock)
+		router := setupArgoCDRouter(t, integrationMock)
 		router.ServeHTTP(resp, req)
 
 		assert.Equal(t, http.StatusInternalServerError, resp.Code)
@@ -36,24 +36,22 @@ func TestGetIntegrations(t *testing.T) {
 	t.Run("happy path", func(t *testing.T) {
 		t.Parallel()
 
-		expectedIntegrations := map[string]integration.DataDogIntegrationData{
+		expectedIntegrations := map[string]integration.ArgoCDIntegrationData{
 			"integration1": {
-				APIKey: "abc123",
-				DDUrl:  "http://datadog.example.com",
+				AccountToken: "abc123",
 			},
 			"integration2": {
-				APIKey: "xyz999",
-				DDUrl:  "http://datadog.example.com",
+				AccountToken: "xyz999",
 			},
 		}
 
-		integrationMock := integrationmock.NewMockIntegration[integration.DataDogIntegrationData](t)
+		integrationMock := integrationmock.NewMockIntegration[integration.ArgoCDIntegrationData](t)
 		integrationMock.EXPECT().GetIntegrations(mock.Anything, "default").Return(expectedIntegrations, nil).Times(1)
 
 		req := httptest.NewRequest(http.MethodGet, "/getIntegrations", http.NoBody)
 		resp := httptest.NewRecorder()
 
-		router := setupDatadogRouter(t, integrationMock)
+		router := setupArgoCDRouter(t, integrationMock)
 		router.ServeHTTP(resp, req)
 
 		assert.Equal(t, http.StatusOK, resp.Code)
@@ -65,13 +63,13 @@ func TestGetIntegrations(t *testing.T) {
 	})
 }
 
-func TestPutIntegrationData(t *testing.T) {
+func TestArgoCD_PutIntegrationData(t *testing.T) {
 	t.Parallel()
 
 	t.Run("invalid request payload", func(t *testing.T) {
 		t.Parallel()
 
-		integrationMock := integrationmock.NewMockIntegration[integration.DataDogIntegrationData](t)
+		integrationMock := integrationmock.NewMockIntegration[integration.ArgoCDIntegrationData](t)
 
 		invalidPayoad, err := json.Marshal("not valid json")
 		require.NoError(t, err)
@@ -79,7 +77,7 @@ func TestPutIntegrationData(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/putIntegration/coolIntegration", bytes.NewBuffer(invalidPayoad))
 		resp := httptest.NewRecorder()
 
-		router := setupDatadogRouter(t, integrationMock)
+		router := setupArgoCDRouter(t, integrationMock)
 		router.ServeHTTP(resp, req)
 
 		assert.Equal(t, http.StatusBadRequest, resp.Code)
@@ -88,18 +86,17 @@ func TestPutIntegrationData(t *testing.T) {
 	t.Run("error setting the integration", func(t *testing.T) {
 		t.Parallel()
 
-		integrationToSave := integration.DataDogIntegrationData{
-			APIKey: "abc123",
-			DDUrl:  "http://datadog.example.com",
+		integrationToSave := integration.ArgoCDIntegrationData{
+			AccountToken: "abc123",
 		}
 		serializedIntegration, err := json.Marshal(integrationToSave)
 		require.NoError(t, err)
 
-		integrationMock := integrationmock.NewMockIntegration[integration.DataDogIntegrationData](t)
+		integrationMock := integrationmock.NewMockIntegration[integration.ArgoCDIntegrationData](t)
 		integrationMock.EXPECT().
 			SetIntegration(mock.Anything, "default", "coolIntegration", mock.MatchedBy(func(integrationData any) bool {
-				ddIntegrationData, ok := integrationData.(integration.DataDogIntegrationData)
-				return ok && ddIntegrationData.APIKey == "abc123" && ddIntegrationData.DDUrl == "http://datadog.example.com"
+				argocdIntegrationData, ok := integrationData.(integration.ArgoCDIntegrationData)
+				return ok && argocdIntegrationData.AccountToken == "abc123"
 			})).
 			Return(assert.AnError).
 			Times(1)
@@ -107,7 +104,7 @@ func TestPutIntegrationData(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPut, "/putIntegration/coolIntegration", bytes.NewBuffer(serializedIntegration))
 		resp := httptest.NewRecorder()
 
-		router := setupDatadogRouter(t, integrationMock)
+		router := setupArgoCDRouter(t, integrationMock)
 		router.ServeHTTP(resp, req)
 
 		assert.Equal(t, http.StatusInternalServerError, resp.Code)
@@ -116,18 +113,17 @@ func TestPutIntegrationData(t *testing.T) {
 	t.Run("happy path", func(t *testing.T) {
 		t.Parallel()
 
-		integrationToSave := integration.DataDogIntegrationData{
-			APIKey: "abc123",
-			DDUrl:  "http://datadog.example.com",
+		integrationToSave := integration.ArgoCDIntegrationData{
+			AccountToken: "abc123",
 		}
 		serializedIntegration, err := json.Marshal(integrationToSave)
 		require.NoError(t, err)
 
-		integrationMock := integrationmock.NewMockIntegration[integration.DataDogIntegrationData](t)
+		integrationMock := integrationmock.NewMockIntegration[integration.ArgoCDIntegrationData](t)
 		integrationMock.EXPECT().
 			SetIntegration(mock.Anything, "default", "coolIntegration", mock.MatchedBy(func(integrationData any) bool {
-				ddIntegrationData, ok := integrationData.(integration.DataDogIntegrationData)
-				return ok && ddIntegrationData.APIKey == "abc123" && ddIntegrationData.DDUrl == "http://datadog.example.com"
+				argocdIntegrationData, ok := integrationData.(integration.ArgoCDIntegrationData)
+				return ok && argocdIntegrationData.AccountToken == "abc123"
 			})).
 			Return(nil).
 			Times(1)
@@ -135,26 +131,26 @@ func TestPutIntegrationData(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPut, "/putIntegration/coolIntegration", bytes.NewBuffer(serializedIntegration))
 		resp := httptest.NewRecorder()
 
-		router := setupDatadogRouter(t, integrationMock)
+		router := setupArgoCDRouter(t, integrationMock)
 		router.ServeHTTP(resp, req)
 
 		assert.Equal(t, http.StatusOK, resp.Code)
 	})
 }
 
-func TestDeleteIntegration(t *testing.T) {
+func TestArgoCD_DeleteIntegration(t *testing.T) {
 	t.Parallel()
 
 	t.Run("error deleting integration", func(t *testing.T) {
 		t.Parallel()
 
-		integrationMock := integrationmock.NewMockIntegration[integration.DataDogIntegrationData](t)
+		integrationMock := integrationmock.NewMockIntegration[integration.ArgoCDIntegrationData](t)
 		integrationMock.EXPECT().DeleteIntegration(mock.Anything, "default", "coolIntegration").Return(assert.AnError).Times(1)
 
 		req := httptest.NewRequest(http.MethodDelete, "/deleteIntegration/coolIntegration", http.NoBody)
 		resp := httptest.NewRecorder()
 
-		router := setupDatadogRouter(t, integrationMock)
+		router := setupArgoCDRouter(t, integrationMock)
 		router.ServeHTTP(resp, req)
 
 		assert.Equal(t, http.StatusInternalServerError, resp.Code)
@@ -163,27 +159,27 @@ func TestDeleteIntegration(t *testing.T) {
 	t.Run("happy path", func(t *testing.T) {
 		t.Parallel()
 
-		integrationMock := integrationmock.NewMockIntegration[integration.DataDogIntegrationData](t)
+		integrationMock := integrationmock.NewMockIntegration[integration.ArgoCDIntegrationData](t)
 		integrationMock.EXPECT().DeleteIntegration(mock.Anything, "default", "coolIntegration").Return(nil).Times(1)
 
 		req := httptest.NewRequest(http.MethodGet, "/deleteIntegration/coolIntegration", http.NoBody)
 		resp := httptest.NewRecorder()
 
-		router := setupDatadogRouter(t, integrationMock)
+		router := setupArgoCDRouter(t, integrationMock)
 		router.ServeHTTP(resp, req)
 
 		assert.Equal(t, http.StatusOK, resp.Code)
 	})
 }
 
-func setupDatadogRouter(t *testing.T, theIntegration integration.Integration[integration.DataDogIntegrationData]) *http.ServeMux {
+func setupArgoCDRouter(t *testing.T, theIntegration integration.Integration[integration.ArgoCDIntegrationData]) *http.ServeMux {
 	t.Helper()
 
-	ddh := NewDatadogHandler(theIntegration, "default", zaptest.NewLogger(t))
+	argoHandler := NewArgoCDHandler(theIntegration, "default", zaptest.NewLogger(t))
 
 	mainRouter := http.NewServeMux()
-	mainRouter.Handle("/getIntegrations", ddh.GetIntegrations(t.Context()))
-	mainRouter.Handle("/putIntegration/{integrationName}", ddh.PutIntegrationData(t.Context()))
-	mainRouter.Handle("/deleteIntegration/{integrationName}", ddh.DeleteIntegration(t.Context()))
+	mainRouter.Handle("/getIntegrations", argoHandler.GetIntegrations(t.Context()))
+	mainRouter.Handle("/putIntegration/{integrationName}", argoHandler.PutIntegrationData(t.Context()))
+	mainRouter.Handle("/deleteIntegration/{integrationName}", argoHandler.DeleteIntegration(t.Context()))
 	return mainRouter
 }

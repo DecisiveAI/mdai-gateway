@@ -10,7 +10,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-const datadogSecretName = "mdai-datadog-integration"
+const datadogSecretName = "mdai-datadog-integration" // nolint: gosec
 
 type DataDogIntegrationData struct {
 	APIKey string `json:"apiKey"`

@@ -10,7 +10,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-const argocdSecretName = "mdai-argocd-integration"
+const argocdSecretName = "mdai-argocd-integration" // nolint: gosec
 
 type ArgoCDIntegrationData struct {
 	AccountToken string `json:"accountToken"`

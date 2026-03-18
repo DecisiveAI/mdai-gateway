@@ -5,29 +5,30 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 
-	"github.com/mydecisive/mdai-gateway/internal/integration"
-	integrationmock "github.com/mydecisive/mdai-gateway/internal/mock/integration"
+	"github.com/mydecisive/mdai-gateway/internal/connection"
+	connectionmock "github.com/mydecisive/mdai-gateway/internal/mock/connection"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 )
 
-func TestGetIntegrations(t *testing.T) {
+func TestGetConnectionByName(t *testing.T) {
 	t.Parallel()
 
-	t.Run("error retrieving integrations", func(t *testing.T) {
+	t.Run("error retrieving connection", func(t *testing.T) {
 		t.Parallel()
 
-		integrationMock := integrationmock.NewMockIntegration[integration.DataDogIntegrationData](t)
-		integrationMock.EXPECT().GetIntegrations(mock.Anything, "default").Return(nil, assert.AnError).Times(1)
+		connectionsMock := connectionmock.NewMockConnection[connection.OctantConnectionData](t)
+		connectionsMock.EXPECT().GetConnectionByName(mock.Anything, "default", "specialConnection").Return(nil, assert.AnError).Times(1)
 
-		req := httptest.NewRequest(http.MethodGet, "/getIntegrations", http.NoBody)
+		req := httptest.NewRequest(http.MethodGet, "/getConnection/specialConnection", http.NoBody)
 		resp := httptest.NewRecorder()
 
-		router := setupRouter(t, integrationMock)
+		router := setupConnectionsRouter(t, connectionsMock)
 		router.ServeHTTP(resp, req)
 
 		assert.Equal(t, http.StatusInternalServerError, resp.Code)
@@ -36,78 +37,92 @@ func TestGetIntegrations(t *testing.T) {
 	t.Run("happy path", func(t *testing.T) {
 		t.Parallel()
 
-		expectedIntegrations := map[string]integration.DataDogIntegrationData{
-			"integration1": {
-				APIKey: "abc123",
-				DDUrl:  "http://datadog.example.com",
+		expectedConnection := &connection.OctantConnectionData{
+			SourceType: "datadog",
+			TelemetryTypes: []connection.Telemetry{
+				connection.Logs,
+				connection.Traces,
 			},
-			"integration2": {
-				APIKey: "xyz999",
-				DDUrl:  "http://datadog.example.com",
+			Deployment: &connection.Deployment{
+				Type: "argocd",
+				Fields: map[string]any{
+					"branch": "bestBranch",
+				},
 			},
 		}
 
-		integrationMock := integrationmock.NewMockIntegration[integration.DataDogIntegrationData](t)
-		integrationMock.EXPECT().GetIntegrations(mock.Anything, "default").Return(expectedIntegrations, nil).Times(1)
+		connectionsMock := connectionmock.NewMockConnection[connection.OctantConnectionData](t)
+		connectionsMock.EXPECT().GetConnectionByName(mock.Anything, "default", "specialConnection").Return(expectedConnection, nil).Times(1)
 
-		req := httptest.NewRequest(http.MethodGet, "/getIntegrations", http.NoBody)
+		req := httptest.NewRequest(http.MethodGet, "/getConnection/specialConnection", http.NoBody)
 		resp := httptest.NewRecorder()
 
-		router := setupRouter(t, integrationMock)
+		router := setupConnectionsRouter(t, connectionsMock)
 		router.ServeHTTP(resp, req)
 
 		assert.Equal(t, http.StatusOK, resp.Code)
 
-		var integrationList []string
-		err := json.Unmarshal(resp.Body.Bytes(), &integrationList)
+		var actualConnection connection.OctantConnectionData
+		err := json.Unmarshal(resp.Body.Bytes(), &actualConnection)
 		require.NoError(t, err)
-		assert.ElementsMatch(t, []string{"integration1", "integration2"}, integrationList)
+		assert.True(t, reflect.DeepEqual(expectedConnection, &actualConnection))
 	})
 }
 
-func TestPutIntegrationData(t *testing.T) {
+func TestSaveConnectionData(t *testing.T) {
 	t.Parallel()
 
 	t.Run("invalid request payload", func(t *testing.T) {
 		t.Parallel()
 
-		integrationMock := integrationmock.NewMockIntegration[integration.DataDogIntegrationData](t)
+		connectionsMock := connectionmock.NewMockConnection[connection.OctantConnectionData](t)
 
 		invalidPayoad, err := json.Marshal("not valid json")
 		require.NoError(t, err)
 
-		req := httptest.NewRequest(http.MethodGet, "/putIntegration/coolIntegration", bytes.NewBuffer(invalidPayoad))
+		req := httptest.NewRequest(http.MethodGet, "/saveConnection/coolConnection", bytes.NewBuffer(invalidPayoad))
 		resp := httptest.NewRecorder()
 
-		router := setupRouter(t, integrationMock)
+		router := setupConnectionsRouter(t, connectionsMock)
 		router.ServeHTTP(resp, req)
 
 		assert.Equal(t, http.StatusBadRequest, resp.Code)
 	})
 
-	t.Run("error setting the integration", func(t *testing.T) {
+	t.Run("error saving the connection", func(t *testing.T) {
 		t.Parallel()
 
-		integrationToSave := integration.DataDogIntegrationData{
-			APIKey: "abc123",
-			DDUrl:  "http://datadog.example.com",
+		connectionToSave := &connection.OctantConnectionData{
+			SourceType: "datadog",
+			TelemetryTypes: []connection.Telemetry{
+				connection.Logs,
+				connection.Traces,
+			},
+			Deployment: &connection.Deployment{
+				Type: "argocd",
+				Fields: map[string]any{
+					"branch": "bestBranch",
+				},
+			},
 		}
-		serializedIntegration, err := json.Marshal(integrationToSave)
+		serializedConnection, err := json.Marshal(connectionToSave)
 		require.NoError(t, err)
 
-		integrationMock := integrationmock.NewMockIntegration[integration.DataDogIntegrationData](t)
-		integrationMock.EXPECT().
-			SetIntegration(mock.Anything, "default", "coolIntegration", mock.MatchedBy(func(integrationData any) bool {
-				ddIntegrationData, ok := integrationData.(integration.DataDogIntegrationData)
-				return ok && ddIntegrationData.APIKey == "abc123" && ddIntegrationData.DDUrl == "http://datadog.example.com"
-			})).
+		connectionsMock := connectionmock.NewMockConnection[connection.OctantConnectionData](t)
+		connectionsMock.EXPECT().
+			SaveConnection(mock.Anything, mock.MatchedBy(func(theConnection connection.OctantConnectionData) bool {
+				matchingSource := theConnection.SourceType == "datadog"
+				matchingTelemetry := len(theConnection.TelemetryTypes) == 2 && theConnection.TelemetryTypes[0] == connection.Logs && theConnection.TelemetryTypes[1] == connection.Traces
+				matchingDeployment := theConnection.Deployment.Type == "argocd" && theConnection.Deployment.Fields["branch"] == "bestBranch"
+				return matchingSource && matchingTelemetry && matchingDeployment
+			}), "default", "coolConnection").
 			Return(assert.AnError).
 			Times(1)
 
-		req := httptest.NewRequest(http.MethodPut, "/putIntegration/coolIntegration", bytes.NewBuffer(serializedIntegration))
+		req := httptest.NewRequest(http.MethodPut, "/saveConnection/coolConnection", bytes.NewBuffer(serializedConnection))
 		resp := httptest.NewRecorder()
 
-		router := setupRouter(t, integrationMock)
+		router := setupConnectionsRouter(t, connectionsMock)
 		router.ServeHTTP(resp, req)
 
 		assert.Equal(t, http.StatusInternalServerError, resp.Code)
@@ -116,45 +131,56 @@ func TestPutIntegrationData(t *testing.T) {
 	t.Run("happy path", func(t *testing.T) {
 		t.Parallel()
 
-		integrationToSave := integration.DataDogIntegrationData{
-			APIKey: "abc123",
-			DDUrl:  "http://datadog.example.com",
+		connectionToSave := &connection.OctantConnectionData{
+			SourceType: "datadog",
+			TelemetryTypes: []connection.Telemetry{
+				connection.Logs,
+				connection.Traces,
+			},
+			Deployment: &connection.Deployment{
+				Type: "argocd",
+				Fields: map[string]any{
+					"branch": "bestBranch",
+				},
+			},
 		}
-		serializedIntegration, err := json.Marshal(integrationToSave)
+		serializedConnection, err := json.Marshal(connectionToSave)
 		require.NoError(t, err)
 
-		integrationMock := integrationmock.NewMockIntegration[integration.DataDogIntegrationData](t)
-		integrationMock.EXPECT().
-			SetIntegration(mock.Anything, "default", "coolIntegration", mock.MatchedBy(func(integrationData any) bool {
-				ddIntegrationData, ok := integrationData.(integration.DataDogIntegrationData)
-				return ok && ddIntegrationData.APIKey == "abc123" && ddIntegrationData.DDUrl == "http://datadog.example.com"
-			})).
+		connectionsMock := connectionmock.NewMockConnection[connection.OctantConnectionData](t)
+		connectionsMock.EXPECT().
+			SaveConnection(mock.Anything, mock.MatchedBy(func(theConnection connection.OctantConnectionData) bool {
+				matchingSource := theConnection.SourceType == "datadog"
+				matchingTelemetry := len(theConnection.TelemetryTypes) == 2 && theConnection.TelemetryTypes[0] == connection.Logs && theConnection.TelemetryTypes[1] == connection.Traces
+				matchingDeployment := theConnection.Deployment.Type == "argocd" && theConnection.Deployment.Fields["branch"] == "bestBranch"
+				return matchingSource && matchingTelemetry && matchingDeployment
+			}), "default", "coolConnection").
 			Return(nil).
 			Times(1)
 
-		req := httptest.NewRequest(http.MethodPut, "/putIntegration/coolIntegration", bytes.NewBuffer(serializedIntegration))
+		req := httptest.NewRequest(http.MethodPut, "/saveConnection/coolConnection", bytes.NewBuffer(serializedConnection))
 		resp := httptest.NewRecorder()
 
-		router := setupRouter(t, integrationMock)
+		router := setupConnectionsRouter(t, connectionsMock)
 		router.ServeHTTP(resp, req)
 
 		assert.Equal(t, http.StatusOK, resp.Code)
 	})
 }
 
-func TestDeleteIntegration(t *testing.T) {
+func TestDeleteConnectionByName(t *testing.T) {
 	t.Parallel()
 
 	t.Run("error deleting integration", func(t *testing.T) {
 		t.Parallel()
 
-		integrationMock := integrationmock.NewMockIntegration[integration.DataDogIntegrationData](t)
-		integrationMock.EXPECT().DeleteIntegration(mock.Anything, "default", "coolIntegration").Return(assert.AnError).Times(1)
+		connectionsMock := connectionmock.NewMockConnection[connection.OctantConnectionData](t)
+		connectionsMock.EXPECT().DeleteConnection(mock.Anything, "default", "coolConnection").Return(assert.AnError).Times(1)
 
-		req := httptest.NewRequest(http.MethodDelete, "/deleteIntegration/coolIntegration", http.NoBody)
+		req := httptest.NewRequest(http.MethodDelete, "/deleteConnection/coolConnection", http.NoBody)
 		resp := httptest.NewRecorder()
 
-		router := setupRouter(t, integrationMock)
+		router := setupConnectionsRouter(t, connectionsMock)
 		router.ServeHTTP(resp, req)
 
 		assert.Equal(t, http.StatusInternalServerError, resp.Code)
@@ -163,27 +189,27 @@ func TestDeleteIntegration(t *testing.T) {
 	t.Run("happy path", func(t *testing.T) {
 		t.Parallel()
 
-		integrationMock := integrationmock.NewMockIntegration[integration.DataDogIntegrationData](t)
-		integrationMock.EXPECT().DeleteIntegration(mock.Anything, "default", "coolIntegration").Return(nil).Times(1)
+		connectionsMock := connectionmock.NewMockConnection[connection.OctantConnectionData](t)
+		connectionsMock.EXPECT().DeleteConnection(mock.Anything, "default", "coolConnection").Return(nil).Times(1)
 
-		req := httptest.NewRequest(http.MethodGet, "/deleteIntegration/coolIntegration", http.NoBody)
+		req := httptest.NewRequest(http.MethodDelete, "/deleteConnection/coolConnection", http.NoBody)
 		resp := httptest.NewRecorder()
 
-		router := setupRouter(t, integrationMock)
+		router := setupConnectionsRouter(t, connectionsMock)
 		router.ServeHTTP(resp, req)
 
 		assert.Equal(t, http.StatusOK, resp.Code)
 	})
 }
 
-func setupRouter(t *testing.T, theIntegration integration.Integration[integration.DataDogIntegrationData]) *http.ServeMux {
+func setupConnectionsRouter(t *testing.T, theConnection connection.Connection[connection.OctantConnectionData]) *http.ServeMux {
 	t.Helper()
 
-	ddh := NewDatadogHandler(theIntegration, "default", zaptest.NewLogger(t))
+	connectionsHandler := NewConnectionsHandler(theConnection, "default", zaptest.NewLogger(t))
 
 	mainRouter := http.NewServeMux()
-	mainRouter.Handle("/getIntegrations", ddh.GetIntegrations(t.Context()))
-	mainRouter.Handle("/putIntegration/{integrationName}", ddh.PutIntegrationData(t.Context()))
-	mainRouter.Handle("/deleteIntegration/{integrationName}", ddh.DeleteIntegration(t.Context()))
+	mainRouter.Handle("/getConnection/{connectionName}", connectionsHandler.GetConnectionByName(t.Context()))
+	mainRouter.Handle("/saveConnection/{connectionName}", connectionsHandler.SaveConnectionData(t.Context()))
+	mainRouter.Handle("/deleteConnection/{connectionName}", connectionsHandler.DeleteConnectionByName(t.Context()))
 	return mainRouter
 }

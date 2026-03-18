@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"github.com/mydecisive/mdai-gateway/internal/connection"
 	"net/http"
 	"strings"
 
@@ -10,6 +9,7 @@ import (
 	"github.com/mydecisive/mdai-data-core/eventing/publisher"
 	datacorekube "github.com/mydecisive/mdai-data-core/kube"
 	"github.com/mydecisive/mdai-gateway/internal/adapter"
+	"github.com/mydecisive/mdai-gateway/internal/connection"
 	"github.com/mydecisive/mdai-gateway/internal/integration"
 	"github.com/mydecisive/mdai-gateway/internal/opamp"
 	"github.com/valkey-io/valkey-go"
