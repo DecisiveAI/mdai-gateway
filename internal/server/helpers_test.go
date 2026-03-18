@@ -1,18 +1,22 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"testing"
 	"time"
 
 	"github.com/mydecisive/mdai-data-core/audit"
+	"github.com/mydecisive/mdai-data-core/eventing"
 	"github.com/mydecisive/mdai-data-core/eventing/publisher"
 	datacorekube "github.com/mydecisive/mdai-data-core/kube"
 	"github.com/mydecisive/mdai-gateway/internal/adapter"
 	"github.com/mydecisive/mdai-gateway/internal/opamp"
-	natsserver "github.com/nats-io/nats-server/v2/server"
+	gatewayvalkey "github.com/mydecisive/mdai-gateway/internal/valkey"
+	"github.com/mydecisive/mdai-gateway/internal/variables"
 	"github.com/stretchr/testify/require"
 	valkeymock "github.com/valkey-io/valkey-go/mock"
 	"go.uber.org/mock/gomock"
@@ -20,11 +24,36 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
-	"k8s.io/client-go/tools/cache"
 )
+
+type fakePublisher struct{}
+
+func (fakePublisher) Publish(context.Context, eventing.MdaiEvent, eventing.MdaiEventSubject) error {
+	return nil
+}
+
+func (fakePublisher) Close() error {
+	return nil
+}
+
+var _ publisher.Publisher = fakePublisher{}
+
+const testSlowValueReadThreshold = 250 * time.Millisecond
+
+func sampleHubVariablesSchemaRaw() map[string]string {
+	return map[string]string{
+		"data_boolean":       `{"type":"manual","dataType":"boolean","storageType":"mdai-valkey","serializeAs":[{"name":"DATA_BOOLEAN"}]}`,
+		"data_map":           `{"type":"manual","dataType":"map","storageType":"mdai-valkey","serializeAs":[{"name":"DATA_MAP"}]}`,
+		"data_set":           `{"type":"manual","dataType":"set","storageType":"mdai-valkey","serializeAs":[{"name":"DATA_SET","transformers":[{"type":"join","join":{"delimiter":"|"}}]}]}`,
+		"data_string":        `{"type":"manual","dataType":"string","storageType":"mdai-valkey","serializeAs":[{"name":"DATA_STRING"}]}`,
+		"data_int":           `{"type":"manual","dataType":"int","storageType":"mdai-valkey","serializeAs":[{"name":"DATA_INT"}]}`,
+		"computed_string":    `{"type":"computed","dataType":"string","storageType":"mdai-valkey","serializeAs":[{"name":"COMPUTED_STRING"}]}`,
+		"meta_hash_set":      `{"type":"meta","dataType":"metaHashSet","storageType":"mdai-valkey","variableRefs":["data_string","data_set"],"serializeAs":[{"name":"META_HASH_SET"}]}`,
+		"meta_priority_list": `{"type":"meta","dataType":"metaPriorityList","storageType":"mdai-valkey","variableRefs":["data_string","data_set"],"serializeAs":[{"name":"META_PRIORITY_LIST","transformers":[{"type":"join","join":{"delimiter":"|"}}]}]}`,
+	}
+}
 
 func newFakeClientset(t *testing.T) kubernetes.Interface { //nolint:ireturn
 	t.Helper()
@@ -34,20 +63,14 @@ func newFakeClientset(t *testing.T) kubernetes.Interface { //nolint:ireturn
 
 	configMap := corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "mdaihub-sample-manual-variables",
+			Name:      "mdaihub-sample-variables-schema",
 			Namespace: "mdai",
 			Labels: map[string]string{
-				datacorekube.ConfigMapTypeLabel: datacorekube.ManualEnvConfigMapType,
+				datacorekube.ConfigMapTypeLabel: datacorekube.VariablesSchemaMapType,
 				datacorekube.LabelMdaiHubName:   "mdaihub-sample",
 			},
 		},
-		Data: map[string]string{
-			"data_boolean": "boolean",
-			"data_map":     "map",
-			"data_set":     "set",
-			"data_string":  "string",
-			"data_int":     "int",
-		},
+		Data: sampleHubVariablesSchemaRaw(),
 	}
 
 	return fake.NewClientset(&configMap)
@@ -55,43 +78,13 @@ func newFakeClientset(t *testing.T) kubernetes.Interface { //nolint:ireturn
 
 func newFakeConfigMapController(t *testing.T, clientset kubernetes.Interface, namespace string) (*datacorekube.ConfigMapController, error) {
 	t.Helper()
-	defaultResyncTime := 0 * time.Second
-
-	informerFactory := informers.NewSharedInformerFactoryWithOptions(
-		clientset,
-		defaultResyncTime,
-		informers.WithNamespace(namespace),
-		informers.WithTweakListOptions(func(opts *metav1.ListOptions) {
-			opts.LabelSelector = fmt.Sprintf("%s=%s", datacorekube.ConfigMapTypeLabel, datacorekube.ManualEnvConfigMapType)
-		},
-		),
-	)
-	cmInformer := informerFactory.Core().V1().ConfigMaps()
-
-	if err := cmInformer.Informer().AddIndexers(map[string]cache.IndexFunc{
-		datacorekube.ByHub: func(obj any) ([]string, error) {
-			var hubNames []string
-			hubName := "mdaihub-sample"
-			hubNames = append(hubNames, hubName)
-			return hubNames, nil
-		},
-	}); err != nil {
-		t.Fatal("failed to add index", err)
-		return nil, err
-	}
-
-	c, err := datacorekube.NewConfigMapController([]string{datacorekube.ManualEnvConfigMapType}, namespace, clientset, zap.NewNop())
+	c, err := datacorekube.NewConfigMapController([]string{datacorekube.VariablesSchemaMapType}, namespace, clientset, zap.NewNop())
 	if err != nil {
 		return nil, err
 	}
 
 	if err := c.Run(); err != nil {
 		t.Errorf("Controller failed to run: %v", err)
-	}
-
-	stopCh := make(chan struct{})
-	if !cache.WaitForCacheSync(stopCh, c.CmInformer.Informer().HasSynced) {
-		return nil, errors.New("failed to sync informer caches")
 	}
 
 	return c, nil
@@ -107,8 +100,13 @@ func (*errReader) Close() error {
 	return nil
 }
 
-func ptr[T any](v T) *T {
-	return &v
+func expectedHubVariablesSchema(t *testing.T) variables.HubVariables {
+	t.Helper()
+
+	decoded, err := variables.DecodeHub(sampleHubVariablesSchemaRaw())
+	require.NoError(t, err)
+
+	return decoded
 }
 
 func stringifyData(t *testing.T, body string) string {
@@ -134,37 +132,15 @@ func stringifyData(t *testing.T, body string) string {
 	}
 }
 
-func runJetStream(t *testing.T) *natsserver.Server {
-	t.Helper()
-	tempDir := t.TempDir()
-	ns, err := natsserver.NewServer(&natsserver.Options{
-		JetStream: true,
-		StoreDir:  tempDir,
-		Port:      -1, // pick a random free port
-	})
-	if err != nil {
-		t.Fatalf("new server: %v", err)
-	}
-	go ns.Start()
-	if !ns.ReadyForConnections(5 * time.Second) {
-		t.Fatal("nats-server did not start")
-	}
-	t.Setenv("NATS_URL", ns.ClientURL())
-	return ns
-}
-
 func setupMocks(t *testing.T, clientset kubernetes.Interface) HandlerDeps {
 	t.Helper()
 
 	ctrl := gomock.NewController(t)
 	valkeyClient := valkeymock.NewClient(ctrl)
+	logger := zap.NewNop()
+	variableReader := gatewayvalkey.NewReader(valkeyClient, logger)
 	auditAdapter := audit.NewAuditAdapter(zap.NewNop(), valkeyClient)
-
-	srv := runJetStream(t)
-	t.Cleanup(func() { srv.Shutdown() })
-	eventPublisher, err := publisher.NewPublisher(t.Context(), zap.NewNop(), publisherClientName)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = eventPublisher.Close() })
+	eventPublisher := fakePublisher{}
 
 	cmController, err := newFakeConfigMapController(t, clientset, "mdai")
 	require.NoError(t, err)
@@ -174,13 +150,45 @@ func setupMocks(t *testing.T, clientset kubernetes.Interface) HandlerDeps {
 	opampServer, _ := opamp.NewOpAMPControlServer(zap.NewNop(), auditAdapter, eventPublisher)
 
 	deps := HandlerDeps{
-		Logger:              zap.NewNop(),
-		ValkeyClient:        valkeyClient,
-		AuditAdapter:        auditAdapter,
-		EventPublisher:      eventPublisher,
-		ConfigMapController: cmController,
-		Deduper:             adapter.NewDeduper(),
-		OpAMPServer:         opampServer,
+		Logger:                 logger,
+		ValkeyClient:           valkeyClient,
+		VariableReader:         variableReader,
+		SlowValueReadThreshold: testSlowValueReadThreshold,
+		AuditAdapter:           auditAdapter,
+		EventPublisher:         eventPublisher,
+		ConfigMapController:    cmController,
+		Deduper:                adapter.NewDeduper(),
+		OpAMPServer:            opampServer,
 	}
 	return deps
+}
+
+func setupReadOnlyMocks(t *testing.T, clientset kubernetes.Interface) HandlerDeps {
+	t.Helper()
+
+	ctrl := gomock.NewController(t)
+	valkeyClient := valkeymock.NewClient(ctrl)
+	logger := zap.NewNop()
+	variableReader := gatewayvalkey.NewReader(valkeyClient, logger)
+	auditAdapter := audit.NewAuditAdapter(zap.NewNop(), valkeyClient)
+
+	cmController, err := newFakeConfigMapController(t, clientset, "mdai")
+	require.NoError(t, err)
+	require.NotNil(t, cmController)
+	t.Cleanup(func() { cmController.Stop() })
+
+	return HandlerDeps{
+		Logger:                 logger,
+		ValkeyClient:           valkeyClient,
+		VariableReader:         variableReader,
+		SlowValueReadThreshold: testSlowValueReadThreshold,
+		AuditAdapter:           auditAdapter,
+		ConfigMapController:    cmController,
+		Deduper:                adapter.NewDeduper(),
+		OpAMPServer: &opamp.OpAMPControlServer{
+			HandlerFunc: func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusNotImplemented)
+			},
+		},
+	}
 }

@@ -104,13 +104,14 @@ func TestGetParser(t *testing.T) {
 
 func TestGetValue(t *testing.T) {
 	tests := []struct {
-		name      string
-		key       string
-		varType   VariableType
-		hubName   string
-		mockSetup func(m *mocks.MockKVAdapter)
-		expected  any
-		expectErr bool
+		name          string
+		key           string
+		varType       VariableType
+		hubName       string
+		mockSetup     func(m *mocks.MockKVAdapter)
+		expected      any
+		expectedFound bool
+		expectErr     bool
 	}{
 		{
 			name:    "set value",
@@ -118,11 +119,12 @@ func TestGetValue(t *testing.T) {
 			varType: "set",
 			hubName: "hub",
 			mockSetup: func(m *mocks.MockKVAdapter) {
-				m.On("GetSetAsStringSlice", mock.Anything, "foo", "hub").
-					Return([]string{"foo", "bar"}, nil).Once()
+				m.On("GetSet", mock.Anything, "foo", "hub").
+					Return([]string{"foo", "bar"}, true, nil).Once()
 			},
-			expected:  []string{"foo", "bar"},
-			expectErr: false,
+			expected:      []string{"foo", "bar"},
+			expectedFound: true,
+			expectErr:     false,
 		},
 		{
 			name:    "map value",
@@ -131,10 +133,11 @@ func TestGetValue(t *testing.T) {
 			hubName: "hub",
 			mockSetup: func(m *mocks.MockKVAdapter) {
 				m.On("GetMap", mock.Anything, "foo", "hub").
-					Return(map[string]string{"foo": "bar"}, nil).Once()
+					Return(map[string]string{"foo": "bar"}, true, nil).Once()
 			},
-			expected:  map[string]string{"foo": "bar"},
-			expectErr: false,
+			expected:      map[string]string{"foo": "bar"},
+			expectedFound: true,
+			expectErr:     false,
 		},
 		{
 			name:    "string value",
@@ -145,8 +148,9 @@ func TestGetValue(t *testing.T) {
 				m.On("GetString", mock.Anything, "foo_string", "hub").
 					Return("bar", true, nil).Once()
 			},
-			expected:  "bar",
-			expectErr: false,
+			expected:      "bar",
+			expectedFound: true,
+			expectErr:     false,
 		},
 		{
 			name:    "boolean value",
@@ -157,8 +161,9 @@ func TestGetValue(t *testing.T) {
 				m.On("GetString", mock.Anything, "foo_bool", "hub").
 					Return("true", true, nil).Once()
 			},
-			expected:  "true",
-			expectErr: false,
+			expected:      true,
+			expectedFound: true,
+			expectErr:     false,
 		},
 		{
 			name:    "int value",
@@ -169,17 +174,58 @@ func TestGetValue(t *testing.T) {
 				m.On("GetString", mock.Anything, "foo_int", "hub").
 					Return("999", true, nil).Once()
 			},
-			expected:  "999",
-			expectErr: false,
+			expected:      999,
+			expectedFound: true,
+			expectErr:     false,
 		},
 		{
-			name:      "invalid value",
-			key:       "foo_invalid",
-			varType:   "invalid",
-			hubName:   "hub",
-			mockSetup: func(m *mocks.MockKVAdapter) {},
-			expected:  nil,
-			expectErr: true,
+			name:    "meta priority list value",
+			key:     "foo_meta_list",
+			varType: VariableTypeMetaPriorityList,
+			hubName: "hub",
+			mockSetup: func(m *mocks.MockKVAdapter) {
+				m.On("GetMetaPriorityList", mock.Anything, "foo_meta_list", "hub").
+					Return([]string{"a", "b"}, true, nil).Once()
+			},
+			expected:      []string{"a", "b"},
+			expectedFound: true,
+			expectErr:     false,
+		},
+		{
+			name:    "meta hash set value",
+			key:     "foo_meta_hash",
+			varType: VariableTypeMetaHashSet,
+			hubName: "hub",
+			mockSetup: func(m *mocks.MockKVAdapter) {
+				m.On("GetMetaHashSet", mock.Anything, "foo_meta_hash", "hub").
+					Return("joined-value", true, nil).Once()
+			},
+			expected:      "joined-value",
+			expectedFound: true,
+			expectErr:     false,
+		},
+		{
+			name:    "missing value returns found false",
+			key:     "missing",
+			varType: VariableTypeStr,
+			hubName: "hub",
+			mockSetup: func(m *mocks.MockKVAdapter) {
+				m.On("GetString", mock.Anything, "missing", "hub").
+					Return("", false, nil).Once()
+			},
+			expected:      "",
+			expectedFound: false,
+			expectErr:     false,
+		},
+		{
+			name:          "invalid value",
+			key:           "foo_invalid",
+			varType:       "invalid",
+			hubName:       "hub",
+			mockSetup:     func(m *mocks.MockKVAdapter) {},
+			expected:      nil,
+			expectedFound: false,
+			expectErr:     true,
 		},
 	}
 
@@ -189,12 +235,13 @@ func TestGetValue(t *testing.T) {
 			tc.mockSetup(mockKV)
 			t.Cleanup(func() { mockKV.AssertExpectations(t) })
 
-			val, err := GetValue(t.Context(), mockKV, tc.key, tc.varType, tc.hubName)
+			val, found, err := GetValue(t.Context(), mockKV, tc.key, tc.varType, tc.hubName)
 
 			if tc.expectErr {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
+				assert.Equal(t, tc.expectedFound, found)
 				assert.Equal(t, tc.expected, val)
 			}
 		})
