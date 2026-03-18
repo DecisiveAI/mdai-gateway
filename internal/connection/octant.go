@@ -67,7 +67,7 @@ func (oc *OctantConnection) SaveConnection(ctx context.Context, connection Octan
 		return createConnectionConfigMap(ctx, oc.K8sClient, namespace, connectionsConfigmapName, connectionName, string(jsonData))
 	}
 	// Update the secret if it already exists
-	return updateConfigMapWithConnection(ctx, oc.K8sClient, namespace, cm, connectionsConfigmapName, string(jsonData))
+	return updateConfigMapWithConnection(ctx, oc.K8sClient, namespace, cm, connectionName, string(jsonData))
 }
 
 func (oc *OctantConnection) DeleteConnection(ctx context.Context, namespace, connectionName string) error {
