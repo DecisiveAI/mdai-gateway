@@ -85,6 +85,72 @@ func TestGetIntegrations(t *testing.T) {
 	})
 }
 
+func TestGetIntegrationByName(t *testing.T) {
+	t.Parallel()
+
+	validInt := DataDogIntegrationData{APIKey: "12345", DDUrl: "https://example.com"}
+	validIntBytes, err := json.Marshal(validInt)
+	require.NoError(t, err)
+
+	t.Run("secret does not exist", func(t *testing.T) {
+		t.Parallel()
+
+		mockK8sClient := fake.NewClientset()
+		datadogIntegration := &DataDogIntegration{
+			K8sClient: mockK8sClient,
+		}
+
+		actual, getErr := datadogIntegration.GetIntegrationByName(t.Context(), defaultNamespace, "doesntMatter")
+		require.NoError(t, getErr)
+		require.Nil(t, actual)
+	})
+
+	t.Run("integration not found", func(t *testing.T) {
+		t.Parallel()
+
+		existingObjects := []runtime.Object{
+			&corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: datadogSecretName, Namespace: defaultNamespace},
+				Data: map[string][]byte{
+					"team-a": validIntBytes,
+				},
+			},
+		}
+
+		mockK8sClient := fake.NewClientset(existingObjects...)
+		datadogIntegration := &DataDogIntegration{
+			K8sClient: mockK8sClient,
+		}
+
+		actual, getErr := datadogIntegration.GetIntegrationByName(t.Context(), defaultNamespace, "team-b")
+		require.ErrorContains(t, getErr, "integration 'team-b' not found")
+		require.Nil(t, actual)
+	})
+
+	t.Run("happy path", func(t *testing.T) {
+		t.Parallel()
+
+		existingObjects := []runtime.Object{
+			&corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: datadogSecretName, Namespace: defaultNamespace},
+				Data: map[string][]byte{
+					"team-a": validIntBytes,
+				},
+			},
+		}
+
+		mockK8sClient := fake.NewClientset(existingObjects...)
+		datadogIntegration := &DataDogIntegration{
+			K8sClient: mockK8sClient,
+		}
+
+		actual, getErr := datadogIntegration.GetIntegrationByName(t.Context(), defaultNamespace, "team-a")
+		require.NoError(t, getErr)
+
+		require.True(t, assert.ObjectsAreEqual(&validInt, actual), "expected and actual don't match")
+	})
+}
+
 func TestSetIntegration(t *testing.T) {
 	t.Parallel()
 
