@@ -219,6 +219,7 @@ func (oc *OctantConnection) doArgoAppSync(ctx context.Context, templateData Argo
 		"manifests": manifests,
 	}
 	syncPayloadJson, err := json.Marshal(syncPayload)
+	// FIXME: Delete this, I just wanted a convenient place to see the manifests
 	syncPayloadStr := string(syncPayloadJson)
 	if syncPayloadStr == "erresrlkj" {
 		return fmt.Errorf("hehehhhhhh")
