@@ -2,10 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
-	"os"
-	"strings"
-
 	"github.com/mydecisive/mdai-data-core/audit"
 	datacorepublisher "github.com/mydecisive/mdai-data-core/eventing/publisher"
 	datacorekube "github.com/mydecisive/mdai-data-core/kube"
@@ -17,6 +15,9 @@ import (
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
+	"net/http"
+	"os"
+	"strings"
 )
 
 const (
@@ -71,6 +72,15 @@ func initDependencies(ctx context.Context) (deps server.HandlerDeps, cleanup fun
 		appLogger.Fatal("failed to start OpAMP server", zap.Error(err))
 	}
 
+	httpTransport := &http.Transport{}
+	if os.Getenv("TLS_INSECURE") == "true" {
+		httpTransport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	}
+
+	httpClient := &http.Client{
+		Transport: httpTransport,
+	}
+
 	deps = server.HandlerDeps{
 		Logger:              appLogger,
 		ValkeyClient:        valkeyClient,
@@ -81,6 +91,7 @@ func initDependencies(ctx context.Context) (deps server.HandlerDeps, cleanup fun
 		OpAMPServer:         opampServer,
 		K8sClient:           clientset,
 		K8sNamespace:        getCurrentNamespace(),
+		HttpClient:          httpClient,
 	}
 
 	cleanup = func() {

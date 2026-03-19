@@ -27,6 +27,7 @@ type HandlerDeps struct {
 	OpAMPServer         *opamp.OpAMPControlServer
 	K8sClient           kubernetes.Interface
 	K8sNamespace        string
+	HttpClient          *http.Client
 }
 
 func NewRouter(ctx context.Context, deps HandlerDeps) *http.ServeMux {
@@ -61,9 +62,7 @@ func NewRouter(ctx context.Context, deps HandlerDeps) *http.ServeMux {
 	mainRouter.Handle("/integrations/datadog/", http.StripPrefix("/integrations/datadog", datadogRouter))
 	mainRouter.Handle("/integrations/argocd/", http.StripPrefix("/integrations/argocd", argocdRouter))
 
-	connectionsHandler := NewConnectionsHandler(&connection.OctantConnection{
-		K8sClient: deps.K8sClient,
-	}, deps.K8sNamespace, deps.Logger)
+	connectionsHandler := NewConnectionsHandler(connection.NewOctantConnection(deps.HttpClient, deps.K8sClient), deps.K8sNamespace, deps.Logger)
 
 	connectionsRouter := http.NewServeMux()
 	connectionsRouter.Handle("GET /{connectionName}", connectionsHandler.GetConnectionByName(ctx))

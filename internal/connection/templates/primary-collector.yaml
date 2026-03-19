@@ -1,0 +1,46 @@
+apiVersion: opentelemetry.io/v1alpha1
+kind: OpenTelemetryCollector
+metadata:
+  name: {{ .AppName }}-primary
+spec:
+  podLabels:
+    app: {{ .AppName }}-primary-collector
+  image: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:0.147.0
+  env:
+    - name: DD_API_KEY
+      valueFrom:
+        secretKeyRef:
+          name: {{ .AppName }}-integration-secret
+          key: api-key
+    - name: DD_SITE
+      valueFrom:
+        secretKeyRef:
+          name: {{ .AppName }}-integration-secret
+          key: site-url
+  config: |
+    receivers:
+      datadog:
+        endpoint: "0.0.0.0:8126"
+    processors:
+      batch:
+        send_batch_size: 1000
+        timeout: 10s
+    exporters:
+      datadog:
+        api:
+          key: "${env:DD_API_KEY}"
+          site: "${env:DD_SITE}"
+    service:
+      pipelines:
+        metrics:
+          receivers: [datadog]
+          processors: [batch]
+          exporters: [datadog]
+        traces:
+          receivers: [datadog]
+          processors: [batch]
+          exporters: [datadog]
+        logs:
+          receivers: [datadog]
+          processors: [batch]
+          exporters: [datadog]
