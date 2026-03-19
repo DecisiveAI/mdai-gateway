@@ -276,10 +276,7 @@ func requireObservedLog(
 func matchesObservedFields(context map[string]any, fields map[string]any) bool {
 	for key, expected := range fields {
 		actual, ok := context[key]
-		if !ok {
-			return false
-		}
-		if !equalObservedValue(actual, expected) {
+		if !ok || !equalObservedValue(actual, expected) {
 			return false
 		}
 	}
@@ -288,23 +285,19 @@ func matchesObservedFields(context map[string]any, fields map[string]any) bool {
 }
 
 func equalObservedValue(actual any, expected any) bool {
-	if reflect.DeepEqual(actual, expected) {
-		return true
-	}
-
-	expectedInt, ok := expected.(int)
-	if !ok {
-		return false
-	}
-
-	switch typedActual := actual.(type) {
-	case int64:
-		return typedActual == int64(expectedInt)
-	case int32:
-		return int64(typedActual) == int64(expectedInt)
+	switch e := expected.(type) {
 	case int:
-		return typedActual == expectedInt
+		switch a := actual.(type) {
+		case int:
+			return a == e
+		case int32:
+			return int64(a) == int64(e)
+		case int64:
+			return a == int64(e)
+		default:
+			return false
+		}
 	default:
-		return false
+		return reflect.DeepEqual(actual, expected)
 	}
 }
