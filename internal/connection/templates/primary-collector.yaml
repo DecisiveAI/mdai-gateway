@@ -5,8 +5,10 @@ metadata:
   labels:
     app: {{ .AppName }}-primary
     app.kubernetes.io/instance: {{ .AppName }}-primary
+  {{- if .IsArgoSideload }}
   annotations:
     argocd.argoproj.io/tracking-id: {{ .AppName }}:opentelemetry.io/OpenTelemetryCollector:mdai/{{ .AppName }}-primary
+  {{- end }}
 spec:
   podLabels:
     app: {{ .AppName }}-primary-collector
