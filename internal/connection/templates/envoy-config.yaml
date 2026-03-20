@@ -2,6 +2,10 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: {{ .AppName }}-envoy-config
+  labels:
+    app.kubernetes.io/instance: {{ .AppName }}-envoy-config
+  annotations:
+    argocd.argoproj.io/tracking-id: {{ .AppName }}:/ConfigMap:mdai/{{ .AppName }}-envoy-config
 data:
   envoy.yaml: |
     static_resources:

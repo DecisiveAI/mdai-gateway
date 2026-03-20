@@ -2,6 +2,11 @@ apiVersion: opentelemetry.io/v1alpha1
 kind: OpenTelemetryCollector
 metadata:
   name: {{ .AppName }}-shadow
+  labels:
+    app: {{ .AppName }}-shadow
+    app.kubernetes.io/instance: {{ .AppName }}-shadow
+  annotations:
+    argocd.argoproj.io/tracking-id: {{ .AppName }}:opentelemetry.io/OpenTelemetryCollector:mdai/{{ .AppName }}-shadow
 spec:
   podLabels:
     app: {{ .AppName }}-shadow-collector

@@ -4,6 +4,9 @@ metadata:
   name: {{ .AppName }}-envoy
   labels:
     app: {{ .AppName }}-envoy
+    app.kubernetes.io/instance: {{ .AppName }}-envoy
+  annotations:
+    argocd.argoproj.io/tracking-id: {{ .AppName }}:apps/Deployment:mdai/{{ .AppName }}-envoy
 spec:
   replicas: 1
   selector:
