@@ -43,6 +43,7 @@ type ArgoTemplateData struct {
 	ConnectionData OctantConnectionData
 	TempDDAPIKey   string
 	TempDDURL      string
+	IsArgoSideload bool
 }
 
 func (oc *OctantConnection) renderArgoAppManifest(templateData *ArgoTemplateData) ([]byte, error) {

@@ -4,8 +4,10 @@ metadata:
   name: {{ .AppName }}-envoy-config
   labels:
     app.kubernetes.io/instance: {{ .AppName }}-envoy-config
+  {{- if .IsArgoSideload }}
   annotations:
     argocd.argoproj.io/tracking-id: {{ .AppName }}:/ConfigMap:mdai/{{ .AppName }}-envoy-config
+  {{- end }}
 data:
   envoy.yaml: |
     static_resources:

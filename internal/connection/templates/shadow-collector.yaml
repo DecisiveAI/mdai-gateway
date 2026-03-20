@@ -5,8 +5,10 @@ metadata:
   labels:
     app: {{ .AppName }}-shadow
     app.kubernetes.io/instance: {{ .AppName }}-shadow
+  {{- if .IsArgoSideload }}
   annotations:
     argocd.argoproj.io/tracking-id: {{ .AppName }}:opentelemetry.io/OpenTelemetryCollector:mdai/{{ .AppName }}-shadow
+  {{- end }}
 spec:
   podLabels:
     app: {{ .AppName }}-shadow-collector

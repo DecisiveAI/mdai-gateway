@@ -144,6 +144,8 @@ func (oc *OctantConnection) pushArgoApp(ctx context.Context, namespace, name str
 		ConnectionData: connection,
 		TempDDAPIKey:   datadawgIntegration.APIKey,
 		TempDDURL:      datadawgIntegration.DDUrl,
+		// Tells template to manually inject Argo tracking annotations. We only want these for direct sync force push
+		IsArgoSideload: true,
 	}
 
 	appCreateErr := oc.doArgoAppCreation(ctx, templateData, argoIntegration)

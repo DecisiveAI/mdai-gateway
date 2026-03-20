@@ -5,8 +5,10 @@ metadata:
   labels:
     app: {{ .AppName }}-envoy
     app.kubernetes.io/instance: {{ .AppName }}-envoy
+  {{- if .IsArgoSideload }}
   annotations:
     argocd.argoproj.io/tracking-id: {{ .AppName }}:/Service:mdai/{{ .AppName }}-envoy-service
+  {{- end }}
 spec:
   type: ClusterIP
   ports:
