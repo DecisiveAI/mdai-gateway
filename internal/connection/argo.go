@@ -10,8 +10,46 @@ import (
 	"time"
 )
 
+type ArgoApp struct {
+	Status ArgoAppStatus `json:"status"`
+}
+
+type ArgoAppStatus struct {
+	Resources []ArgoAppResources `json:"resources"`
+	Health    ArgoAppHealth      `json:"health"`
+}
+
+type ArgoAppHealth struct {
+	Status             string    `json:"status"`
+	LastTransitionTime time.Time `json:"lastTransitionTime"`
+}
+
+type ArgoAppResources struct {
+	Kind string `json:"kind"`
+	Name string `json:"name"`
+}
+
 func (oc *OctantConnection) getArgoAppStatus(ctx context.Context, namespace string, name string, argoIntegration *integration.ArgoCDIntegrationData) error {
 	// GET APP
+	getAppUrl := fmt.Sprintf("%s/api/v1/applications/%s", argoIntegration.APIUrl, name)
+	req, err := http.NewRequestWithContext(ctx, "GET", getAppUrl, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", argoIntegration.AccountToken))
+	resp, err := oc.httpClient.Do(req)
+	defer resp.Body.Close()
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+	var app ArgoApp
+	if err := json.NewDecoder(resp.Body).Decode(&app); err != nil {
+		return err
+	}
+
 	return nil
 }
 
