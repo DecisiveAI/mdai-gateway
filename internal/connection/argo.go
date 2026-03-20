@@ -148,5 +148,19 @@ func (oc *OctantConnection) doArgoAppCreation(ctx context.Context, templateData 
 }
 
 func (oc *OctantConnection) deleteArgoApp(ctx context.Context, name string, argoIntegration *integration.ArgoCDIntegrationData) error {
+	query := "?cascade=true&propagationPolicy=foreground&appNamespace=argocd"
+	deleteAppUrl := fmt.Sprintf("%s/api/v1/applications/%s%s", argoIntegration.APIUrl, name, query)
+	req, err := http.NewRequestWithContext(ctx, "DELETE", deleteAppUrl, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", argoIntegration.AccountToken))
+	resp, err := oc.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
 	return nil
 }
