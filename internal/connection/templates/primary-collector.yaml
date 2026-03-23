@@ -39,15 +39,9 @@ spec:
           site: "${env:DD_SITE}"
     service:
       pipelines:
-        metrics:
-          receivers: [datadog]
-          processors: [batch]
-          exporters: [datadog]
-        traces:
-          receivers: [datadog]
-          processors: [batch]
-          exporters: [datadog]
-        logs:
-          receivers: [datadog]
-          processors: [batch]
-          exporters: [datadog]
+        {{- range .ConnectionData.TelemetryTypes }}
+          {{ . }}:
+            receivers: [datadog]
+            processors: [batch]
+            exporters: [datadog]
+        {{- end }}
