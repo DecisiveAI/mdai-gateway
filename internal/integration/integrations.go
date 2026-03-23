@@ -38,8 +38,7 @@ func createIntegrationSecret(ctx context.Context, k8sClient kubernetes.Interface
 		Type: corev1.SecretTypeOpaque,
 	}
 
-	_, err := k8sClient.CoreV1().Secrets(namespace).Create(ctx, newSecret, metav1.CreateOptions{})
-	if err != nil {
+	if _, err := k8sClient.CoreV1().Secrets(namespace).Create(ctx, newSecret, metav1.CreateOptions{}); err != nil {
 		return fmt.Errorf("failed to create secret %s: %w", secretName, err)
 	}
 	return nil

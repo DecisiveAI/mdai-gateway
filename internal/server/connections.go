@@ -61,8 +61,7 @@ func (ch *ConnectionsHandler) SaveConnectionData(ctx context.Context) http.Handl
 			return
 		}
 
-		err := ch.octantConnection.SaveConnection(ctx, theConnection, ch.k8sNamespace, connectionName)
-		if err != nil {
+		if err := ch.octantConnection.SaveConnection(ctx, theConnection, ch.k8sNamespace, connectionName); err != nil {
 			ch.logger.Error("failed to update connection", zap.Error(err))
 			http.Error(w, "Failed to update connection", http.StatusInternalServerError)
 			return
@@ -75,8 +74,7 @@ func (ch *ConnectionsHandler) DeleteConnectionByName(ctx context.Context) http.H
 	return func(w http.ResponseWriter, req *http.Request) {
 		connectionName := req.PathValue("connectionName")
 
-		err := ch.octantConnection.DeleteConnection(ctx, ch.k8sNamespace, connectionName)
-		if err != nil {
+		if err := ch.octantConnection.DeleteConnection(ctx, ch.k8sNamespace, connectionName); err != nil {
 			ch.logger.Error("Failed to delete connection", zap.Error(err))
 			http.Error(w, "Failed to delete connection", http.StatusInternalServerError)
 			return

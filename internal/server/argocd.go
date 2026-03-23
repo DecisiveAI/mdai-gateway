@@ -3,7 +3,9 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"net/http"
+	"slices"
 
 	"github.com/mydecisive/mdai-gateway/internal/httputil"
 	"github.com/mydecisive/mdai-gateway/internal/integration"
@@ -29,10 +31,7 @@ func (ah *ArgoCDHandler) GetIntegrations(ctx context.Context) http.HandlerFunc {
 			return
 		}
 
-		integrationList := make([]string, 0, len(argocdIntegrations))
-		for intName := range argocdIntegrations {
-			integrationList = append(integrationList, intName)
-		}
+		integrationList := slices.Sorted(maps.Keys(argocdIntegrations))
 		httputil.WriteJSONResponse(w, ah.logger, http.StatusOK, integrationList)
 	}
 }
@@ -53,8 +52,7 @@ func (ah *ArgoCDHandler) PutIntegrationData(ctx context.Context) http.HandlerFun
 			return
 		}
 
-		err := ah.argocdIntegration.SetIntegration(ctx, ah.k8sNamespace, integrationName, argocdIntegration)
-		if err != nil {
+		if err := ah.argocdIntegration.SetIntegration(ctx, ah.k8sNamespace, integrationName, argocdIntegration); err != nil {
 			ah.logger.Error("failed to update integration", zap.Error(err))
 			http.Error(w, "Failed to update integration", http.StatusInternalServerError)
 			return
@@ -67,8 +65,7 @@ func (ah *ArgoCDHandler) DeleteIntegration(ctx context.Context) http.HandlerFunc
 	return func(w http.ResponseWriter, req *http.Request) {
 		integrationName := req.PathValue("integrationName")
 
-		err := ah.argocdIntegration.DeleteIntegration(ctx, ah.k8sNamespace, integrationName)
-		if err != nil {
+		if err := ah.argocdIntegration.DeleteIntegration(ctx, ah.k8sNamespace, integrationName); err != nil {
 			ah.logger.Error("Failed to delete integration", zap.Error(err))
 			http.Error(w, "Failed to delete integration", http.StatusInternalServerError)
 			return

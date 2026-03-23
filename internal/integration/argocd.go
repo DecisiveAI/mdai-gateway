@@ -28,7 +28,7 @@ type ArgoCDIntegration struct {
 
 var _ Integration[ArgoCDIntegrationData] = (*ArgoCDIntegration)(nil)
 
-// GetIntegrations retrieves any existing integrations in the provided namespace for the "mdai-gateway-integration" secret.
+// GetIntegrations retrieves any existing integrations in the provided namespace for the "mdai-argocd-integration" secret.
 func (aci *ArgoCDIntegration) GetIntegrations(ctx context.Context, namespace string) (map[string]ArgoCDIntegrationData, error) {
 	secret, err := aci.K8sClient.CoreV1().Secrets(namespace).Get(ctx, argocdSecretName, metav1.GetOptions{})
 	if err != nil {
@@ -50,7 +50,7 @@ func (aci *ArgoCDIntegration) GetIntegrations(ctx context.Context, namespace str
 	return integrations, nil
 }
 
-// GetIntegrationByName retrieves the existing integration in the provided namespace for the "mdai-gateway-integration" secret, if it exists.
+// GetIntegrationByName retrieves the existing integration in the provided namespace for the "mdai-argocd-integration" secret, if it exists.
 func (aci *ArgoCDIntegration) GetIntegrationByName(ctx context.Context, namespace, name string) (*ArgoCDIntegrationData, error) {
 	secret, err := aci.K8sClient.CoreV1().Secrets(namespace).Get(ctx, argocdSecretName, metav1.GetOptions{})
 	if err != nil {
@@ -71,7 +71,7 @@ func (aci *ArgoCDIntegration) GetIntegrationByName(ctx context.Context, namespac
 	return &payload, nil
 }
 
-// SetIntegration adds or updates the "mdai-gateway-integration" secret for the provided namespace.
+// SetIntegration adds or updates the "mdai-argocd-integration" secret for the provided namespace.
 func (aci *ArgoCDIntegration) SetIntegration(ctx context.Context, namespace, integrationName string, integrationData ArgoCDIntegrationData) error {
 	jsonData, err := json.Marshal(integrationData)
 	if err != nil {
@@ -79,20 +79,18 @@ func (aci *ArgoCDIntegration) SetIntegration(ctx context.Context, namespace, int
 	}
 
 	secret, err := aci.K8sClient.CoreV1().Secrets(namespace).Get(ctx, argocdSecretName, metav1.GetOptions{})
-	isNotFound := k8serrors.IsNotFound(err)
-	if err != nil && !isNotFound {
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			// Create the secret if it does not exist
+			return createIntegrationSecret(ctx, aci.K8sClient, namespace, argocdSecretName, integrationName, jsonData)
+		}
 		return fmt.Errorf("failed to fetch secret %s: %w", argocdSecretName, err)
-	}
-
-	if isNotFound {
-		// Create the secret if it does not exist
-		return createIntegrationSecret(ctx, aci.K8sClient, namespace, argocdSecretName, integrationName, jsonData)
 	}
 	// Update the secret if it already exists
 	return updateSecretWithIntegration(ctx, aci.K8sClient, namespace, secret, integrationName, jsonData)
 }
 
-// DeleteIntegration removes a named integration from the "mdai-gateway-integration" secret in the provided namespace.
+// DeleteIntegration removes a named integration from the "mdai-argocd-integration" secret in the provided namespace.
 func (aci *ArgoCDIntegration) DeleteIntegration(ctx context.Context, namespace, integrationName string) error {
 	secret, err := aci.K8sClient.CoreV1().Secrets(namespace).Get(ctx, argocdSecretName, metav1.GetOptions{})
 	if err != nil {
@@ -111,8 +109,7 @@ func (aci *ArgoCDIntegration) DeleteIntegration(ctx context.Context, namespace, 
 
 	delete(secret.Data, integrationName)
 
-	_, err = aci.K8sClient.CoreV1().Secrets(namespace).Update(ctx, secret, metav1.UpdateOptions{})
-	if err != nil {
+	if _, err = aci.K8sClient.CoreV1().Secrets(namespace).Update(ctx, secret, metav1.UpdateOptions{}); err != nil {
 		return fmt.Errorf("failed to update secret %s after deletion: %w", argocdSecretName, err)
 	}
 

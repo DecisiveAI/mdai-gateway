@@ -23,8 +23,7 @@ func updateConfigMapWithConnection(ctx context.Context, k8sClient kubernetes.Int
 	}
 	cm.Data[connectionName] = connectionData
 
-	_, err := k8sClient.CoreV1().ConfigMaps(namespace).Update(ctx, cm, metav1.UpdateOptions{})
-	if err != nil {
+	if _, err := k8sClient.CoreV1().ConfigMaps(namespace).Update(ctx, cm, metav1.UpdateOptions{}); err != nil {
 		return fmt.Errorf("error while updating configmap: %w", err)
 	}
 	return nil
@@ -41,8 +40,7 @@ func createConnectionConfigMap(ctx context.Context, k8sClient kubernetes.Interfa
 		},
 	}
 
-	_, err := k8sClient.CoreV1().ConfigMaps(namespace).Create(ctx, newCM, metav1.CreateOptions{})
-	if err != nil {
+	if _, err := k8sClient.CoreV1().ConfigMaps(namespace).Create(ctx, newCM, metav1.CreateOptions{}); err != nil {
 		return fmt.Errorf("failed to create configmap %s: %w", configmapName, err)
 	}
 	return nil
