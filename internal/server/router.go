@@ -10,6 +10,7 @@ import (
 	"github.com/mydecisive/mdai-data-core/eventing/publisher"
 	datacorekube "github.com/mydecisive/mdai-data-core/kube"
 	"github.com/mydecisive/mdai-gateway/internal/adapter"
+	"github.com/mydecisive/mdai-gateway/internal/connection"
 	"github.com/mydecisive/mdai-gateway/internal/integration"
 	"github.com/mydecisive/mdai-gateway/internal/opamp"
 	gatewayvalkey "github.com/mydecisive/mdai-gateway/internal/valkey"
@@ -48,16 +49,36 @@ func NewRouter(ctx context.Context, deps HandlerDeps) *http.ServeMux {
 
 	mainRouter.Handle("POST /opamp", deps.OpAMPServer.HandlerFunc)
 
-	integrationsHandler := NewDatadogHandler(&integration.DataDogIntegration{
+	ddIntegrationHandler := NewDatadogHandler(&integration.DataDogIntegration{
+		K8sClient: deps.K8sClient,
+	}, deps.K8sNamespace, deps.Logger)
+	argocdIntegrationHandler := NewArgoCDHandler(&integration.ArgoCDIntegration{
 		K8sClient: deps.K8sClient,
 	}, deps.K8sNamespace, deps.Logger)
 
 	datadogRouter := http.NewServeMux()
-	mainRouter.Handle("GET /integrations/datadog", integrationsHandler.GetIntegrations(ctx))
-	mainRouter.Handle("PUT /integrations/datadog/{integrationName}", integrationsHandler.PutIntegrationData(ctx))
-	mainRouter.Handle("DELETE /integrations/datadog/{integrationName}", integrationsHandler.DeleteIntegration(ctx))
+	datadogRouter.Handle("GET /", ddIntegrationHandler.GetIntegrations(ctx))
+	datadogRouter.Handle("PUT /{integrationName}", ddIntegrationHandler.PutIntegrationData(ctx))
+	datadogRouter.Handle("DELETE /{integrationName}", ddIntegrationHandler.DeleteIntegration(ctx))
 
-	mainRouter.Handle("/integrations/datadog", datadogRouter)
+	argocdRouter := http.NewServeMux()
+	argocdRouter.Handle("GET /", argocdIntegrationHandler.GetIntegrations(ctx))
+	argocdRouter.Handle("PUT /{integrationName}", argocdIntegrationHandler.PutIntegrationData(ctx))
+	argocdRouter.Handle("DELETE /{integrationName}", argocdIntegrationHandler.DeleteIntegration(ctx))
+
+	mainRouter.Handle("/integrations/datadog/", http.StripPrefix("/integrations/datadog", datadogRouter))
+	mainRouter.Handle("/integrations/argocd/", http.StripPrefix("/integrations/argocd", argocdRouter))
+
+	connectionsHandler := NewConnectionsHandler(&connection.OctantConnection{
+		K8sClient: deps.K8sClient,
+	}, deps.K8sNamespace, deps.Logger)
+
+	connectionsRouter := http.NewServeMux()
+	connectionsRouter.Handle("GET /{connectionName}", connectionsHandler.GetConnectionByName(ctx))
+	connectionsRouter.Handle("PUT /{connectionName}", connectionsHandler.SaveConnectionData(ctx))
+	connectionsRouter.Handle("DELETE /{connectionName}", connectionsHandler.DeleteConnectionByName(ctx))
+
+	mainRouter.Handle("/connections/", http.StripPrefix("/connections", connectionsRouter))
 
 	return mainRouter
 }

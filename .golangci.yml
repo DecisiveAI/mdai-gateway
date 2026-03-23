@@ -125,6 +125,7 @@ linters:
           - dupl
           - forcetypeassert
           - funlen
+          - goconst
           - maintidx
           - unparam
       - path: mocks/*
@@ -132,6 +133,15 @@ linters:
           - forcetypeassert
           - mnd
           - gocritic
+      - path: internal/server/*
+        linters:
+          - dupl  # this code is not duplicate, it uses generics
+      - path: internal/connection/*
+        linters:
+          - tagliatelle
+      - path: internal/integration/*
+        linters:
+          - tagliatelle
       - linters:
           - lll
         path: internal/*
