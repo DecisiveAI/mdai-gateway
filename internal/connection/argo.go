@@ -29,28 +29,33 @@ type ArgoAppResources struct {
 	Name string `json:"name"`
 }
 
-func (oc *OctantConnection) getArgoAppStatus(ctx context.Context, namespace string, name string, argoIntegration *integration.ArgoCDIntegrationData) error {
+func (oc *OctantConnection) getArgoAppStatus(ctx context.Context, name string, namespace string) (*ArgoApp, error) {
+	argoIntegration, getArgoIntErr := oc.ArgoCDIntegrationStuff.GetIntegrationByName(ctx, namespace, "default-argo-integration")
+	if getArgoIntErr != nil {
+		return nil, getArgoIntErr
+	}
+
 	// GET APP
 	getAppUrl := fmt.Sprintf("%s/api/v1/applications/%s", argoIntegration.APIUrl, name)
 	req, err := http.NewRequestWithContext(ctx, "GET", getAppUrl, nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", argoIntegration.AccountToken))
 	resp, err := oc.httpClient.Do(req)
 	defer resp.Body.Close()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 	var app ArgoApp
 	if err := json.NewDecoder(resp.Body).Decode(&app); err != nil {
-		return err
+		return nil, err
 	}
 
-	return nil
+	return &app, nil
 }
 
 func (oc *OctantConnection) pushArgoApp(ctx context.Context, namespace, name string, connection OctantConnectionData) error {
@@ -147,13 +152,19 @@ func (oc *OctantConnection) doArgoAppCreation(ctx context.Context, templateData 
 	return nil
 }
 
-func (oc *OctantConnection) deleteArgoApp(ctx context.Context, name string, argoIntegration *integration.ArgoCDIntegrationData) error {
-	query := "?cascade=true&propagationPolicy=foreground&appNamespace=argocd"
+func (oc *OctantConnection) deleteArgoApp(ctx context.Context, name string, namespace string) error {
+	argoIntegration, getArgoIntErr := oc.ArgoCDIntegrationStuff.GetIntegrationByName(ctx, namespace, "default-argo-integration")
+	if getArgoIntErr != nil {
+		return getArgoIntErr
+	}
+	query := "?cascade=true&propagationPolicy=foreground&appNamespace=argocd&cascade=true"
 	deleteAppUrl := fmt.Sprintf("%s/api/v1/applications/%s%s", argoIntegration.APIUrl, name, query)
 	req, err := http.NewRequestWithContext(ctx, "DELETE", deleteAppUrl, nil)
 	if err != nil {
 		return err
 	}
+	// Despite no body being required, ArgoCD requires a JSON content type to process Delete
+	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", argoIntegration.AccountToken))
 	resp, err := oc.httpClient.Do(req)
 	if err != nil {

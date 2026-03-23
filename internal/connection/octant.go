@@ -12,6 +12,12 @@ import (
 	"net/http"
 )
 
+type DeploymentType string
+
+var (
+	ArgoDeploymentType DeploymentType = "argocd"
+)
+
 // FIXME: Actually wire up all needed fields
 type OctantConnectionData struct {
 	SourceType     string      `json:"sourceType"`
@@ -21,8 +27,9 @@ type OctantConnectionData struct {
 
 // FIXME: Actually wire up all needed fields
 type Deployment struct {
-	Type   string         `json:"type"`
-	Fields map[string]any `json:"fields"`
+	Type    DeploymentType `json:"type"`
+	Fields  map[string]any `json:"fields"`
+	ArgoApp *ArgoApp       `json:"argoApp,omitempty"`
 }
 
 type ArgoDeployment struct {
@@ -67,6 +74,14 @@ func (oc *OctantConnection) GetConnectionByName(ctx context.Context, namespace, 
 	if err = json.Unmarshal([]byte(configmap.Data[name]), &connection); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal connection data: %w", err)
 	}
+
+	argoApp, err := oc.getArgoAppStatus(ctx, name, namespace)
+	if err != nil {
+		return &connection, err
+	}
+
+	connection.Deployment.ArgoApp = argoApp
+
 	return &connection, nil
 }
 
@@ -100,6 +115,10 @@ func (oc *OctantConnection) DeleteConnection(ctx context.Context, namespace, con
 			return nil
 		}
 		return fmt.Errorf("failed to fetch configmap %s: %w", connectionsConfigmapName, err)
+	}
+
+	if err := oc.deleteArgoApp(ctx, connectionName, namespace); err != nil {
+		return err
 	}
 
 	if cm.Data == nil {
