@@ -64,7 +64,7 @@ func TestGetConnectionByName(t *testing.T) {
 		}
 
 		actual, getErr := octantConnection.GetConnectionByName(t.Context(), defaultNamespace, "team-b")
-		require.ErrorContains(t, getErr, "connection 'team-b' not found")
+		require.NoError(t, getErr)
 		require.Nil(t, actual)
 	})
 

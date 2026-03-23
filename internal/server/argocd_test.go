@@ -24,7 +24,7 @@ func TestArgoCD_GetIntegrations(t *testing.T) {
 		integrationMock := integrationmock.NewMockIntegration[integration.ArgoCDIntegrationData](t)
 		integrationMock.EXPECT().GetIntegrations(mock.Anything, "default").Return(nil, assert.AnError).Times(1)
 
-		req := httptest.NewRequest(http.MethodGet, "/getIntegrations", http.NoBody)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/getIntegrations", http.NoBody)
 		resp := httptest.NewRecorder()
 
 		router := setupArgoCDRouter(t, integrationMock)
@@ -48,7 +48,7 @@ func TestArgoCD_GetIntegrations(t *testing.T) {
 		integrationMock := integrationmock.NewMockIntegration[integration.ArgoCDIntegrationData](t)
 		integrationMock.EXPECT().GetIntegrations(mock.Anything, "default").Return(expectedIntegrations, nil).Times(1)
 
-		req := httptest.NewRequest(http.MethodGet, "/getIntegrations", http.NoBody)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/getIntegrations", http.NoBody)
 		resp := httptest.NewRecorder()
 
 		router := setupArgoCDRouter(t, integrationMock)
@@ -74,7 +74,7 @@ func TestArgoCD_PutIntegrationData(t *testing.T) {
 		invalidPayoad, err := json.Marshal("not valid json")
 		require.NoError(t, err)
 
-		req := httptest.NewRequest(http.MethodGet, "/putIntegration/coolIntegration", bytes.NewBuffer(invalidPayoad))
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/putIntegration/coolIntegration", bytes.NewBuffer(invalidPayoad))
 		resp := httptest.NewRecorder()
 
 		router := setupArgoCDRouter(t, integrationMock)
@@ -101,7 +101,7 @@ func TestArgoCD_PutIntegrationData(t *testing.T) {
 			Return(assert.AnError).
 			Times(1)
 
-		req := httptest.NewRequest(http.MethodPut, "/putIntegration/coolIntegration", bytes.NewBuffer(serializedIntegration))
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPut, "/putIntegration/coolIntegration", bytes.NewBuffer(serializedIntegration))
 		resp := httptest.NewRecorder()
 
 		router := setupArgoCDRouter(t, integrationMock)
@@ -128,7 +128,7 @@ func TestArgoCD_PutIntegrationData(t *testing.T) {
 			Return(nil).
 			Times(1)
 
-		req := httptest.NewRequest(http.MethodPut, "/putIntegration/coolIntegration", bytes.NewBuffer(serializedIntegration))
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPut, "/putIntegration/coolIntegration", bytes.NewBuffer(serializedIntegration))
 		resp := httptest.NewRecorder()
 
 		router := setupArgoCDRouter(t, integrationMock)
@@ -147,7 +147,7 @@ func TestArgoCD_DeleteIntegration(t *testing.T) {
 		integrationMock := integrationmock.NewMockIntegration[integration.ArgoCDIntegrationData](t)
 		integrationMock.EXPECT().DeleteIntegration(mock.Anything, "default", "coolIntegration").Return(assert.AnError).Times(1)
 
-		req := httptest.NewRequest(http.MethodDelete, "/deleteIntegration/coolIntegration", http.NoBody)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodDelete, "/deleteIntegration/coolIntegration", http.NoBody)
 		resp := httptest.NewRecorder()
 
 		router := setupArgoCDRouter(t, integrationMock)
@@ -162,7 +162,7 @@ func TestArgoCD_DeleteIntegration(t *testing.T) {
 		integrationMock := integrationmock.NewMockIntegration[integration.ArgoCDIntegrationData](t)
 		integrationMock.EXPECT().DeleteIntegration(mock.Anything, "default", "coolIntegration").Return(nil).Times(1)
 
-		req := httptest.NewRequest(http.MethodGet, "/deleteIntegration/coolIntegration", http.NoBody)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodDelete, "/deleteIntegration/coolIntegration", http.NoBody)
 		resp := httptest.NewRecorder()
 
 		router := setupArgoCDRouter(t, integrationMock)

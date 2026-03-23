@@ -25,7 +25,7 @@ func TestGetConnectionByName(t *testing.T) {
 		connectionsMock := connectionmock.NewMockConnection[connection.OctantConnectionData](t)
 		connectionsMock.EXPECT().GetConnectionByName(mock.Anything, "default", "specialConnection").Return(nil, assert.AnError).Times(1)
 
-		req := httptest.NewRequest(http.MethodGet, "/getConnection/specialConnection", http.NoBody)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/getConnection/specialConnection", http.NoBody)
 		resp := httptest.NewRecorder()
 
 		router := setupConnectionsRouter(t, connectionsMock)
@@ -54,7 +54,7 @@ func TestGetConnectionByName(t *testing.T) {
 		connectionsMock := connectionmock.NewMockConnection[connection.OctantConnectionData](t)
 		connectionsMock.EXPECT().GetConnectionByName(mock.Anything, "default", "specialConnection").Return(expectedConnection, nil).Times(1)
 
-		req := httptest.NewRequest(http.MethodGet, "/getConnection/specialConnection", http.NoBody)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/getConnection/specialConnection", http.NoBody)
 		resp := httptest.NewRecorder()
 
 		router := setupConnectionsRouter(t, connectionsMock)
@@ -80,7 +80,7 @@ func TestSaveConnectionData(t *testing.T) {
 		invalidPayoad, err := json.Marshal("not valid json")
 		require.NoError(t, err)
 
-		req := httptest.NewRequest(http.MethodGet, "/saveConnection/coolConnection", bytes.NewBuffer(invalidPayoad))
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/saveConnection/coolConnection", bytes.NewBuffer(invalidPayoad))
 		resp := httptest.NewRecorder()
 
 		router := setupConnectionsRouter(t, connectionsMock)
@@ -119,7 +119,7 @@ func TestSaveConnectionData(t *testing.T) {
 			Return(assert.AnError).
 			Times(1)
 
-		req := httptest.NewRequest(http.MethodPut, "/saveConnection/coolConnection", bytes.NewBuffer(serializedConnection))
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPut, "/saveConnection/coolConnection", bytes.NewBuffer(serializedConnection))
 		resp := httptest.NewRecorder()
 
 		router := setupConnectionsRouter(t, connectionsMock)
@@ -158,7 +158,7 @@ func TestSaveConnectionData(t *testing.T) {
 			Return(nil).
 			Times(1)
 
-		req := httptest.NewRequest(http.MethodPut, "/saveConnection/coolConnection", bytes.NewBuffer(serializedConnection))
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPut, "/saveConnection/coolConnection", bytes.NewBuffer(serializedConnection))
 		resp := httptest.NewRecorder()
 
 		router := setupConnectionsRouter(t, connectionsMock)
@@ -177,7 +177,7 @@ func TestDeleteConnectionByName(t *testing.T) {
 		connectionsMock := connectionmock.NewMockConnection[connection.OctantConnectionData](t)
 		connectionsMock.EXPECT().DeleteConnection(mock.Anything, "default", "coolConnection").Return(assert.AnError).Times(1)
 
-		req := httptest.NewRequest(http.MethodDelete, "/deleteConnection/coolConnection", http.NoBody)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodDelete, "/deleteConnection/coolConnection", http.NoBody)
 		resp := httptest.NewRecorder()
 
 		router := setupConnectionsRouter(t, connectionsMock)
@@ -192,7 +192,7 @@ func TestDeleteConnectionByName(t *testing.T) {
 		connectionsMock := connectionmock.NewMockConnection[connection.OctantConnectionData](t)
 		connectionsMock.EXPECT().DeleteConnection(mock.Anything, "default", "coolConnection").Return(nil).Times(1)
 
-		req := httptest.NewRequest(http.MethodDelete, "/deleteConnection/coolConnection", http.NoBody)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodDelete, "/deleteConnection/coolConnection", http.NoBody)
 		resp := httptest.NewRecorder()
 
 		router := setupConnectionsRouter(t, connectionsMock)
