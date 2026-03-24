@@ -18,47 +18,50 @@ var (
 	ArgoDeploymentType DeploymentType = "argocd"
 )
 
+type OctantConnectionDestination struct {
+	DestinationType string `json:"type"`
+	IntegrationName string `json:"integrationName"`
+}
+
 // FIXME: Actually wire up all needed fields
 type OctantConnectionData struct {
-	SourceType     string      `json:"sourceType"`
-	TelemetryTypes []Telemetry `json:"telemetryTypes"`
-	Deployment     *Deployment `json:"deployment,omitempty"`
+	SourceType     string                        `json:"sourceType"`
+	Destinations   []OctantConnectionDestination `json:"destinations"`
+	TelemetryTypes []Telemetry                   `json:"telemetryTypes"`
+	Deployment     *Deployment                   `json:"deployment,omitempty"`
+	Status         any                           `json:"status,omitempty"`
 }
 
 // FIXME: Actually wire up all needed fields
 type Deployment struct {
-	Type    DeploymentType `json:"type"`
-	Fields  map[string]any `json:"fields"`
-	ArgoApp *ArgoApp       `json:"argoApp,omitempty"`
-}
-
-type ArgoDeployment struct {
-	Branch string `json:"branch"`
+	Type            DeploymentType `json:"type"`
+	IntegrationName string         `json:"integrationName"`
+	Fields          map[string]any `json:"fields"`
 }
 
 var _ Connection[OctantConnectionData] = (*OctantConnection)(nil)
 
 type OctantConnection struct {
-	httpClient              *http.Client
-	K8sClient               kubernetes.Interface
-	ArgoCDIntegrationStuff  integration.ArgoCDIntegration
-	DataDogIntegrationStuff integration.DataDogIntegration
+	httpClient    *http.Client
+	k8sClient     kubernetes.Interface
+	argoClient    integration.ArgoCDIntegration
+	datadogClient integration.DataDogIntegration
 }
 
 func NewOctantConnection(httpClient *http.Client, k8sClient kubernetes.Interface) *OctantConnection {
 	return &OctantConnection{
 		httpClient: httpClient,
-		K8sClient:  k8sClient,
-		ArgoCDIntegrationStuff: integration.ArgoCDIntegration{
+		k8sClient:  k8sClient,
+		argoClient: integration.ArgoCDIntegration{
 			K8sClient: k8sClient,
 		},
-		DataDogIntegrationStuff: integration.DataDogIntegration{
+		datadogClient: integration.DataDogIntegration{
 			K8sClient: k8sClient,
 		},
 	}
 }
 func (oc *OctantConnection) GetConnectionByName(ctx context.Context, namespace, name string) (*OctantConnectionData, error) {
-	configmap, err := oc.K8sClient.CoreV1().ConfigMaps(namespace).Get(ctx, connectionsConfigmapName, metav1.GetOptions{})
+	configmap, err := oc.k8sClient.CoreV1().ConfigMaps(namespace).Get(ctx, connectionsConfigmapName, metav1.GetOptions{})
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			return nil, nil // nolint: nilnil
@@ -75,12 +78,14 @@ func (oc *OctantConnection) GetConnectionByName(ctx context.Context, namespace, 
 		return nil, fmt.Errorf("failed to unmarshal connection data: %w", err)
 	}
 
-	argoApp, err := oc.getArgoAppStatus(ctx, name, namespace)
-	if err != nil {
-		return &connection, err
-	}
+	if connection.Deployment.Type != ArgoDeploymentType {
+		argoApp, err := oc.getArgoAppStatus(ctx, name, namespace, connection)
+		if err != nil {
+			return &connection, err
+		}
 
-	connection.Deployment.ArgoApp = argoApp
+		connection.Status = argoApp
+	}
 
 	return &connection, nil
 }
@@ -91,25 +96,32 @@ func (oc *OctantConnection) SaveConnection(ctx context.Context, connection Octan
 		return fmt.Errorf("failed to marshal connection data: %w", err)
 	}
 
-	cm, err := oc.K8sClient.CoreV1().ConfigMaps(namespace).Get(ctx, connectionsConfigmapName, metav1.GetOptions{})
+	cm, err := oc.k8sClient.CoreV1().ConfigMaps(namespace).Get(ctx, connectionsConfigmapName, metav1.GetOptions{})
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			// Create the confmap if it does not exist
-			return createConnectionConfigMap(ctx, oc.K8sClient, namespace, connectionsConfigmapName, connectionName, string(jsonData))
+			return createConnectionConfigMap(ctx, oc.k8sClient, namespace, connectionsConfigmapName, connectionName, string(jsonData))
 		}
 		return fmt.Errorf("failed to fetch configmap %s: %w", connectionsConfigmapName, err)
 	}
 	// Update the confmap if it already exists
-	updateConfigMapErr := updateConfigMapWithConnection(ctx, oc.K8sClient, namespace, cm, connectionName, string(jsonData))
+	updateConfigMapErr := updateConfigMapWithConnection(ctx, oc.k8sClient, namespace, cm, connectionName, string(jsonData))
 	if updateConfigMapErr != nil {
 		return updateConfigMapErr
 	}
 
-	return oc.pushArgoApp(ctx, namespace, connectionName, connection)
+	if connection.Deployment.Type == ArgoDeploymentType {
+		err := oc.pushArgoApp(ctx, namespace, connectionName, connection)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (oc *OctantConnection) DeleteConnection(ctx context.Context, namespace, connectionName string) error {
-	cm, err := oc.K8sClient.CoreV1().ConfigMaps(namespace).Get(ctx, connectionsConfigmapName, metav1.GetOptions{})
+	cm, err := oc.k8sClient.CoreV1().ConfigMaps(namespace).Get(ctx, connectionsConfigmapName, metav1.GetOptions{})
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			return nil
@@ -117,7 +129,12 @@ func (oc *OctantConnection) DeleteConnection(ctx context.Context, namespace, con
 		return fmt.Errorf("failed to fetch configmap %s: %w", connectionsConfigmapName, err)
 	}
 
-	if err := oc.deleteArgoApp(ctx, connectionName, namespace); err != nil {
+	var connection OctantConnectionData
+	if err = json.Unmarshal([]byte(cm.Data[connectionName]), &connection); err != nil {
+		return fmt.Errorf("failed to unmarshal connection data: %w", err)
+	}
+
+	if err := oc.deleteArgoApp(ctx, connectionName, namespace, connection); err != nil {
 		return err
 	}
 
@@ -130,7 +147,7 @@ func (oc *OctantConnection) DeleteConnection(ctx context.Context, namespace, con
 
 	delete(cm.Data, connectionName)
 
-	if _, err = oc.K8sClient.CoreV1().ConfigMaps(namespace).Update(ctx, cm, metav1.UpdateOptions{}); err != nil {
+	if _, err = oc.k8sClient.CoreV1().ConfigMaps(namespace).Update(ctx, cm, metav1.UpdateOptions{}); err != nil {
 		return fmt.Errorf("failed to update configmap %s after deletion: %w", connectionsConfigmapName, err)
 	}
 

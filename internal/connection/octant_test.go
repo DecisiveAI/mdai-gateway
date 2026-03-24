@@ -38,7 +38,7 @@ func TestGetConnectionByName(t *testing.T) {
 
 		mockK8sClient := fake.NewClientset()
 		octantConnection := &OctantConnection{
-			K8sClient: mockK8sClient,
+			k8sClient: mockK8sClient,
 		}
 
 		actual, getErr := octantConnection.GetConnectionByName(t.Context(), defaultNamespace, "doesntMatter")
@@ -60,7 +60,7 @@ func TestGetConnectionByName(t *testing.T) {
 
 		mockK8sClient := fake.NewClientset(existingObjects...)
 		octantConnection := &OctantConnection{
-			K8sClient: mockK8sClient,
+			k8sClient: mockK8sClient,
 		}
 
 		actual, getErr := octantConnection.GetConnectionByName(t.Context(), defaultNamespace, "team-b")
@@ -82,7 +82,7 @@ func TestGetConnectionByName(t *testing.T) {
 
 		mockK8sClient := fake.NewClientset(existingObjects...)
 		octantConnection := &OctantConnection{
-			K8sClient: mockK8sClient,
+			k8sClient: mockK8sClient,
 		}
 
 		actual, getErr := octantConnection.GetConnectionByName(t.Context(), defaultNamespace, "team-a")
@@ -104,7 +104,7 @@ func TestGetConnectionByName(t *testing.T) {
 
 		mockK8sClient := fake.NewClientset(existingObjects...)
 		octantConnection := &OctantConnection{
-			K8sClient: mockK8sClient,
+			k8sClient: mockK8sClient,
 		}
 
 		actual, getErr := octantConnection.GetConnectionByName(t.Context(), defaultNamespace, "team-a")
@@ -136,7 +136,7 @@ func TestArgoCD_SetIntegration(t *testing.T) {
 
 		mockK8sClient := fake.NewClientset()
 		octantConnection := &OctantConnection{
-			K8sClient: mockK8sClient,
+			k8sClient: mockK8sClient,
 		}
 
 		// Verify the configmap doesn't exist yet
@@ -173,7 +173,7 @@ func TestArgoCD_SetIntegration(t *testing.T) {
 		}
 		mockK8sClient := fake.NewClientset(existingObjects...)
 		octantConnection := &OctantConnection{
-			K8sClient: mockK8sClient,
+			k8sClient: mockK8sClient,
 		}
 
 		// Verify the secret DOES exist already
@@ -209,7 +209,7 @@ func TestArgoCD_DeleteIntegration(t *testing.T) {
 
 		mockK8sClient := fake.NewClientset()
 		octantConnection := &OctantConnection{
-			K8sClient: mockK8sClient,
+			k8sClient: mockK8sClient,
 		}
 
 		// validate configmap doesn't exist before we try to delete
@@ -233,7 +233,7 @@ func TestArgoCD_DeleteIntegration(t *testing.T) {
 		}
 		mockK8sClient := fake.NewClientset(existingObjects...)
 		octantConnection := &OctantConnection{
-			K8sClient: mockK8sClient,
+			k8sClient: mockK8sClient,
 		}
 
 		// validate configmap exists with "team-a" before we try to delete with another connection name
@@ -261,7 +261,7 @@ func TestArgoCD_DeleteIntegration(t *testing.T) {
 		}
 		mockK8sClient := fake.NewClientset(existingObjects...)
 		octantConnection := &OctantConnection{
-			K8sClient: mockK8sClient,
+			k8sClient: mockK8sClient,
 		}
 
 		// validate secret exists with both integration names before we delete one of them.

@@ -29,18 +29,19 @@ type ArgoAppResources struct {
 	Name string `json:"name"`
 }
 
-func (oc *OctantConnection) getArgoAppStatus(ctx context.Context, name string, namespace string) (*ArgoApp, error) {
-	argoIntegration, getArgoIntErr := oc.ArgoCDIntegrationStuff.GetIntegrationByName(ctx, namespace, "default-argo-integration")
+func (oc *OctantConnection) getArgoAppStatus(ctx context.Context, name string, namespace string, connection OctantConnectionData) (*ArgoApp, error) {
+	argoIntegration, getArgoIntErr := oc.argoClient.GetIntegrationByName(ctx, namespace, connection.Deployment.IntegrationName)
 	if getArgoIntErr != nil {
 		return nil, getArgoIntErr
 	}
 
 	// GET APP
-	getAppUrl := fmt.Sprintf("%s/api/v1/applications/%s", argoIntegration.APIUrl, name)
+	getAppUrl := fmt.Sprintf("%s/api/v1/applications/%s?upsert=true", argoIntegration.APIUrl, name)
 	req, err := http.NewRequestWithContext(ctx, "GET", getAppUrl, nil)
 	if err != nil {
 		return nil, err
 	}
+	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", argoIntegration.AccountToken))
 	resp, err := oc.httpClient.Do(req)
 	defer resp.Body.Close()
@@ -59,22 +60,34 @@ func (oc *OctantConnection) getArgoAppStatus(ctx context.Context, name string, n
 }
 
 func (oc *OctantConnection) pushArgoApp(ctx context.Context, namespace, name string, connection OctantConnectionData) error {
-	// FIXME: Actually wire up the integration name here
-	datadawgIntegration, getDDIntErr := oc.DataDogIntegrationStuff.GetIntegrationByName(ctx, namespace, "datadawg")
-	if getDDIntErr != nil {
-		return getDDIntErr
+	if len(connection.Destinations) != 1 {
+		// TODO: Implement multiple destination handling and handling of non-dd integrations
+		return fmt.Errorf("pushing argo application to multiple destinations is currently unsupported")
 	}
-	argoIntegration, getArgoIntErr := oc.ArgoCDIntegrationStuff.GetIntegrationByName(ctx, namespace, "default-argo-integration")
+	var datadogIntegration *integration.DataDogIntegrationData
+	for _, destination := range connection.Destinations {
+		switch destination.DestinationType {
+		case "datadog":
+			foundDDIntegration, getDDIntErr := oc.datadogClient.GetIntegrationByName(ctx, namespace, destination.IntegrationName)
+			if getDDIntErr != nil {
+				return getDDIntErr
+			}
+			datadogIntegration = foundDDIntegration
+		default:
+			return fmt.Errorf("unknown destination type: %s", destination.DestinationType)
+		}
+	}
+
+	argoIntegration, getArgoIntErr := oc.argoClient.GetIntegrationByName(ctx, namespace, connection.Deployment.IntegrationName)
 	if getArgoIntErr != nil {
 		return getArgoIntErr
 	}
 
 	templateData := ArgoTemplateData{
-		AppName:        name,
-		Namespace:      namespace,
-		ConnectionData: connection,
-		TempDDAPIKey:   datadawgIntegration.APIKey,
-		TempDDURL:      datadawgIntegration.DDUrl,
+		AppName:                name,
+		Namespace:              namespace,
+		ConnectionData:         connection,
+		DatadogIntegrationData: datadogIntegration,
 		// Tells template to manually inject Argo tracking annotations. We only want these for direct sync force push
 		IsArgoSideload: true,
 	}
@@ -152,11 +165,12 @@ func (oc *OctantConnection) doArgoAppCreation(ctx context.Context, templateData 
 	return nil
 }
 
-func (oc *OctantConnection) deleteArgoApp(ctx context.Context, name string, namespace string) error {
-	argoIntegration, getArgoIntErr := oc.ArgoCDIntegrationStuff.GetIntegrationByName(ctx, namespace, "default-argo-integration")
+func (oc *OctantConnection) deleteArgoApp(ctx context.Context, name string, namespace string, connection OctantConnectionData) error {
+	argoIntegration, getArgoIntErr := oc.argoClient.GetIntegrationByName(ctx, namespace, connection.Deployment.IntegrationName)
 	if getArgoIntErr != nil {
 		return getArgoIntErr
 	}
+
 	query := "?cascade=true&propagationPolicy=foreground&appNamespace=argocd&cascade=true"
 	deleteAppUrl := fmt.Sprintf("%s/api/v1/applications/%s%s", argoIntegration.APIUrl, name, query)
 	req, err := http.NewRequestWithContext(ctx, "DELETE", deleteAppUrl, nil)
