@@ -78,7 +78,7 @@ func (oc *OctantConnection) GetConnectionByName(ctx context.Context, namespace, 
 		return nil, fmt.Errorf("failed to unmarshal connection data: %w", err)
 	}
 
-	if connection.Deployment.Type != ArgoDeploymentType {
+	if connection.Deployment.Type == ArgoDeploymentType {
 		argoApp, err := oc.getArgoAppStatus(ctx, name, namespace, connection)
 		if err != nil {
 			return &connection, err
@@ -134,8 +134,10 @@ func (oc *OctantConnection) DeleteConnection(ctx context.Context, namespace, con
 		return fmt.Errorf("failed to unmarshal connection data: %w", err)
 	}
 
-	if err := oc.deleteArgoApp(ctx, connectionName, namespace, connection); err != nil {
-		return err
+	if connection.Deployment.Type == ArgoDeploymentType {
+		if err := oc.deleteArgoApp(ctx, connectionName, namespace, connection); err != nil {
+			return err
+		}
 	}
 
 	if cm.Data == nil {
