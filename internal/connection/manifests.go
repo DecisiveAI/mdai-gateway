@@ -3,6 +3,7 @@ package connection
 import (
 	"bytes"
 	_ "embed"
+	"github.com/mydecisive/mdai-gateway/internal/integration"
 	"sigs.k8s.io/yaml"
 	"text/template"
 )
@@ -38,12 +39,11 @@ var manifestTemplates = map[string]string{
 }
 
 type ArgoTemplateData struct {
-	AppName        string
-	Namespace      string
-	ConnectionData OctantConnectionData
-	TempDDAPIKey   string
-	TempDDURL      string
-	IsArgoSideload bool
+	AppName                string
+	Namespace              string
+	ConnectionData         OctantConnectionData
+	DatadogIntegrationData *integration.DataDogIntegrationData
+	IsArgoSideload         bool
 }
 
 func (oc *OctantConnection) renderArgoAppManifest(templateData *ArgoTemplateData) ([]byte, error) {
@@ -65,8 +65,6 @@ func (oc *OctantConnection) renderArgoAppManifest(templateData *ArgoTemplateData
 }
 
 func (oc *OctantConnection) renderSyncManifests(templateData *ArgoTemplateData) ([]string, error) {
-	// FIXME: Actually wire up telemetry types; for now just renders all three. Probably need to do more than a string template for the collector configs
-
 	var manifests []string
 	for templateName, templateString := range manifestTemplates {
 		appManifestTemplate, err := template.New(templateName).Parse(templateString)
