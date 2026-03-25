@@ -134,17 +134,17 @@ func (oc *OctantConnection) DeleteConnection(ctx context.Context, namespace, con
 		return fmt.Errorf("failed to unmarshal connection data: %w", err)
 	}
 
-	if connection.Deployment.Type == ArgoDeploymentType {
-		if err := oc.deleteArgoApp(ctx, connectionName, namespace, connection); err != nil {
-			return err
-		}
-	}
-
 	if cm.Data == nil {
 		return nil
 	}
 	if _, exists := cm.Data[connectionName]; !exists {
 		return nil
+	}
+
+	if connection.Deployment.Type == ArgoDeploymentType {
+		if err := oc.deleteArgoApp(ctx, connectionName, namespace, connection); err != nil {
+			return err
+		}
 	}
 
 	delete(cm.Data, connectionName)
