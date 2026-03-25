@@ -14,6 +14,7 @@ spec:
     app: {{ .AppName }}-primary-collector
   image: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:0.147.0
   env:
+    {{- if .DatadogIntegrationData }}
     - name: DD_API_KEY
       valueFrom:
         secretKeyRef:
@@ -24,6 +25,7 @@ spec:
         secretKeyRef:
           name: {{ .AppName }}-integration-secret
           key: site-url
+    {{- end }}
   config: |
     receivers:
       datadog:
@@ -33,10 +35,12 @@ spec:
         send_batch_size: 1000
         timeout: 10s
     exporters:
+      {{- if .DatadogIntegrationData }}
       datadog:
         api:
           key: "${env:DD_API_KEY}"
           site: "${env:DD_SITE}"
+      {{- end }}
     service:
       pipelines:
         {{- range .ConnectionData.TelemetryTypes }}
