@@ -14,9 +14,6 @@ var argoAppTemplate string
 //go:embed templates/primary-collector.yaml
 var primaryCollectorTemplate string
 
-//go:embed templates/shadow-collector.yaml
-var shadowCollectorTemplate string
-
 //go:embed templates/envoy-config.yaml
 var envoyConfigTemplate string
 
@@ -31,7 +28,6 @@ var secretTemplate string
 
 var manifestTemplates = map[string]string{
 	"primary-collector": primaryCollectorTemplate,
-	"shadow-collector":  shadowCollectorTemplate,
 	"envoy-config":      envoyConfigTemplate,
 	"envoy-deployment":  envoyDeploymentTemplate,
 	"envoy-service":     envoyServiceTemplate,
