@@ -5,11 +5,12 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"net/http"
+
 	"github.com/mydecisive/mdai-gateway/internal/integration"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
-	"net/http"
 )
 
 type DeploymentType string
@@ -23,7 +24,6 @@ type OctantConnectionDestination struct {
 	IntegrationName string `json:"integrationName"`
 }
 
-// FIXME: Actually wire up all needed fields
 type OctantConnectionData struct {
 	SourceType     string                        `json:"sourceType"`
 	Destinations   []OctantConnectionDestination `json:"destinations"`
@@ -32,7 +32,6 @@ type OctantConnectionData struct {
 	Status         any                           `json:"status,omitempty"`
 }
 
-// FIXME: Actually wire up all needed fields
 type Deployment struct {
 	Type            DeploymentType `json:"type"`
 	IntegrationName string         `json:"integrationName"`
@@ -41,25 +40,34 @@ type Deployment struct {
 
 var _ Connection[OctantConnectionData] = (*OctantConnection)(nil)
 
+type ArgoIntegrationClient interface {
+	GetIntegrationByName(ctx context.Context, namespace, name string) (*integration.ArgoCDIntegrationData, error)
+}
+
+type DatadogIntegrationClient interface {
+	GetIntegrationByName(ctx context.Context, namespace, name string) (*integration.DataDogIntegrationData, error)
+}
+
 type OctantConnection struct {
 	httpClient    *http.Client
 	k8sClient     kubernetes.Interface
-	argoClient    integration.ArgoCDIntegration
-	datadogClient integration.DataDogIntegration
+	argoClient    ArgoIntegrationClient
+	datadogClient DatadogIntegrationClient
 }
 
 func NewOctantConnection(httpClient *http.Client, k8sClient kubernetes.Interface) *OctantConnection {
 	return &OctantConnection{
 		httpClient: httpClient,
 		k8sClient:  k8sClient,
-		argoClient: integration.ArgoCDIntegration{
+		argoClient: &integration.ArgoCDIntegration{
 			K8sClient: k8sClient,
 		},
-		datadogClient: integration.DataDogIntegration{
+		datadogClient: &integration.DataDogIntegration{
 			K8sClient: k8sClient,
 		},
 	}
 }
+
 func (oc *OctantConnection) GetConnectionByName(ctx context.Context, namespace, name string) (*OctantConnectionData, error) {
 	configmap, err := oc.k8sClient.CoreV1().ConfigMaps(namespace).Get(ctx, connectionsConfigmapName, metav1.GetOptions{})
 	if err != nil {
@@ -141,7 +149,7 @@ func (oc *OctantConnection) DeleteConnection(ctx context.Context, namespace, con
 		return nil
 	}
 
-	if connection.Deployment.Type == ArgoDeploymentType {
+	if connection.Deployment != nil && connection.Deployment.Type == ArgoDeploymentType {
 		if err := oc.deleteArgoApp(ctx, connectionName, namespace, connection); err != nil {
 			return err
 		}
