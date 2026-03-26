@@ -2,7 +2,7 @@ package connection
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -36,7 +36,6 @@ func TestGetArgoAppStatus(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -130,7 +129,7 @@ func TestPushArgoApp(t *testing.T) {
 			destinations: []OctantConnectionDestination{
 				{DestinationType: "datadog", IntegrationName: "dd-1"},
 			},
-			ddClientErr: fmt.Errorf("datadog integration not found"),
+			ddClientErr: errors.New("datadog integration not found"),
 			expectedErr: "datadog integration not found",
 		},
 		{
@@ -138,7 +137,7 @@ func TestPushArgoApp(t *testing.T) {
 			destinations: []OctantConnectionDestination{
 				{DestinationType: "datadog", IntegrationName: "dd-1"},
 			},
-			argoClientErr: fmt.Errorf("argo integration not found"),
+			argoClientErr: errors.New("argo integration not found"),
 			expectedErr:   "argo integration not found",
 		},
 		{
@@ -170,7 +169,6 @@ func TestPushArgoApp(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 

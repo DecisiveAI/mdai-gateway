@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"github.com/mydecisive/mdai-gateway/internal/integration"
 	"net/http"
 	"time"
+
+	"github.com/mydecisive/mdai-gateway/internal/integration"
 )
 
 type ArgoApp struct {
@@ -37,12 +39,12 @@ func (oc *OctantConnection) getArgoAppStatus(ctx context.Context, name string, n
 
 	// GET APP
 	getAppUrl := fmt.Sprintf("%s/api/v1/applications/%s?upsert=true", argoIntegration.APIUrl, name)
-	req, err := http.NewRequestWithContext(ctx, "GET", getAppUrl, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, getAppUrl, nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", argoIntegration.AccountToken))
+	req.Header.Set("Authorization", "Bearer "+argoIntegration.AccountToken)
 	resp, err := oc.httpClient.Do(req)
 	defer resp.Body.Close()
 	if err != nil {
@@ -62,7 +64,7 @@ func (oc *OctantConnection) getArgoAppStatus(ctx context.Context, name string, n
 func (oc *OctantConnection) pushArgoApp(ctx context.Context, namespace, name string, connection OctantConnectionData) error {
 	if len(connection.Destinations) != 1 {
 		// TODO: Implement multiple destination handling and handling of non-dd integrations
-		return fmt.Errorf("pushing argo application to multiple destinations is currently unsupported")
+		return errors.New("pushing argo application to multiple destinations is currently unsupported")
 	}
 	var datadogIntegration *integration.DataDogIntegrationData
 	for _, destination := range connection.Destinations {
@@ -115,7 +117,7 @@ func (oc *OctantConnection) doArgoAppSync(ctx context.Context, templateData Argo
 		"revision": "HEAD",
 		"prune":    false,
 		"dryRun":   false,
-		"strategy": map[string]interface{}{
+		"strategy": map[string]any{
 			"apply": map[string]bool{
 				"force": false,
 			},
@@ -127,12 +129,12 @@ func (oc *OctantConnection) doArgoAppSync(ctx context.Context, templateData Argo
 		return err
 	}
 	syncUrl := fmt.Sprintf("%s/api/v1/applications/%s/sync", argoIntegration.APIUrl, name)
-	syncReq, err := http.NewRequestWithContext(ctx, "POST", syncUrl, bytes.NewReader(syncPayloadJson))
+	syncReq, err := http.NewRequestWithContext(ctx, http.MethodPost, syncUrl, bytes.NewReader(syncPayloadJson))
 	if err != nil {
 		return err
 	}
 	syncReq.Header.Set("Content-Type", "application/json")
-	syncReq.Header.Set("Authorization", fmt.Sprintf("Bearer %s", argoIntegration.AccountToken))
+	syncReq.Header.Set("Authorization", "Bearer "+argoIntegration.AccountToken)
 	syncResp, err := oc.httpClient.Do(syncReq)
 	if err != nil {
 		return err
@@ -148,13 +150,13 @@ func (oc *OctantConnection) doArgoAppCreation(ctx context.Context, templateData 
 	if err != nil {
 		return err
 	}
-	createAppUrl := fmt.Sprintf("%s/api/v1/applications", argoIntegration.APIUrl)
-	req, err := http.NewRequestWithContext(ctx, "POST", createAppUrl, bytes.NewReader(appJson))
+	createAppUrl := argoIntegration.APIUrl + "/api/v1/applications"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, createAppUrl, bytes.NewReader(appJson))
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", argoIntegration.AccountToken))
+	req.Header.Set("Authorization", "Bearer "+argoIntegration.AccountToken)
 	resp, err := oc.httpClient.Do(req)
 	if err != nil {
 		return err
@@ -173,13 +175,13 @@ func (oc *OctantConnection) deleteArgoApp(ctx context.Context, name string, name
 
 	query := "?cascade=true&propagationPolicy=foreground&appNamespace=argocd&cascade=true"
 	deleteAppUrl := fmt.Sprintf("%s/api/v1/applications/%s%s", argoIntegration.APIUrl, name, query)
-	req, err := http.NewRequestWithContext(ctx, "DELETE", deleteAppUrl, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, deleteAppUrl, nil)
 	if err != nil {
 		return err
 	}
 	// Despite no body being required, ArgoCD requires a JSON content type to process Delete
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", argoIntegration.AccountToken))
+	req.Header.Set("Authorization", "Bearer "+argoIntegration.AccountToken)
 	resp, err := oc.httpClient.Do(req)
 	if err != nil {
 		return err

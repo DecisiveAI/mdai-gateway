@@ -3,9 +3,10 @@ package connection
 import (
 	"bytes"
 	_ "embed"
+	"text/template"
+
 	"github.com/mydecisive/mdai-gateway/internal/integration"
 	"sigs.k8s.io/yaml"
-	"text/template"
 )
 
 //go:embed templates/argo-app.yaml

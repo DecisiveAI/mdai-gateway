@@ -44,10 +44,8 @@ func TestGetConnectionByName(t *testing.T) {
 				connection.Traces,
 			},
 			Deployment: &connection.Deployment{
-				Type: connection.ArgoForceSyncDeploymentType,
-				Fields: map[string]any{
-					"branch": "bestBranch",
-				},
+				Type:            connection.ArgoForceSyncDeploymentType,
+				IntegrationName: "argo-test",
 			},
 		}
 
@@ -99,10 +97,8 @@ func TestSaveConnectionData(t *testing.T) {
 				connection.Traces,
 			},
 			Deployment: &connection.Deployment{
-				Type: connection.ArgoForceSyncDeploymentType,
-				Fields: map[string]any{
-					"branch": "bestBranch",
-				},
+				Type:            connection.ArgoForceSyncDeploymentType,
+				IntegrationName: "argo-test",
 			},
 		}
 		serializedConnection, err := json.Marshal(connectionToSave)
@@ -113,7 +109,7 @@ func TestSaveConnectionData(t *testing.T) {
 			SaveConnection(mock.Anything, mock.MatchedBy(func(theConnection connection.OctantConnectionData) bool {
 				matchingSource := theConnection.SourceType == "datadog"
 				matchingTelemetry := len(theConnection.TelemetryTypes) == 2 && theConnection.TelemetryTypes[0] == connection.Logs && theConnection.TelemetryTypes[1] == connection.Traces
-				matchingDeployment := theConnection.Deployment.Type == connection.ArgoForceSyncDeploymentType && theConnection.Deployment.Fields["branch"] == "bestBranch"
+				matchingDeployment := theConnection.Deployment.Type == connection.ArgoForceSyncDeploymentType && theConnection.Deployment.IntegrationName == "argo-test"
 				return matchingSource && matchingTelemetry && matchingDeployment
 			}), "default", "coolConnection").
 			Return(assert.AnError).
@@ -138,10 +134,8 @@ func TestSaveConnectionData(t *testing.T) {
 				connection.Traces,
 			},
 			Deployment: &connection.Deployment{
-				Type: connection.ArgoForceSyncDeploymentType,
-				Fields: map[string]any{
-					"branch": "bestBranch",
-				},
+				Type:            connection.ArgoForceSyncDeploymentType,
+				IntegrationName: "argo-test",
 			},
 		}
 		serializedConnection, err := json.Marshal(connectionToSave)
@@ -152,7 +146,7 @@ func TestSaveConnectionData(t *testing.T) {
 			SaveConnection(mock.Anything, mock.MatchedBy(func(theConnection connection.OctantConnectionData) bool {
 				matchingSource := theConnection.SourceType == "datadog"
 				matchingTelemetry := len(theConnection.TelemetryTypes) == 2 && theConnection.TelemetryTypes[0] == connection.Logs && theConnection.TelemetryTypes[1] == connection.Traces
-				matchingDeployment := theConnection.Deployment.Type == connection.ArgoForceSyncDeploymentType && theConnection.Deployment.Fields["branch"] == "bestBranch"
+				matchingDeployment := theConnection.Deployment.Type == connection.ArgoForceSyncDeploymentType && theConnection.Deployment.IntegrationName == "argo-test"
 				return matchingSource && matchingTelemetry && matchingDeployment
 			}), "default", "coolConnection").
 			Return(nil).

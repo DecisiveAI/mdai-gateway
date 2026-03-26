@@ -16,12 +16,9 @@ import (
 type DeploymentType string
 
 // TODO: Refactor connection operations to use tasksets/plans instead of if-argo-then
-//type DeploymentTask func(ctx context.Context, name string, namespace string, connection OctantConnectionData) (any, error)
-//type DeploymentTaskSet map[string][]DeploymentTask
-
-var (
-	ArgoForceSyncDeploymentType DeploymentType = "argocd-force-sync"
-)
+// type DeploymentTask func(ctx context.Context, name string, namespace string, connection OctantConnectionData) (any, error)
+// type DeploymentTaskSet map[string][]DeploymentTask
+var ArgoForceSyncDeploymentType DeploymentType = "argocd-force-sync"
 
 type OctantConnectionDestination struct {
 	DestinationType string `json:"type"`
@@ -57,12 +54,12 @@ type OctantConnection struct {
 	argoClient    ArgoIntegrationClient
 	datadogClient DatadogIntegrationClient
 	// TODO: Refactor connection operations to use tasksets/plans instead of if-argo-then
-	//taskSets      map[DeploymentType]DeploymentTaskSet
+	// taskSets      map[DeploymentType]DeploymentTaskSet
 }
 
 func NewOctantConnection(httpClient *http.Client, k8sClient kubernetes.Interface) *OctantConnection {
 	// TODO: Refactor connection operations to use tasksets/plans instead of if-argo-then
-	//taskSets := map[DeploymentType]DeploymentTaskSet{
+	// taskSets := map[DeploymentType]DeploymentTaskSet{
 	//	ArgoForceSyncDeploymentType: {
 	//		"GET": ...,
 	//		"POST": ...,
