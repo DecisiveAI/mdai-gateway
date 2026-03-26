@@ -2,7 +2,7 @@ package connection
 
 import (
 	"context"
-	_ "embed"
+	_ "embed" // nolint: revive
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -13,49 +13,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-type DeploymentType string
-
-// TODO: Refactor connection operations to use tasksets/plans instead of if-argo-then
-// type DeploymentTask func(ctx context.Context, name string, namespace string, connection OctantConnectionData) (any, error)
-// type DeploymentTaskSet map[string][]DeploymentTask
-var ArgoForceSyncDeploymentType DeploymentType = "argocd-force-sync"
-
-type OctantConnectionDestination struct {
-	DestinationType string `json:"type"`
-	IntegrationName string `json:"integrationName"`
-}
-
-type OctantConnectionData struct {
-	SourceType     string                        `json:"sourceType"`
-	Destinations   []OctantConnectionDestination `json:"destinations"`
-	TelemetryTypes []Telemetry                   `json:"telemetryTypes"`
-	Deployment     *Deployment                   `json:"deployment,omitempty"`
-	Status         any                           `json:"status,omitempty"`
-}
-
-type Deployment struct {
-	Type            DeploymentType `json:"type"`
-	IntegrationName string         `json:"integrationName"`
-}
-
 var _ Connection[OctantConnectionData] = (*OctantConnection)(nil)
-
-type ArgoIntegrationClient interface {
-	GetIntegrationByName(ctx context.Context, namespace, name string) (*integration.ArgoCDIntegrationData, error)
-}
-
-type DatadogIntegrationClient interface {
-	GetIntegrationByName(ctx context.Context, namespace, name string) (*integration.DataDogIntegrationData, error)
-}
-
-type OctantConnection struct {
-	httpClient    *http.Client
-	k8sClient     kubernetes.Interface
-	argoClient    ArgoIntegrationClient
-	datadogClient DatadogIntegrationClient
-	// TODO: Refactor connection operations to use tasksets/plans instead of if-argo-then
-	// taskSets      map[DeploymentType]DeploymentTaskSet
-}
 
 func NewOctantConnection(httpClient *http.Client, k8sClient kubernetes.Interface) *OctantConnection {
 	// TODO: Refactor connection operations to use tasksets/plans instead of if-argo-then
@@ -65,7 +23,7 @@ func NewOctantConnection(httpClient *http.Client, k8sClient kubernetes.Interface
 	//		"POST": ...,
 	//		"DELETE": ...,
 	//	},
-	//}
+	// }
 	return &OctantConnection{
 		httpClient: httpClient,
 		k8sClient:  k8sClient,
@@ -141,16 +99,16 @@ func (oc *OctantConnection) SaveConnection(ctx context.Context, connection Octan
 }
 
 func (oc *OctantConnection) DeleteConnection(ctx context.Context, namespace, connectionName string) error {
-	cm, err := oc.k8sClient.CoreV1().ConfigMaps(namespace).Get(ctx, connectionsConfigmapName, metav1.GetOptions{})
-	if err != nil {
-		if k8serrors.IsNotFound(err) {
+	cm, getCMErr := oc.k8sClient.CoreV1().ConfigMaps(namespace).Get(ctx, connectionsConfigmapName, metav1.GetOptions{})
+	if getCMErr != nil {
+		if k8serrors.IsNotFound(getCMErr) {
 			return nil
 		}
-		return fmt.Errorf("failed to fetch configmap %s: %w", connectionsConfigmapName, err)
+		return fmt.Errorf("failed to fetch configmap %s: %w", connectionsConfigmapName, getCMErr)
 	}
 
 	var connection OctantConnectionData
-	if err = json.Unmarshal([]byte(cm.Data[connectionName]), &connection); err != nil {
+	if err := json.Unmarshal([]byte(cm.Data[connectionName]), &connection); err != nil {
 		return fmt.Errorf("failed to unmarshal connection data: %w", err)
 	}
 
@@ -163,14 +121,14 @@ func (oc *OctantConnection) DeleteConnection(ctx context.Context, namespace, con
 
 	// TODO: This should be refactored to a more robust deployment-based task system
 	if connection.Deployment != nil && connection.Deployment.Type == ArgoForceSyncDeploymentType {
-		if err := oc.deleteArgoApp(ctx, connectionName, namespace, connection); err != nil {
-			return err
+		if deleteErr := oc.deleteArgoApp(ctx, connectionName, namespace, connection); deleteErr != nil {
+			return deleteErr
 		}
 	}
 
 	delete(cm.Data, connectionName)
 
-	if _, err = oc.k8sClient.CoreV1().ConfigMaps(namespace).Update(ctx, cm, metav1.UpdateOptions{}); err != nil {
+	if _, err := oc.k8sClient.CoreV1().ConfigMaps(namespace).Update(ctx, cm, metav1.UpdateOptions{}); err != nil {
 		return fmt.Errorf("failed to update configmap %s after deletion: %w", connectionsConfigmapName, err)
 	}
 

@@ -27,14 +27,6 @@ var envoyServiceTemplate string
 //go:embed templates/secret.yaml
 var secretTemplate string
 
-var argoForceSyncManifestTemplates = map[string]string{
-	"primary-collector": primaryCollectorTemplate,
-	"envoy-config":      envoyConfigTemplate,
-	"envoy-deployment":  envoyDeploymentTemplate,
-	"envoy-service":     envoyServiceTemplate,
-	"secret":            secretTemplate,
-}
-
 type ArgoTemplateData struct {
 	AppName                string
 	Namespace              string
@@ -43,42 +35,48 @@ type ArgoTemplateData struct {
 	IsArgoSideload         bool
 }
 
-func (oc *OctantConnection) renderArgoAppManifest(templateData *ArgoTemplateData) ([]byte, error) {
+func (*OctantConnection) renderArgoAppManifest(templateData *ArgoTemplateData) ([]byte, error) {
 	appManifestTemplate, err := template.New("argo-app").Parse(argoAppTemplate)
 	if err != nil {
 		return []byte{}, err
 	}
 	var renderedYaml bytes.Buffer
-	if err := appManifestTemplate.Execute(&renderedYaml, templateData); err != nil {
-		return []byte{}, err
+	if templateErr := appManifestTemplate.Execute(&renderedYaml, templateData); templateErr != nil {
+		return []byte{}, templateErr
 	}
 
-	renderedJson, err := yaml.YAMLToJSON(renderedYaml.Bytes())
+	renderedJSON, err := yaml.YAMLToJSON(renderedYaml.Bytes())
 	if err != nil {
 		return []byte{}, err
 	}
 
-	return renderedJson, nil
+	return renderedJSON, nil
 }
 
-func (oc *OctantConnection) renderSyncManifests(templateData *ArgoTemplateData) ([]string, error) {
+func (*OctantConnection) renderSyncManifests(templateData *ArgoTemplateData) ([]string, error) {
 	var manifests []string
-	for templateName, templateString := range argoForceSyncManifestTemplates {
+	for templateName, templateString := range map[string]string{
+		"primary-collector": primaryCollectorTemplate,
+		"envoy-config":      envoyConfigTemplate,
+		"envoy-deployment":  envoyDeploymentTemplate,
+		"envoy-service":     envoyServiceTemplate,
+		"secret":            secretTemplate,
+	} {
 		appManifestTemplate, err := template.New(templateName).Parse(templateString)
 		if err != nil {
 			return manifests, err
 		}
 		var renderedYaml bytes.Buffer
-		if err := appManifestTemplate.Execute(&renderedYaml, templateData); err != nil {
-			return manifests, err
+		if templateErr := appManifestTemplate.Execute(&renderedYaml, templateData); templateErr != nil {
+			return manifests, templateErr
 		}
 
-		renderedJson, err := yaml.YAMLToJSON(renderedYaml.Bytes())
+		renderedJSON, err := yaml.YAMLToJSON(renderedYaml.Bytes())
 		if err != nil {
 			return manifests, err
 		}
 
-		manifests = append(manifests, string(renderedJson))
+		manifests = append(manifests, string(renderedJSON))
 	}
 
 	return manifests, nil

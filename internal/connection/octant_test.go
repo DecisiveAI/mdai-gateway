@@ -47,7 +47,7 @@ func setupTestServer() *httptest.Server {
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/applications/team-a":
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{"status": {"health": {"status": "Healthy"}}}`))
+			w.Write([]byte(`{"status": {"health": {"status": "Healthy"}}}`)) // nolint: errcheck,gosec,revive
 		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/applications":
 			w.WriteHeader(http.StatusOK)
 		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/applications/team-a/sync":
@@ -162,7 +162,8 @@ func TestDeleteConnection(t *testing.T) {
 			IntegrationName: "argo-test",
 		},
 	}
-	existingConnectionBytes, _ := json.Marshal(existingConnection)
+	existingConnectionBytes, marshalErr := json.Marshal(existingConnection)
+	require.NoError(t, marshalErr)
 
 	existingObjects := []runtime.Object{
 		&corev1.ConfigMap{
@@ -184,11 +185,11 @@ func TestDeleteConnection(t *testing.T) {
 		},
 	}
 
-	err := octantConnection.DeleteConnection(context.Background(), defaultNamespace, "team-a")
-	require.NoError(t, err)
+	deleteErr := octantConnection.DeleteConnection(context.Background(), defaultNamespace, "team-a")
+	require.NoError(t, deleteErr)
 
 	// Verify removed
-	cm, err := mockK8sClient.CoreV1().ConfigMaps(defaultNamespace).Get(context.Background(), connectionsConfigmapName, metav1.GetOptions{})
-	require.NoError(t, err)
+	cm, getCMErr := mockK8sClient.CoreV1().ConfigMaps(defaultNamespace).Get(context.Background(), connectionsConfigmapName, metav1.GetOptions{})
+	require.NoError(t, getCMErr)
 	require.NotContains(t, cm.Data, "team-a")
 }
