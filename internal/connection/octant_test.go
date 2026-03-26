@@ -73,7 +73,6 @@ func TestGetConnectionByName(t *testing.T) {
 		Deployment: &Deployment{
 			Type:            ArgoForceSyncDeploymentType,
 			IntegrationName: "argo-test",
-			Fields:          map[string]any{"branch": "tv/bestBranch"},
 		},
 	}
 	validConnectionBytes, err := json.Marshal(validConnection)
@@ -124,7 +123,6 @@ func TestSaveConnection(t *testing.T) {
 		Deployment: &Deployment{
 			Type:            ArgoForceSyncDeploymentType,
 			IntegrationName: "argo-test",
-			Fields:          map[string]any{"branch": "tv/bestBranch"},
 		},
 	}
 

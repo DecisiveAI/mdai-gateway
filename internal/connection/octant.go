@@ -39,7 +39,6 @@ type OctantConnectionData struct {
 type Deployment struct {
 	Type            DeploymentType `json:"type"`
 	IntegrationName string         `json:"integrationName"`
-	Fields          map[string]any `json:"fields"`
 }
 
 var _ Connection[OctantConnectionData] = (*OctantConnection)(nil)
@@ -100,7 +99,8 @@ func (oc *OctantConnection) GetConnectionByName(ctx context.Context, namespace, 
 		return nil, fmt.Errorf("failed to unmarshal connection data: %w", err)
 	}
 
-	if connection.Deployment.Type == ArgoForceSyncDeploymentType {
+	// TODO: This should be refactored to a more robust deployment-based task system
+	if connection.Deployment != nil && connection.Deployment.Type == ArgoForceSyncDeploymentType {
 		argoApp, err := oc.getArgoAppStatus(ctx, name, namespace, connection)
 		if err != nil {
 			return &connection, err
@@ -132,7 +132,8 @@ func (oc *OctantConnection) SaveConnection(ctx context.Context, connection Octan
 		return updateConfigMapErr
 	}
 
-	if connection.Deployment.Type == ArgoForceSyncDeploymentType {
+	// TODO: This should be refactored to a more robust deployment-based task system
+	if connection.Deployment != nil && connection.Deployment.Type == ArgoForceSyncDeploymentType {
 		err := oc.pushArgoApp(ctx, namespace, connectionName, connection)
 		if err != nil {
 			return err
@@ -163,6 +164,7 @@ func (oc *OctantConnection) DeleteConnection(ctx context.Context, namespace, con
 		return nil
 	}
 
+	// TODO: This should be refactored to a more robust deployment-based task system
 	if connection.Deployment != nil && connection.Deployment.Type == ArgoForceSyncDeploymentType {
 		if err := oc.deleteArgoApp(ctx, connectionName, namespace, connection); err != nil {
 			return err
