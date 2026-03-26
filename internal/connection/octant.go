@@ -15,8 +15,12 @@ import (
 
 type DeploymentType string
 
+// TODO: Refactor connection operations to use tasksets/plans instead of if-argo-then
+//type DeploymentTask func(ctx context.Context, name string, namespace string, connection OctantConnectionData) (any, error)
+//type DeploymentTaskSet map[string][]DeploymentTask
+
 var (
-	ArgoDeploymentType DeploymentType = "argocd"
+	ArgoForceSyncDeploymentType DeploymentType = "argocd-force-sync"
 )
 
 type OctantConnectionDestination struct {
@@ -53,9 +57,19 @@ type OctantConnection struct {
 	k8sClient     kubernetes.Interface
 	argoClient    ArgoIntegrationClient
 	datadogClient DatadogIntegrationClient
+	// TODO: Refactor connection operations to use tasksets/plans instead of if-argo-then
+	//taskSets      map[DeploymentType]DeploymentTaskSet
 }
 
 func NewOctantConnection(httpClient *http.Client, k8sClient kubernetes.Interface) *OctantConnection {
+	// TODO: Refactor connection operations to use tasksets/plans instead of if-argo-then
+	//taskSets := map[DeploymentType]DeploymentTaskSet{
+	//	ArgoForceSyncDeploymentType: {
+	//		"GET": ...,
+	//		"POST": ...,
+	//		"DELETE": ...,
+	//	},
+	//}
 	return &OctantConnection{
 		httpClient: httpClient,
 		k8sClient:  k8sClient,
@@ -86,7 +100,7 @@ func (oc *OctantConnection) GetConnectionByName(ctx context.Context, namespace, 
 		return nil, fmt.Errorf("failed to unmarshal connection data: %w", err)
 	}
 
-	if connection.Deployment.Type == ArgoDeploymentType {
+	if connection.Deployment.Type == ArgoForceSyncDeploymentType {
 		argoApp, err := oc.getArgoAppStatus(ctx, name, namespace, connection)
 		if err != nil {
 			return &connection, err
@@ -118,7 +132,7 @@ func (oc *OctantConnection) SaveConnection(ctx context.Context, connection Octan
 		return updateConfigMapErr
 	}
 
-	if connection.Deployment.Type == ArgoDeploymentType {
+	if connection.Deployment.Type == ArgoForceSyncDeploymentType {
 		err := oc.pushArgoApp(ctx, namespace, connectionName, connection)
 		if err != nil {
 			return err
@@ -149,7 +163,7 @@ func (oc *OctantConnection) DeleteConnection(ctx context.Context, namespace, con
 		return nil
 	}
 
-	if connection.Deployment != nil && connection.Deployment.Type == ArgoDeploymentType {
+	if connection.Deployment != nil && connection.Deployment.Type == ArgoForceSyncDeploymentType {
 		if err := oc.deleteArgoApp(ctx, connectionName, namespace, connection); err != nil {
 			return err
 		}

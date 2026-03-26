@@ -71,7 +71,7 @@ func TestGetConnectionByName(t *testing.T) {
 	validConnection := OctantConnectionData{
 		SourceType: "datadog",
 		Deployment: &Deployment{
-			Type:            "argocd",
+			Type:            ArgoForceSyncDeploymentType,
 			IntegrationName: "argo-test",
 			Fields:          map[string]any{"branch": "tv/bestBranch"},
 		},
@@ -122,7 +122,7 @@ func TestSaveConnection(t *testing.T) {
 			{DestinationType: "datadog", IntegrationName: "dd-test"},
 		},
 		Deployment: &Deployment{
-			Type:            "argocd",
+			Type:            ArgoForceSyncDeploymentType,
 			IntegrationName: "argo-test",
 			Fields:          map[string]any{"branch": "tv/bestBranch"},
 		},
@@ -160,7 +160,7 @@ func TestDeleteConnection(t *testing.T) {
 	existingConnection := OctantConnectionData{
 		SourceType: "datadog",
 		Deployment: &Deployment{
-			Type:            "argocd",
+			Type:            ArgoForceSyncDeploymentType,
 			IntegrationName: "argo-test",
 		},
 	}

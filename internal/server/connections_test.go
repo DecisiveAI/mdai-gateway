@@ -44,7 +44,7 @@ func TestGetConnectionByName(t *testing.T) {
 				connection.Traces,
 			},
 			Deployment: &connection.Deployment{
-				Type: "argocd",
+				Type: connection.ArgoForceSyncDeploymentType,
 				Fields: map[string]any{
 					"branch": "bestBranch",
 				},
@@ -99,7 +99,7 @@ func TestSaveConnectionData(t *testing.T) {
 				connection.Traces,
 			},
 			Deployment: &connection.Deployment{
-				Type: "argocd",
+				Type: connection.ArgoForceSyncDeploymentType,
 				Fields: map[string]any{
 					"branch": "bestBranch",
 				},
@@ -113,7 +113,7 @@ func TestSaveConnectionData(t *testing.T) {
 			SaveConnection(mock.Anything, mock.MatchedBy(func(theConnection connection.OctantConnectionData) bool {
 				matchingSource := theConnection.SourceType == "datadog"
 				matchingTelemetry := len(theConnection.TelemetryTypes) == 2 && theConnection.TelemetryTypes[0] == connection.Logs && theConnection.TelemetryTypes[1] == connection.Traces
-				matchingDeployment := theConnection.Deployment.Type == "argocd" && theConnection.Deployment.Fields["branch"] == "bestBranch"
+				matchingDeployment := theConnection.Deployment.Type == connection.ArgoForceSyncDeploymentType && theConnection.Deployment.Fields["branch"] == "bestBranch"
 				return matchingSource && matchingTelemetry && matchingDeployment
 			}), "default", "coolConnection").
 			Return(assert.AnError).
@@ -138,7 +138,7 @@ func TestSaveConnectionData(t *testing.T) {
 				connection.Traces,
 			},
 			Deployment: &connection.Deployment{
-				Type: "argocd",
+				Type: connection.ArgoForceSyncDeploymentType,
 				Fields: map[string]any{
 					"branch": "bestBranch",
 				},
@@ -152,7 +152,7 @@ func TestSaveConnectionData(t *testing.T) {
 			SaveConnection(mock.Anything, mock.MatchedBy(func(theConnection connection.OctantConnectionData) bool {
 				matchingSource := theConnection.SourceType == "datadog"
 				matchingTelemetry := len(theConnection.TelemetryTypes) == 2 && theConnection.TelemetryTypes[0] == connection.Logs && theConnection.TelemetryTypes[1] == connection.Traces
-				matchingDeployment := theConnection.Deployment.Type == "argocd" && theConnection.Deployment.Fields["branch"] == "bestBranch"
+				matchingDeployment := theConnection.Deployment.Type == connection.ArgoForceSyncDeploymentType && theConnection.Deployment.Fields["branch"] == "bestBranch"
 				return matchingSource && matchingTelemetry && matchingDeployment
 			}), "default", "coolConnection").
 			Return(nil).
