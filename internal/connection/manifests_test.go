@@ -22,19 +22,19 @@ func TestRenderArgoAppManifest(t *testing.T) {
 	require.NotEmpty(t, result)
 
 	// Verify the result is valid JSON and contains our injected data
-	var parsed map[string]interface{}
+	var parsed map[string]any
 	err = json.Unmarshal(result, &parsed)
 	require.NoError(t, err, "Rendered output should be valid JSON")
 
 	// Verify App Name
-	metadata, ok := parsed["metadata"].(map[string]interface{})
+	metadata, ok := parsed["metadata"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "test-app", metadata["name"])
 
 	// Verify Namespace
-	spec, ok := parsed["spec"].(map[string]interface{})
+	spec, ok := parsed["spec"].(map[string]any)
 	require.True(t, ok)
-	destination, ok := spec["destination"].(map[string]interface{})
+	destination, ok := spec["destination"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "team-a-namespace", destination["namespace"])
 }
@@ -59,14 +59,14 @@ func TestRenderSyncManifests(t *testing.T) {
 	require.NoError(t, err)
 
 	// Index manifests by their "Kind" and "Name" for easy lookup and assertion
-	parsedManifests := make(map[string]map[string]interface{})
+	parsedManifests := make(map[string]map[string]any)
 	for _, manifestStr := range manifests {
-		var parsed map[string]interface{}
+		var parsed map[string]any
 		err = json.Unmarshal([]byte(manifestStr), &parsed)
 		require.NoError(t, err, "Each sync manifest should be valid JSON")
 
 		kind := parsed["kind"].(string)
-		metadata := parsed["metadata"].(map[string]interface{})
+		metadata := parsed["metadata"].(map[string]any)
 		name := metadata["name"].(string)
 
 		key := kind + "/" + name
@@ -78,12 +78,12 @@ func TestRenderSyncManifests(t *testing.T) {
 		require.True(t, exists, "Secret manifest not found")
 
 		// Verify Argo sideload tracking annotation
-		metadata := secret["metadata"].(map[string]interface{})
-		annotations := metadata["annotations"].(map[string]interface{})
+		metadata := secret["metadata"].(map[string]any)
+		annotations := metadata["annotations"].(map[string]any)
 		assert.Contains(t, annotations["argocd.argoproj.io/tracking-id"], "test-app")
 
 		// Verify Datadog injection
-		stringData := secret["stringData"].(map[string]interface{})
+		stringData := secret["stringData"].(map[string]any)
 		assert.Equal(t, "fake-dd-api-key", stringData["api-key"])
 		assert.Equal(t, "https://datadoghq.com", stringData["site-url"])
 	})
@@ -93,16 +93,16 @@ func TestRenderSyncManifests(t *testing.T) {
 		require.True(t, exists, "Primary Collector manifest not found")
 
 		// Verify Argo sideload tracking annotation
-		metadata := otel["metadata"].(map[string]interface{})
-		annotations := metadata["annotations"].(map[string]interface{})
+		metadata := otel["metadata"].(map[string]any)
+		annotations := metadata["annotations"].(map[string]any)
 		assert.Contains(t, annotations["argocd.argoproj.io/tracking-id"], "test-app")
 
-		spec := otel["spec"].(map[string]interface{})
+		spec := otel["spec"].(map[string]any)
 
 		// Verify Env Vars
-		envVars := spec["env"].([]interface{})
+		envVars := spec["env"].([]any)
 		require.Len(t, envVars, 2)
-		env1 := envVars[0].(map[string]interface{})
+		env1 := envVars[0].(map[string]any)
 		assert.Equal(t, "DD_API_KEY", env1["name"])
 
 		// Verify config string templates out pipelines
@@ -124,7 +124,7 @@ func TestRenderSyncManifests(t *testing.T) {
 		require.True(t, existsCM, "Envoy ConfigMap not found")
 
 		// Check that envoy.yaml data exists
-		data := cm["data"].(map[string]interface{})
+		data := cm["data"].(map[string]any)
 		assert.Contains(t, data["envoy.yaml"], "primary_collector")
 	})
 }

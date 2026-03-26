@@ -38,21 +38,21 @@ func (m *mockDatadogClient) GetIntegrationByName(ctx context.Context, namespace,
 	return m.IntegrationData, m.Err
 }
 
-// Helper to stand up a fake Argo API
+// Helper to stand up a fake Argo API.
 func setupTestServer() *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
 		// Return success for all standard operations
 		switch {
-		case r.Method == "GET" && r.URL.Path == "/api/v1/applications/team-a":
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/applications/team-a":
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte(`{"status": {"health": {"status": "Healthy"}}}`))
-		case r.Method == "POST" && r.URL.Path == "/api/v1/applications":
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/applications":
 			w.WriteHeader(http.StatusOK)
-		case r.Method == "POST" && r.URL.Path == "/api/v1/applications/team-a/sync":
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/applications/team-a/sync":
 			w.WriteHeader(http.StatusOK)
-		case r.Method == "DELETE" && r.URL.Path == "/api/v1/applications/team-a":
+		case r.Method == http.MethodDelete && r.URL.Path == "/api/v1/applications/team-a":
 			w.WriteHeader(http.StatusOK)
 		default:
 			w.WriteHeader(http.StatusOK) // Catch-all for tests not strictly checking response bodies
