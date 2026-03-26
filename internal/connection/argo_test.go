@@ -45,7 +45,7 @@ func TestGetArgoAppStatus(t *testing.T) {
 				assert.Equal(t, "Bearer fake-token", r.Header.Get("Authorization"))
 
 				w.WriteHeader(tc.serverResponse)
-				w.Write([]byte(tc.responseBody))
+				w.Write([]byte(tc.responseBody)) // nolint: errcheck,gosec
 			}))
 			defer ts.Close()
 

@@ -38,18 +38,20 @@ func (oc *OctantConnection) getArgoAppStatus(ctx context.Context, name string, n
 	}
 
 	// GET APP
-	getAppUrl := fmt.Sprintf("%s/api/v1/applications/%s?upsert=true", argoIntegration.APIUrl, name)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, getAppUrl, nil)
+	getAppURL := fmt.Sprintf("%s/api/v1/applications/%s?upsert=true", argoIntegration.APIUrl, name)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, getAppURL, http.NoBody)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+argoIntegration.AccountToken)
 	resp, err := oc.httpClient.Do(req)
-	defer resp.Body.Close()
 	if err != nil {
 		return nil, err
 	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
@@ -124,12 +126,12 @@ func (oc *OctantConnection) doArgoAppSync(ctx context.Context, templateData Argo
 		},
 		"manifests": manifests,
 	}
-	syncPayloadJson, err := json.Marshal(syncPayload)
+	syncPayloadJSON, err := json.Marshal(syncPayload)
 	if err != nil {
 		return err
 	}
-	syncUrl := fmt.Sprintf("%s/api/v1/applications/%s/sync", argoIntegration.APIUrl, name)
-	syncReq, err := http.NewRequestWithContext(ctx, http.MethodPost, syncUrl, bytes.NewReader(syncPayloadJson))
+	syncURL := fmt.Sprintf("%s/api/v1/applications/%s/sync", argoIntegration.APIUrl, name)
+	syncReq, err := http.NewRequestWithContext(ctx, http.MethodPost, syncURL, bytes.NewReader(syncPayloadJSON))
 	if err != nil {
 		return err
 	}
@@ -139,6 +141,9 @@ func (oc *OctantConnection) doArgoAppSync(ctx context.Context, templateData Argo
 	if err != nil {
 		return err
 	}
+	defer func() {
+		_ = syncResp.Body.Close()
+	}()
 	if syncResp.StatusCode != http.StatusOK {
 		return fmt.Errorf("unexpected status code: %d", syncResp.StatusCode)
 	}
@@ -146,12 +151,12 @@ func (oc *OctantConnection) doArgoAppSync(ctx context.Context, templateData Argo
 }
 
 func (oc *OctantConnection) doArgoAppCreation(ctx context.Context, templateData ArgoTemplateData, argoIntegration *integration.ArgoCDIntegrationData) error {
-	appJson, err := oc.renderArgoAppManifest(&templateData)
+	appJSON, err := oc.renderArgoAppManifest(&templateData)
 	if err != nil {
 		return err
 	}
-	createAppUrl := argoIntegration.APIUrl + "/api/v1/applications"
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, createAppUrl, bytes.NewReader(appJson))
+	createAppURL := argoIntegration.APIUrl + "/api/v1/applications"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, createAppURL, bytes.NewReader(appJSON))
 	if err != nil {
 		return err
 	}
@@ -161,6 +166,9 @@ func (oc *OctantConnection) doArgoAppCreation(ctx context.Context, templateData 
 	if err != nil {
 		return err
 	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
@@ -174,8 +182,8 @@ func (oc *OctantConnection) deleteArgoApp(ctx context.Context, name string, name
 	}
 
 	query := "?cascade=true&propagationPolicy=foreground&appNamespace=argocd&cascade=true"
-	deleteAppUrl := fmt.Sprintf("%s/api/v1/applications/%s%s", argoIntegration.APIUrl, name, query)
-	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, deleteAppUrl, nil)
+	deleteAppURL := fmt.Sprintf("%s/api/v1/applications/%s%s", argoIntegration.APIUrl, name, query)
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, deleteAppURL, http.NoBody)
 	if err != nil {
 		return err
 	}
@@ -186,6 +194,9 @@ func (oc *OctantConnection) deleteArgoApp(ctx context.Context, name string, name
 	if err != nil {
 		return err
 	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}

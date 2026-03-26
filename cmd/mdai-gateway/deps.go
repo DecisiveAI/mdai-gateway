@@ -75,7 +75,7 @@ func initDependencies(ctx context.Context) (deps server.HandlerDeps, cleanup fun
 
 	httpTransport := &http.Transport{}
 	if os.Getenv("TLS_INSECURE") == "true" {
-		httpTransport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+		httpTransport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} // nolint:gosec
 	}
 
 	httpClient := &http.Client{
@@ -92,7 +92,7 @@ func initDependencies(ctx context.Context) (deps server.HandlerDeps, cleanup fun
 		OpAMPServer:         opampServer,
 		K8sClient:           clientset,
 		K8sNamespace:        getCurrentNamespace(),
-		HttpClient:          httpClient,
+		HTTPClient:          httpClient,
 	}
 
 	cleanup = func() {

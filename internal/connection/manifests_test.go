@@ -186,7 +186,7 @@ func TestRenderSyncManifests(t *testing.T) {
 			if len(tt.templateData.ConnectionData.TelemetryTypes) > 0 {
 				for _, tel := range tt.templateData.ConnectionData.TelemetryTypes {
 					receivers, found := getNestedField(otelConfig, "service", "pipelines", string(tel), "receivers")
-					require.True(t, found, fmt.Sprintf("Pipeline %s should exist", tel))
+					require.True(t, found, "Pipeline %s should exist", tel)
 
 					// We can now cast the result and assert exactly what it contains
 					recSlice := receivers.([]any)
