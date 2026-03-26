@@ -26,7 +26,7 @@ var envoyServiceTemplate string
 //go:embed templates/secret.yaml
 var secretTemplate string
 
-var manifestTemplates = map[string]string{
+var argoForceSyncManifestTemplates = map[string]string{
 	"primary-collector": primaryCollectorTemplate,
 	"envoy-config":      envoyConfigTemplate,
 	"envoy-deployment":  envoyDeploymentTemplate,
@@ -62,7 +62,7 @@ func (oc *OctantConnection) renderArgoAppManifest(templateData *ArgoTemplateData
 
 func (oc *OctantConnection) renderSyncManifests(templateData *ArgoTemplateData) ([]string, error) {
 	var manifests []string
-	for templateName, templateString := range manifestTemplates {
+	for templateName, templateString := range argoForceSyncManifestTemplates {
 		appManifestTemplate, err := template.New(templateName).Parse(templateString)
 		if err != nil {
 			return manifests, err
