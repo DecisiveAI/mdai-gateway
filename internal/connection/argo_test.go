@@ -291,7 +291,8 @@ func TestGetArgoAppStatus_Error_InvalidJSON(t *testing.T) {
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{ "invalid": json `)) // Malformed JSON to fail decode
+		// Malformed JSON to fail decode
+		w.Write([]byte(`{ "invalid": json `)) // nolint: errcheck,gosec,revive
 	}))
 	defer ts.Close()
 
