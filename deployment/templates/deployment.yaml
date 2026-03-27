@@ -57,7 +57,7 @@ spec:
               key: VALKEY_PASSWORD
               name: valkey-secret
         - name: NATS_URL
-          value: "{{ .Values.natsUrl }}"
+          value: {{ include "mdai.natsUrl" . | quote }}
         - name: NATS_PASSWORD
           valueFrom:
             secretKeyRef:
