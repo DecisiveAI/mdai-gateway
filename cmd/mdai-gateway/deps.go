@@ -7,23 +7,26 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/mydecisive/mdai-data-core/audit"
 	datacorepublisher "github.com/mydecisive/mdai-data-core/eventing/publisher"
 	datacorekube "github.com/mydecisive/mdai-data-core/kube"
 	"github.com/mydecisive/mdai-data-core/service"
-	"github.com/mydecisive/mdai-data-core/valkey"
+	datacorevalkey "github.com/mydecisive/mdai-data-core/valkey"
 	"github.com/mydecisive/mdai-gateway/internal/adapter"
 	"github.com/mydecisive/mdai-gateway/internal/opamp"
 	"github.com/mydecisive/mdai-gateway/internal/server"
+	gatewayvalkey "github.com/mydecisive/mdai-gateway/internal/valkey"
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
 )
 
 const (
-	namespaceFilePath   = "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
-	publisherClientName = "publisher-mdai-gateway"
+	namespaceFilePath      = "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
+	publisherClientName    = "publisher-mdai-gateway"
+	slowValueReadThreshold = 250 * time.Millisecond
 )
 
 func getCurrentNamespace() string {
@@ -44,10 +47,11 @@ func getCurrentNamespace() string {
 func initDependencies(ctx context.Context) (deps server.HandlerDeps, cleanup func()) { //nolint:nonamedreturns
 	sysLogger, appLogger, teardownFn := service.InitLogger(ctx, serviceName)
 
-	valkeyClient, err := valkey.Init(ctx, appLogger, valkey.NewConfig())
+	valkeyClient, err := datacorevalkey.Init(ctx, appLogger, datacorevalkey.NewConfig())
 	if err != nil {
 		appLogger.Fatal("failed to initialize valkey client", zap.Error(err))
 	}
+	variableReader := gatewayvalkey.NewReader(valkeyClient, appLogger)
 
 	auditAdapter := audit.NewAuditAdapter(appLogger, valkeyClient)
 
@@ -61,7 +65,12 @@ func initDependencies(ctx context.Context) (deps server.HandlerDeps, cleanup fun
 		appLogger.Fatal("failed to create Kubernetes client: %w", zap.Error(err))
 	}
 
-	cmController, err := startConfigMapController(appLogger, clientset, []string{datacorekube.ManualEnvConfigMapType}, corev1.NamespaceAll)
+	cmController, err := startConfigMapController(appLogger, clientset,
+		[]string{
+			datacorekube.VariablesSchemaMapType,
+		},
+		corev1.NamespaceAll,
+	)
 	if err != nil {
 		appLogger.Fatal("failed to start config map controller", zap.Error(err))
 	}
@@ -83,16 +92,18 @@ func initDependencies(ctx context.Context) (deps server.HandlerDeps, cleanup fun
 	}
 
 	deps = server.HandlerDeps{
-		Logger:              appLogger,
-		ValkeyClient:        valkeyClient,
-		EventPublisher:      publisher,
-		ConfigMapController: cmController,
-		AuditAdapter:        auditAdapter,
-		Deduper:             deduper,
-		OpAMPServer:         opampServer,
-		K8sClient:           clientset,
-		K8sNamespace:        getCurrentNamespace(),
-		HTTPClient:          httpClient,
+		Logger:                 appLogger,
+		ValkeyClient:           valkeyClient,
+		VariableReader:         variableReader,
+		SlowValueReadThreshold: slowValueReadThreshold,
+		EventPublisher:         publisher,
+		ConfigMapController:    cmController,
+		AuditAdapter:           auditAdapter,
+		Deduper:                deduper,
+		OpAMPServer:            opampServer,
+		K8sClient:              clientset,
+		K8sNamespace:           getCurrentNamespace(),
+		HTTPClient:             httpClient,
 	}
 
 	cleanup = func() {
@@ -119,7 +130,7 @@ func startConfigMapController(
 	}
 
 	if err := controller.Run(); err != nil {
-		logger.Error("ConfigMap controller exited with error", zap.Error(err))
+		return nil, fmt.Errorf("failed to sync configmap controller cache: %w", err)
 	}
 
 	return controller, nil

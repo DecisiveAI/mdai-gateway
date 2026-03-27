@@ -1,4 +1,4 @@
-package manualvariables
+package variables
 
 type HTTPError struct {
 	Msg    string

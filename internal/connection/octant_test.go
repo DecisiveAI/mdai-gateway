@@ -2,12 +2,13 @@ package connection
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"testing"
 
 	"github.com/mydecisive/mdai-gateway/internal/integration"
+	"encoding/json"
+	"testing"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"

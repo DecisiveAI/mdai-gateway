@@ -14,11 +14,13 @@ type (
 )
 
 const (
-	VariableTypeSet  VariableType = "set"
-	VariableTypeMap  VariableType = "map"
-	VariableTypeBool VariableType = "boolean"
-	VariableTypeInt  VariableType = "int"
-	VariableTypeStr  VariableType = "string"
+	VariableTypeSet              VariableType = "set"
+	VariableTypeMap              VariableType = "map"
+	VariableTypeBool             VariableType = "boolean"
+	VariableTypeInt              VariableType = "int"
+	VariableTypeStr              VariableType = "string"
+	VariableTypeMetaHashSet      VariableType = "metaHashSet"
+	VariableTypeMetaPriorityList VariableType = "metaPriorityList"
 
 	CommandAdd CommandType = "add"
 	CommandDel CommandType = "remove"
@@ -94,21 +96,57 @@ func GetParser(varType VariableType, command CommandType) (ParseFn, error) {
 }
 
 type kvAdapter interface {
-	GetSetAsStringSlice(ctx context.Context, variableKey string, hubName string) ([]string, error)
-	GetMap(ctx context.Context, variableKey string, hubName string) (map[string]string, error)
+	GetSet(ctx context.Context, variableKey string, hubName string) ([]string, bool, error)
+	GetMap(ctx context.Context, variableKey string, hubName string) (map[string]string, bool, error)
 	GetString(ctx context.Context, variableKey string, hubName string) (string, bool, error)
+	GetMetaPriorityList(ctx context.Context, variableKey string, hubName string) ([]string, bool, error)
+	GetMetaHashSet(ctx context.Context, variableKey string, hubName string) (string, bool, error)
 }
 
-func GetValue(ctx context.Context, a kvAdapter, varRef string, varType VariableType, hubName string) (any, error) {
+type getterFunc[T any] func(ctx context.Context, variableKey string, hubName string) (T, bool, error)
+
+func getParsedStringValue(
+	ctx context.Context,
+	getter getterFunc[string],
+	varRef string,
+	hubName string,
+	valueType string,
+	parse func(string) (any, error),
+) (any, bool, error) {
+	value, found, err := getter(ctx, varRef, hubName)
+	if err != nil || !found {
+		return nil, found, err
+	}
+
+	parsed, err := parse(value)
+	if err != nil {
+		return nil, false, fmt.Errorf("parse %s value for %s: %w", valueType, varRef, err)
+	}
+
+	return parsed, true, nil
+}
+
+func GetValue(ctx context.Context, a kvAdapter, varRef string, varType VariableType, hubName string) (any, bool, error) {
 	switch varType {
 	case VariableTypeSet:
-		return a.GetSetAsStringSlice(ctx, varRef, hubName)
+		return a.GetSet(ctx, varRef, hubName)
 	case VariableTypeMap:
 		return a.GetMap(ctx, varRef, hubName)
-	case VariableTypeStr, VariableTypeInt, VariableTypeBool:
-		v, _, err := a.GetString(ctx, varRef, hubName)
-		return v, err
+	case VariableTypeStr:
+		return a.GetString(ctx, varRef, hubName)
+	case VariableTypeInt:
+		return getParsedStringValue(ctx, a.GetString, varRef, hubName, "int", func(value string) (any, error) {
+			return strconv.Atoi(value)
+		})
+	case VariableTypeBool:
+		return getParsedStringValue(ctx, a.GetString, varRef, hubName, "boolean", func(value string) (any, error) {
+			return strconv.ParseBool(value)
+		})
+	case VariableTypeMetaPriorityList:
+		return a.GetMetaPriorityList(ctx, varRef, hubName)
+	case VariableTypeMetaHashSet:
+		return a.GetMetaHashSet(ctx, varRef, hubName)
 	default:
-		return nil, fmt.Errorf("%w %s", errUnsupportedVariableType, varType)
+		return nil, false, fmt.Errorf("%w %s", errUnsupportedVariableType, varType)
 	}
 }

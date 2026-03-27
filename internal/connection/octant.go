@@ -3,11 +3,12 @@ package connection
 import (
 	"context"
 	_ "embed" // nolint: revive
-	"encoding/json"
-	"fmt"
 	"net/http"
 
 	"github.com/mydecisive/mdai-gateway/internal/integration"
+	"encoding/json"
+	"fmt"
+
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"

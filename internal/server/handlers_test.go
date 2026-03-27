@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -15,8 +16,10 @@ import (
 	"github.com/mydecisive/mdai-data-core/audit"
 	"github.com/mydecisive/mdai-data-core/eventing"
 	datacorekube "github.com/mydecisive/mdai-data-core/kube"
-	"github.com/mydecisive/mdai-gateway/internal/manualvariables"
+	"github.com/mydecisive/mdai-gateway/internal/variables"
+	"github.com/mydecisive/mdai-gateway/mocks"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/valkey-io/valkey-go"
 	valkeymock "github.com/valkey-io/valkey-go/mock"
@@ -27,13 +30,12 @@ import (
 )
 
 const (
-	publisherClientName = "publisher-mdai-gateway"
-	alert3              = "../../testdata/alert_post_body_3.json"
-	alert2              = "../../testdata/alert_post_body_2.json"
-	alert1              = "../../testdata/alert_post_body_1.json"
+	alert3 = "../../testdata/alert_post_body_3.json"
+	alert2 = "../../testdata/alert_post_body_2.json"
+	alert1 = "../../testdata/alert_post_body_1.json"
 )
 
-func TestGetConfiguredManualVariables(t *testing.T) {
+func TestGetConfiguredVariablesSchema(t *testing.T) {
 	ctx := t.Context()
 
 	clientset := newFakeClientset(t)
@@ -49,7 +51,7 @@ func TestGetConfiguredManualVariables(t *testing.T) {
 	require.NotNil(t, cmController)
 	require.NoError(t, err, "failed to start configmap controller")
 
-	hubMap, err := cmController.GetAllHubsToDataMap()
+	hubMap, err := cmController.GetAllHubsVariablesSchemaConfigMapData()
 
 	require.NoError(t, err)
 	assert.Len(t, hubMap, 1)
@@ -58,17 +60,13 @@ func TestGetConfiguredManualVariables(t *testing.T) {
 	require.Contains(t, hubMap, "mdaihub-sample")
 	require.IsType(t, map[string]string{}, hubMap["mdaihub-sample"])
 
-	hubVars := hubMap["mdaihub-sample"]
-	assert.Equal(t, "boolean", hubVars["data_boolean"])
-	assert.Equal(t, "map", hubVars["data_map"])
-	assert.Equal(t, "set", hubVars["data_set"])
-	assert.Equal(t, "string", hubVars["data_string"])
-	assert.Equal(t, "int", hubVars["data_int"])
+	assert.Equal(t, sampleHubVariablesSchemaRaw(), hubMap["mdaihub-sample"])
 }
 
 func TestHandleListVariables(t *testing.T) {
+	expectedSchemas := expectedHubVariablesSchema(t)
+
 	listTests := []struct {
-		out      any
 		expected any
 		name     string
 		target   string
@@ -78,41 +76,26 @@ func TestHandleListVariables(t *testing.T) {
 			name:   "List",
 			target: "/variables/list",
 			status: http.StatusOK,
-			out:    &manualvariables.ByHub{},
-			expected: &manualvariables.ByHub{
-				"mdaihub-sample": {
-					"data_boolean": "boolean",
-					"data_map":     "map",
-					"data_set":     "set",
-					"data_string":  "string",
-					"data_int":     "int",
-				},
+			expected: variables.ByHub{
+				"mdaihub-sample": expectedSchemas,
 			},
 		},
 		{
-			name:   "ListHub",
-			target: "/variables/list/hub/mdaihub-sample",
-			status: http.StatusOK,
-			out:    &map[string]string{},
-			expected: &map[string]string{
-				"data_boolean": "boolean",
-				"data_map":     "map",
-				"data_set":     "set",
-				"data_string":  "string",
-				"data_int":     "int",
-			},
+			name:     "ListHub",
+			target:   "/variables/list/hub/mdaihub-sample",
+			status:   http.StatusOK,
+			expected: expectedSchemas,
 		},
 		{
 			name:     "ListHub_NonExistent",
 			target:   "/variables/list/hub/nonexistent_hub",
 			status:   http.StatusNotFound,
-			out:      new(string),
-			expected: ptr("Hub not found"),
+			expected: "no variables found for hub",
 		},
 	}
 
 	clientset := newFakeClientset(t)
-	deps := setupMocks(t, clientset)
+	deps := setupReadOnlyMocks(t, clientset)
 	mux := NewRouter(t.Context(), deps)
 
 	for _, tt := range listTests {
@@ -124,20 +107,19 @@ func TestHandleListVariables(t *testing.T) {
 
 			assert.Equal(t, tt.status, rr.Code)
 
-			err := json.Unmarshal(rr.Body.Bytes(), tt.out)
+			expectedBody, err := json.Marshal(tt.expected)
 			require.NoError(t, err)
-			assert.Equal(t, tt.expected, tt.out)
+			assert.JSONEq(t, string(expectedBody), rr.Body.String())
 		})
 	}
 }
 
 func TestHandleGetVariables(t *testing.T) {
 	getTests := []struct {
-		out       any
 		expected  any
 		valkey    func(t *testing.T, m *valkeymock.Client)
 		cmprepare func(t *testing.T, cs kubernetes.Interface, cmController *datacorekube.ConfigMapController)
-		cmcleanup func(t *testing.T, cs kubernetes.Interface)
+		cmcleanup func(t *testing.T, cs kubernetes.Interface, cmController *datacorekube.ConfigMapController)
 		name      string
 		target    string
 		status    int
@@ -146,8 +128,7 @@ func TestHandleGetVariables(t *testing.T) {
 			name:     "Int",
 			target:   "/variables/values/hub/mdaihub-sample/var/data_int",
 			status:   http.StatusOK,
-			out:      &map[string]string{},
-			expected: &map[string]string{"data_int": "3"},
+			expected: map[string]int{"data_int": 3},
 			valkey: func(t *testing.T, m *valkeymock.Client) {
 				t.Helper()
 				key := "variable/mdaihub-sample/data_int"
@@ -162,8 +143,7 @@ func TestHandleGetVariables(t *testing.T) {
 			name:     "Boolean",
 			target:   "/variables/values/hub/mdaihub-sample/var/data_boolean",
 			status:   http.StatusOK,
-			out:      &map[string]string{},
-			expected: &map[string]string{"data_boolean": "true"},
+			expected: map[string]bool{"data_boolean": true},
 			valkey: func(t *testing.T, m *valkeymock.Client) {
 				t.Helper()
 				key := "variable/mdaihub-sample/data_boolean"
@@ -178,8 +158,7 @@ func TestHandleGetVariables(t *testing.T) {
 			name:     "String",
 			target:   "/variables/values/hub/mdaihub-sample/var/data_string",
 			status:   http.StatusOK,
-			out:      &map[string]string{},
-			expected: &map[string]string{"data_string": "foo"},
+			expected: map[string]string{"data_string": "foo"},
 			valkey: func(t *testing.T, m *valkeymock.Client) {
 				t.Helper()
 				key := "variable/mdaihub-sample/data_string"
@@ -191,11 +170,25 @@ func TestHandleGetVariables(t *testing.T) {
 			},
 		},
 		{
+			name:     "ComputedString",
+			target:   "/variables/values/hub/mdaihub-sample/var/computed_string",
+			status:   http.StatusOK,
+			expected: map[string]string{"computed_string": "derived"},
+			valkey: func(t *testing.T, m *valkeymock.Client) {
+				t.Helper()
+				key := "variable/mdaihub-sample/computed_string"
+				m.EXPECT().
+					Do(gomock.Any(), valkeymock.Match("GET", key)).
+					Return(valkeymock.Result(
+						valkeymock.ValkeyBlobString("derived"),
+					))
+			},
+		},
+		{
 			name:   "Set",
 			target: "/variables/values/hub/mdaihub-sample/var/data_set",
 			status: http.StatusOK,
-			out:    &map[string][]string{},
-			expected: &map[string][]string{
+			expected: map[string][]string{
 				"data_set": {
 					"manual_service_1",
 					"manual_service_2",
@@ -205,6 +198,9 @@ func TestHandleGetVariables(t *testing.T) {
 			valkey: func(t *testing.T, m *valkeymock.Client) {
 				t.Helper()
 				key := "variable/mdaihub-sample/data_set"
+				m.EXPECT().
+					Do(gomock.Any(), valkeymock.Match("EXISTS", key)).
+					Return(valkeymock.Result(valkeymock.ValkeyInt64(1)))
 				m.EXPECT().
 					Do(gomock.Any(), valkeymock.Match("SMEMBERS", key)).
 					Return(valkeymock.Result(
@@ -219,8 +215,7 @@ func TestHandleGetVariables(t *testing.T) {
 			name:   "Map",
 			target: "/variables/values/hub/mdaihub-sample/var/data_map",
 			status: http.StatusOK,
-			out:    &map[string]map[string]string{},
-			expected: &map[string]map[string]string{
+			expected: map[string]map[string]string{
 				"data_map": {
 					"attrib.1": "value1",
 					"attrib.2": "value2",
@@ -230,6 +225,9 @@ func TestHandleGetVariables(t *testing.T) {
 			valkey: func(t *testing.T, m *valkeymock.Client) {
 				t.Helper()
 				key := "variable/mdaihub-sample/data_map"
+				m.EXPECT().
+					Do(gomock.Any(), valkeymock.Match("EXISTS", key)).
+					Return(valkeymock.Result(valkeymock.ValkeyInt64(1)))
 				m.EXPECT().
 					Do(gomock.Any(), valkeymock.Match("HGETALL", key)).
 					Return(valkeymock.Result(valkeymock.ValkeyMap(map[string]valkey.ValkeyMessage{
@@ -243,8 +241,7 @@ func TestHandleGetVariables(t *testing.T) {
 			name:     "String_NoValue",
 			target:   "/variables/values/hub/mdaihub-sample/var/data_string",
 			status:   http.StatusOK,
-			out:      &map[string]string{},
-			expected: &map[string]string{"data_string": ""},
+			expected: map[string]any{"data_string": nil},
 			valkey: func(t *testing.T, m *valkeymock.Client) {
 				t.Helper()
 				key := "variable/mdaihub-sample/data_string"
@@ -256,66 +253,100 @@ func TestHandleGetVariables(t *testing.T) {
 			},
 		},
 		{
+			name:     "Set_NoValue",
+			target:   "/variables/values/hub/mdaihub-sample/var/data_set",
+			status:   http.StatusOK,
+			expected: map[string]any{"data_set": nil},
+			valkey: func(t *testing.T, m *valkeymock.Client) {
+				t.Helper()
+				key := "variable/mdaihub-sample/data_set"
+				m.EXPECT().
+					Do(gomock.Any(), valkeymock.Match("EXISTS", key)).
+					Return(valkeymock.Result(valkeymock.ValkeyInt64(0)))
+			},
+		},
+		{
+			name:     "Map_NoValue",
+			target:   "/variables/values/hub/mdaihub-sample/var/data_map",
+			status:   http.StatusOK,
+			expected: map[string]any{"data_map": nil},
+			valkey: func(t *testing.T, m *valkeymock.Client) {
+				t.Helper()
+				key := "variable/mdaihub-sample/data_map"
+				m.EXPECT().
+					Do(gomock.Any(), valkeymock.Match("EXISTS", key)).
+					Return(valkeymock.Result(valkeymock.ValkeyInt64(0)))
+			},
+		},
+		{
+			name:     "MetaHashSet",
+			target:   "/variables/values/hub/mdaihub-sample/var/meta_hash_set",
+			status:   http.StatusOK,
+			expected: map[string]string{"meta_hash_set": "service|critical"},
+			valkey: func(t *testing.T, m *valkeymock.Client) {
+				t.Helper()
+				key := "variable/mdaihub-sample/meta_hash_set"
+				m.EXPECT().
+					Do(gomock.Any(), valkeymock.Match("HASHSET.LOOKUP", key)).
+					Return(valkeymock.Result(
+						valkeymock.ValkeyBlobString("service|critical"),
+					))
+			},
+		},
+		{
+			name:     "MetaPriorityList",
+			target:   "/variables/values/hub/mdaihub-sample/var/meta_priority_list",
+			status:   http.StatusOK,
+			expected: map[string][]string{"meta_priority_list": {"alpha", "beta"}},
+			valkey: func(t *testing.T, m *valkeymock.Client) {
+				t.Helper()
+				key := "variable/mdaihub-sample/meta_priority_list"
+				m.EXPECT().
+					Do(gomock.Any(), valkeymock.Match("PRIORITYLIST.GET", key)).
+					Return(valkeymock.Result(
+						valkeymock.ValkeyArray(
+							valkeymock.ValkeyBlobString("alpha"),
+							valkeymock.ValkeyBlobString("beta"),
+						),
+					))
+			},
+		},
+		{
 			name:     "NonExistentHub",
 			target:   "/variables/values/hub/nonexistent_hub/var/data_string",
 			status:   http.StatusNotFound,
-			out:      new(string),
-			expected: ptr("hub not found"),
+			expected: "no variables found for hub",
 		},
 		{
 			name:     "NonExistentVariable",
 			target:   "/variables/values/hub/mdaihub-sample/var/nonexistent_variable",
 			status:   http.StatusNotFound,
-			out:      new(string),
-			expected: ptr("variable not found"),
+			expected: "variable not found",
 		},
 		{
 			name:     "UnsupportedVariableType",
 			target:   "/variables/values/hub/mdaihub-sample/var/data_unsupported_type",
 			status:   http.StatusInternalServerError,
-			out:      new(string),
-			expected: ptr("unsupported variable type booleaninttstring"),
+			expected: "failed to read variable value",
 			cmprepare: func(t *testing.T, clientset kubernetes.Interface, cmController *datacorekube.ConfigMapController) {
 				t.Helper()
 
-				ctx := t.Context()
-
-				cm, err := clientset.CoreV1().ConfigMaps("mdai").Get(ctx, "mdaihub-sample-manual-variables", metav1.GetOptions{})
-				require.NoError(t, err)
-
-				cm.Data["data_unsupported_type"] = "booleaninttstring"
-
-				_, err = clientset.CoreV1().ConfigMaps("mdai").Update(ctx, cm, metav1.UpdateOptions{})
-				require.NoError(t, err)
-
-				require.Eventually(t, func() bool {
-					obj, exists, err := cmController.CmInformer.Informer().GetIndexer().GetByKey("mdai/mdaihub-sample-manual-variables")
-					if err != nil || obj == nil || !exists {
-						return false
-					}
-					cm := obj.(*corev1.ConfigMap) //nolint:forcetypeassert
-					return cm.Data["data_unsupported_type"] == "booleaninttstring"
-				}, 2*time.Second, 50*time.Millisecond)
+				updateSchemaConfigMap(t, clientset, cmController, func(cm *corev1.ConfigMap) {
+					cm.Data["data_unsupported_type"] = `{"type":"manual","dataType":"booleaninttstring","storageType":"mdai-valkey"}`
+				})
 			},
-			cmcleanup: func(t *testing.T, cs kubernetes.Interface) {
+			cmcleanup: func(t *testing.T, cs kubernetes.Interface, cmController *datacorekube.ConfigMapController) {
 				t.Helper()
 
-				ctx := t.Context()
-				cmClient := cs.CoreV1().ConfigMaps("mdai")
-
-				cm, err := cmClient.Get(ctx, "mdaihub-sample-manual-variables", metav1.GetOptions{})
-				require.NoError(t, err)
-
-				delete(cm.Data, "data_unsupported_type")
-
-				_, err = cmClient.Update(ctx, cm, metav1.UpdateOptions{})
-				require.NoError(t, err)
+				updateSchemaConfigMap(t, cs, cmController, func(cm *corev1.ConfigMap) {
+					delete(cm.Data, "data_unsupported_type")
+				})
 			},
 		},
 	}
 
 	clientset := newFakeClientset(t)
-	deps := setupMocks(t, clientset)
+	deps := setupReadOnlyMocks(t, clientset)
 	mux := NewRouter(t.Context(), deps)
 
 	for _, tt := range getTests {
@@ -327,7 +358,7 @@ func TestHandleGetVariables(t *testing.T) {
 				tt.cmprepare(t, clientset, deps.ConfigMapController)
 			}
 			if tt.cmcleanup != nil {
-				defer tt.cmcleanup(t, clientset)
+				defer tt.cmcleanup(t, clientset, deps.ConfigMapController)
 			}
 
 			req := httptest.NewRequest(http.MethodGet, tt.target, http.NoBody)
@@ -337,21 +368,109 @@ func TestHandleGetVariables(t *testing.T) {
 
 			assert.Equal(t, tt.status, rr.Code)
 
-			err := json.Unmarshal(rr.Body.Bytes(), tt.out)
+			expectedBody, err := json.Marshal(tt.expected)
 			require.NoError(t, err)
+			assert.JSONEq(t, string(expectedBody), rr.Body.String())
+		})
+	}
+}
 
-			switch out := tt.out.(type) {
-			case *string:
-				assert.Equal(t, *tt.expected.(*string), *out) //nolint:forcetypeassert
-			case *map[string][]string:
-				assert.Equal(t, *tt.expected.(*map[string][]string), *out) //nolint:forcetypeassert
-			case *map[string]string:
-				assert.Equal(t, *tt.expected.(*map[string]string), *out) //nolint:forcetypeassert
-			case *map[string]map[string]string:
-				assert.Equal(t, *tt.expected.(*map[string]map[string]string), *out) //nolint:forcetypeassert
-			default:
-				t.Fatalf("unsupported type: %T", out)
+func TestHandleGetHubVariableValues(t *testing.T) {
+	tests := []struct {
+		expected any
+		valkey   func(t *testing.T, m *valkeymock.Client)
+		name     string
+		target   string
+		status   int
+	}{
+		{
+			name:   "AllValues",
+			target: "/variables/values/hub/mdaihub-sample",
+			status: http.StatusOK,
+			expected: map[string]any{
+				"data_boolean":       true,
+				"data_int":           3,
+				"data_string":        "foo",
+				"computed_string":    "derived",
+				"data_set":           []string{"manual_service_1", "manual_service_2", "manual_service_3"},
+				"data_map":           map[string]string{"attrib.1": "value1", "attrib.2": "value2", "attrib.3": "value3"},
+				"meta_hash_set":      "service|critical",
+				"meta_priority_list": []string{"alpha", "beta"},
+			},
+			valkey: func(t *testing.T, m *valkeymock.Client) {
+				t.Helper()
+
+				m.EXPECT().
+					Do(gomock.Any(), valkeymock.Match("GET", "variable/mdaihub-sample/data_boolean")).
+					Return(valkeymock.Result(valkeymock.ValkeyBlobString("true")))
+				m.EXPECT().
+					Do(gomock.Any(), valkeymock.Match("GET", "variable/mdaihub-sample/data_int")).
+					Return(valkeymock.Result(valkeymock.ValkeyBlobString("3")))
+				m.EXPECT().
+					Do(gomock.Any(), valkeymock.Match("GET", "variable/mdaihub-sample/data_string")).
+					Return(valkeymock.Result(valkeymock.ValkeyBlobString("foo")))
+				m.EXPECT().
+					Do(gomock.Any(), valkeymock.Match("GET", "variable/mdaihub-sample/computed_string")).
+					Return(valkeymock.Result(valkeymock.ValkeyBlobString("derived")))
+				m.EXPECT().
+					Do(gomock.Any(), valkeymock.Match("EXISTS", "variable/mdaihub-sample/data_set")).
+					Return(valkeymock.Result(valkeymock.ValkeyInt64(1)))
+				m.EXPECT().
+					Do(gomock.Any(), valkeymock.Match("SMEMBERS", "variable/mdaihub-sample/data_set")).
+					Return(valkeymock.Result(valkeymock.ValkeyArray(
+						valkeymock.ValkeyBlobString("manual_service_1"),
+						valkeymock.ValkeyBlobString("manual_service_2"),
+						valkeymock.ValkeyBlobString("manual_service_3"),
+					)))
+				m.EXPECT().
+					Do(gomock.Any(), valkeymock.Match("EXISTS", "variable/mdaihub-sample/data_map")).
+					Return(valkeymock.Result(valkeymock.ValkeyInt64(1)))
+				m.EXPECT().
+					Do(gomock.Any(), valkeymock.Match("HGETALL", "variable/mdaihub-sample/data_map")).
+					Return(valkeymock.Result(valkeymock.ValkeyMap(map[string]valkey.ValkeyMessage{
+						"attrib.1": valkeymock.ValkeyBlobString("value1"),
+						"attrib.2": valkeymock.ValkeyBlobString("value2"),
+						"attrib.3": valkeymock.ValkeyBlobString("value3"),
+					})))
+				m.EXPECT().
+					Do(gomock.Any(), valkeymock.Match("HASHSET.LOOKUP", "variable/mdaihub-sample/meta_hash_set")).
+					Return(valkeymock.Result(valkeymock.ValkeyBlobString("service|critical")))
+				m.EXPECT().
+					Do(gomock.Any(), valkeymock.Match("PRIORITYLIST.GET", "variable/mdaihub-sample/meta_priority_list")).
+					Return(valkeymock.Result(valkeymock.ValkeyArray(
+						valkeymock.ValkeyBlobString("alpha"),
+						valkeymock.ValkeyBlobString("beta"),
+					)))
+			},
+		},
+		{
+			name:     "NonExistentHub",
+			target:   "/variables/values/hub/nonexistent_hub",
+			status:   http.StatusNotFound,
+			expected: "no variables found for hub",
+		},
+	}
+
+	clientset := newFakeClientset(t)
+	deps := setupReadOnlyMocks(t, clientset)
+	mux := NewRouter(t.Context(), deps)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.valkey != nil {
+				tt.valkey(t, deps.ValkeyClient.(*valkeymock.Client)) //nolint:forcetypeassert
 			}
+
+			req := httptest.NewRequest(http.MethodGet, tt.target, http.NoBody)
+			rr := httptest.NewRecorder()
+
+			mux.ServeHTTP(rr, req)
+
+			assert.Equal(t, tt.status, rr.Code)
+
+			expectedBody, err := json.Marshal(tt.expected)
+			require.NoError(t, err)
+			assert.JSONEq(t, string(expectedBody), rr.Body.String())
 		})
 	}
 }
@@ -500,6 +619,34 @@ func TestHandleSetVariables(t *testing.T) {
 	}
 }
 
+func TestHandleSetVariables_PublishFailureHidesInternalError(t *testing.T) {
+	clientset := newFakeClientset(t)
+	deps := setupMocks(t, clientset)
+	ctx := t.Context()
+
+	mockPublisher := &mocks.MockPublisher{}
+	mockPublisher.On("Publish", mock.Anything, mock.Anything, mock.Anything).Return(errors.New("nats auth failed"))
+	deps.EventPublisher = mockPublisher
+	mux := NewRouter(ctx, deps)
+
+	mockClient, ok := deps.ValkeyClient.(*valkeymock.Client)
+	if !ok {
+		t.Fatal("ValkeyClient is not a *valkeymock.Client")
+	}
+	mockClient.EXPECT().Do(ctx, XaddMatcher{}).Return(valkeymock.Result(valkeymock.ValkeyString(""))).Times(1)
+
+	req := httptest.NewRequest(http.MethodPost, "/variables/hub/mdaihub-sample/var/data_string", bytes.NewBufferString(`{"data":"value"}`))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+
+	mux.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	assert.Equal(t, "Failed to publish event\n", rr.Body.String())
+	mockPublisher.AssertExpectations(t)
+}
+
 func TestHandleSetVariables_InvalidRequestPayload(t *testing.T) {
 	setTests := []struct {
 		name     string
@@ -549,7 +696,7 @@ func TestHandleSetVariables_InvalidRequestPayload(t *testing.T) {
 	}
 
 	clientset := newFakeClientset(t)
-	deps := setupMocks(t, clientset)
+	deps := setupReadOnlyMocks(t, clientset)
 	mux := NewRouter(t.Context(), deps)
 
 	for _, tt := range setTests {
@@ -616,7 +763,7 @@ func TestHandleDeleteVariables_InvalidRequestPayload(t *testing.T) {
 	}
 
 	clientset := newFakeClientset(t)
-	deps := setupMocks(t, clientset)
+	deps := setupReadOnlyMocks(t, clientset)
 	mux := NewRouter(t.Context(), deps)
 
 	for _, tt := range setTests {
@@ -630,6 +777,89 @@ func TestHandleDeleteVariables_InvalidRequestPayload(t *testing.T) {
 
 			assert.Equal(t, http.StatusBadRequest, rr.Code)
 			assert.Equal(t, tt.expected, rr.Body.String())
+		})
+	}
+}
+
+func TestHandleSetDeleteVariables_NonExistentHub(t *testing.T) {
+	clientset := newFakeClientset(t)
+	deps := setupReadOnlyMocks(t, clientset)
+	mux := NewRouter(t.Context(), deps)
+
+	for _, method := range []string{http.MethodPost, http.MethodDelete} {
+		t.Run(method, func(t *testing.T) {
+			req := httptest.NewRequest(method, "/variables/hub/nonexistent_hub/var/data_string", bytes.NewBufferString(`{"data":"value"}`))
+			req.Header.Set("Content-Type", "application/json")
+
+			rr := httptest.NewRecorder()
+
+			mux.ServeHTTP(rr, req)
+
+			assert.Equal(t, http.StatusNotFound, rr.Code)
+
+			var result string
+			err := json.Unmarshal(rr.Body.Bytes(), &result)
+			require.NoError(t, err)
+			assert.Equal(t, "no variables found for hub", result)
+		})
+	}
+}
+
+func TestHandleSetDeleteVariables_RejectsNonManual(t *testing.T) {
+	tests := []struct {
+		name     string
+		method   string
+		target   string
+		body     string
+		expected string
+	}{
+		{
+			name:     "post computed variable",
+			method:   http.MethodPost,
+			target:   "/variables/hub/mdaihub-sample/var/computed_string",
+			body:     `{"data":"value"}`,
+			expected: variables.ErrVariableNotManual.Error(),
+		},
+		{
+			name:     "delete computed variable",
+			method:   http.MethodDelete,
+			target:   "/variables/hub/mdaihub-sample/var/computed_string",
+			body:     `{"data":"value"}`,
+			expected: variables.ErrVariableNotManual.Error(),
+		},
+		{
+			name:     "post meta variable",
+			method:   http.MethodPost,
+			target:   "/variables/hub/mdaihub-sample/var/meta_hash_set",
+			body:     `{"data":"value"}`,
+			expected: variables.ErrVariableNotManual.Error(),
+		},
+		{
+			name:     "delete meta variable",
+			method:   http.MethodDelete,
+			target:   "/variables/hub/mdaihub-sample/var/meta_priority_list",
+			body:     `{"data":["value"]}`,
+			expected: variables.ErrVariableNotManual.Error(),
+		},
+	}
+
+	clientset := newFakeClientset(t)
+	deps := setupReadOnlyMocks(t, clientset)
+	mux := NewRouter(t.Context(), deps)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(tt.method, tt.target, bytes.NewBufferString(tt.body))
+			req.Header.Set("Content-Type", "application/json")
+
+			rr := httptest.NewRecorder()
+			mux.ServeHTTP(rr, req)
+
+			assert.Equal(t, http.StatusConflict, rr.Code)
+
+			expectedBody, err := json.Marshal(tt.expected)
+			require.NoError(t, err)
+			assert.JSONEq(t, string(expectedBody), rr.Body.String())
 		})
 	}
 }
@@ -744,7 +974,7 @@ func TestUpdateEventsHandler(t *testing.T) {
 
 func TestAlerts_Failuers(t *testing.T) {
 	clientset := newFakeClientset(t)
-	deps := setupMocks(t, clientset)
+	deps := setupReadOnlyMocks(t, clientset)
 	mux := NewRouter(t.Context(), deps)
 
 	// Prometheus JSON fail
@@ -782,7 +1012,7 @@ func TestAlerts_Failuers(t *testing.T) {
 
 func TestAlerts_NotAllowed(t *testing.T) {
 	clientset := newFakeClientset(t)
-	deps := setupMocks(t, clientset)
+	deps := setupReadOnlyMocks(t, clientset)
 
 	for _, method := range []string{http.MethodConnect, http.MethodOptions, http.MethodTrace, http.MethodPut, http.MethodPatch, http.MethodDelete} {
 		mux := NewRouter(t.Context(), deps)
@@ -800,7 +1030,7 @@ func TestAlerts_NotAllowed(t *testing.T) {
 
 func TestAudit_Success(t *testing.T) {
 	clientset := newFakeClientset(t)
-	deps := setupMocks(t, clientset)
+	deps := setupReadOnlyMocks(t, clientset)
 	mux := NewRouter(t.Context(), deps)
 
 	deps.ValkeyClient.(*valkeymock.Client).EXPECT(). //nolint:forcetypeassert
@@ -831,7 +1061,7 @@ func TestAudit_Success(t *testing.T) {
 
 func TestAudit_Fail(t *testing.T) {
 	clientset := newFakeClientset(t)
-	deps := setupMocks(t, clientset)
+	deps := setupReadOnlyMocks(t, clientset)
 	mux := NewRouter(t.Context(), deps)
 
 	deps.ValkeyClient.(*valkeymock.Client).EXPECT(). //nolint:forcetypeassert
@@ -848,7 +1078,7 @@ func TestAudit_Fail(t *testing.T) {
 
 func TestAlets_TrailingJSON(t *testing.T) {
 	clientset := newFakeClientset(t)
-	deps := setupMocks(t, clientset)
+	deps := setupReadOnlyMocks(t, clientset)
 	mux := NewRouter(t.Context(), deps)
 
 	// trailing JSON after a valid object -> must be rejected
@@ -868,7 +1098,7 @@ func TestAlets_TrailingJSON(t *testing.T) {
 
 func TestAlerts_BodyTooLarge(t *testing.T) {
 	clientset := newFakeClientset(t)
-	deps := setupMocks(t, clientset)
+	deps := setupReadOnlyMocks(t, clientset)
 	mux := NewRouter(t.Context(), deps)
 	tooBig := strings.Repeat("x", (10<<20)+1) // 10 MiB + 1 byte
 
@@ -900,7 +1130,7 @@ func TestAlerts_BodyTooLarge(t *testing.T) {
 
 func TestAlerts_WrongContentType(t *testing.T) {
 	clientset := newFakeClientset(t)
-	deps := setupMocks(t, clientset)
+	deps := setupReadOnlyMocks(t, clientset)
 	mux := NewRouter(t.Context(), deps)
 
 	body := strings.NewReader(`{"status":"firing","alerts":[]}`)

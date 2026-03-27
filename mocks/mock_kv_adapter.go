@@ -10,17 +10,27 @@ type MockKVAdapter struct {
 	mock.Mock
 }
 
-func (m *MockKVAdapter) GetSetAsStringSlice(ctx context.Context, variableKey string, hubName string) ([]string, error) {
+func (m *MockKVAdapter) GetSet(ctx context.Context, variableKey string, hubName string) ([]string, bool, error) {
 	args := m.Called(ctx, variableKey, hubName)
-	return args.Get(0).([]string), args.Error(1)
+	return args.Get(0).([]string), args.Bool(1), args.Error(2)
 }
 
-func (m *MockKVAdapter) GetMap(ctx context.Context, variableKey string, hubName string) (map[string]string, error) {
+func (m *MockKVAdapter) GetMap(ctx context.Context, variableKey string, hubName string) (map[string]string, bool, error) {
 	args := m.Called(ctx, variableKey, hubName)
-	return args.Get(0).(map[string]string), args.Error(1)
+	return args.Get(0).(map[string]string), args.Bool(1), args.Error(2)
 }
 
 func (m *MockKVAdapter) GetString(ctx context.Context, variableKey string, hubName string) (string, bool, error) {
+	args := m.Called(ctx, variableKey, hubName)
+	return args.Get(0).(string), args.Bool(1), args.Error(2)
+}
+
+func (m *MockKVAdapter) GetMetaPriorityList(ctx context.Context, variableKey string, hubName string) ([]string, bool, error) {
+	args := m.Called(ctx, variableKey, hubName)
+	return args.Get(0).([]string), args.Bool(1), args.Error(2)
+}
+
+func (m *MockKVAdapter) GetMetaHashSet(ctx context.Context, variableKey string, hubName string) (string, bool, error) {
 	args := m.Called(ctx, variableKey, hubName)
 	return args.Get(0).(string), args.Bool(1), args.Error(2)
 }

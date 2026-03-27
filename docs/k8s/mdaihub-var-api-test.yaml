@@ -1,0 +1,101 @@
+apiVersion: hub.mydecisive.ai/v1
+kind: MdaiHub
+metadata:
+  labels:
+    app.kubernetes.io/name: mdai-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: mdaihub-var-api-test
+  namespace: mdai
+spec:
+  variables:
+    - key: service_list
+      dataType: set
+      serializeAs:
+        - name: "SERVICE_LIST"
+          transformers:
+            - type: join
+              join:
+                delimiter: "|"
+    - key: highRiskStates
+      dataType: set
+      serializeAs:
+        - name: "HIGH_RISK_STATES"
+          transformers:
+            - type: join
+              join:
+                delimiter: "|"
+    - key: filter
+      dataType: string
+      serializeAs:
+        - name: "FILTER"
+    - key: riskLevel
+      dataType: string
+      serializeAs:
+        - name: "RISK_LEVEL"
+    - key: severity_number
+      dataType: int
+      serializeAs:
+        - name: "SEVERITY_NUMBER"
+    - key: any_service_alerted
+      dataType: boolean
+      serializeAs:
+        - name: "SERVICE_ALERTED"
+    - key: attribute_map
+      dataType: map
+      serializeAs:
+        - name: "ATTRIBUTES"
+    - key: severity_filters_by_level
+      dataType: map
+      serializeAs:
+        - name: "SEVERITY_FILTERS_BY_LEVEL"
+    - key: my_priority_list
+      type: meta
+      dataType: metaPriorityList
+      variableRefs:
+        - default
+        - service_list
+      serializeAs:
+        - name: "SERVICE_PRIORITY"
+          transformers:
+            - type: join
+              join:
+                delimiter: "|"
+    - key: my_hash_set
+      type: meta
+      dataType: metaHashSet
+      variableRefs:
+        - severity_number
+        - severity_filters_by_level
+      serializeAs:
+        - name: "SERVICE_HASH_SET"
+
+    # manual variables for testing write endpoints
+    - key: test_string
+      type: manual
+      dataType: string
+      serializeAs:
+        - name: "TEST_STRING"
+    - key: test_int
+      type: manual
+      dataType: int
+      serializeAs:
+        - name: "TEST_INT"
+    - key: test_boolean
+      type: manual
+      dataType: boolean
+      serializeAs:
+        - name: "TEST_BOOLEAN"
+    - key: test_set
+      type: manual
+      dataType: set
+      serializeAs:
+        - name: "TEST_SET"
+          transformers:
+            - type: join
+              join:
+                delimiter: "|"
+    - key: test_map
+      type: manual
+      dataType: map
+      serializeAs:
+        - name: "TEST_MAP"

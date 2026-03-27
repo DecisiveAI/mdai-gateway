@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/mydecisive/mdai-data-core/audit"
 	"github.com/mydecisive/mdai-data-core/eventing/publisher"
@@ -12,21 +13,24 @@ import (
 	"github.com/mydecisive/mdai-gateway/internal/connection"
 	"github.com/mydecisive/mdai-gateway/internal/integration"
 	"github.com/mydecisive/mdai-gateway/internal/opamp"
+	gatewayvalkey "github.com/mydecisive/mdai-gateway/internal/valkey"
 	"github.com/valkey-io/valkey-go"
 	"go.uber.org/zap"
 	"k8s.io/client-go/kubernetes"
 )
 
 type HandlerDeps struct {
-	Logger              *zap.Logger
-	ValkeyClient        valkey.Client
-	AuditAdapter        *audit.AuditAdapter
-	EventPublisher      publisher.Publisher
-	ConfigMapController *datacorekube.ConfigMapController
-	Deduper             *adapter.Deduper
-	OpAMPServer         *opamp.OpAMPControlServer
-	K8sClient           kubernetes.Interface
-	K8sNamespace        string
+	Logger                 *zap.Logger
+	ValkeyClient           valkey.Client
+	VariableReader         *gatewayvalkey.Reader
+	SlowValueReadThreshold time.Duration
+	AuditAdapter           *audit.AuditAdapter
+	EventPublisher         publisher.Publisher
+	ConfigMapController    *datacorekube.ConfigMapController
+	Deduper                *adapter.Deduper
+	OpAMPServer            *opamp.OpAMPControlServer
+	K8sClient              kubernetes.Interface
+	K8sNamespace           string
 	HTTPClient          *http.Client
 }
 
@@ -35,11 +39,15 @@ func NewRouter(ctx context.Context, deps HandlerDeps) *http.ServeMux {
 
 	mainRouter.HandleFunc("GET /audit", handleAuditEventsGet(ctx, deps))
 	mainRouter.Handle("POST /alerts/alertmanager", requireJSON(handlePromAlertsPost(deps)))
+
 	mainRouter.Handle("GET /variables/list", handleListAllVariables(ctx, deps))
 	mainRouter.Handle("GET /variables/list/hub/{hubName}", handleListHubVariables(ctx, deps))
+	mainRouter.Handle("GET /variables/values/hub/{hubName}", handleGetHubVariableValues(ctx, deps))
 	mainRouter.Handle("GET /variables/values/hub/{hubName}/var/{varName}", handleGetVariables(ctx, deps))
+	// write operations are allowed only for manual variables
 	mainRouter.Handle("POST /variables/hub/{hubName}/var/{varName}", handleSetDeleteVariables(ctx, deps))
 	mainRouter.Handle("DELETE /variables/hub/{hubName}/var/{varName}", handleSetDeleteVariables(ctx, deps))
+
 	mainRouter.Handle("POST /opamp", deps.OpAMPServer.HandlerFunc)
 
 	ddIntegrationHandler := NewDatadogHandler(&integration.DataDogIntegration{
