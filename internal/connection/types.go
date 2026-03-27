@@ -16,7 +16,7 @@ type DeploymentType string
 // type DeploymentTask func(ctx context.Context, name string, namespace string, connection OctantConnectionData) (any, error)
 // type DeploymentTaskSet map[string][]DeploymentTask.
 
-const ArgoForceSyncDeploymentType DeploymentType = "argocd-force-sync"
+const ArgoSideloadDeploymentType DeploymentType = "argocd-sideload"
 
 type OctantConnectionDestination struct {
 	DestinationType string `json:"type"`
