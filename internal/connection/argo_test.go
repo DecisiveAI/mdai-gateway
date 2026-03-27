@@ -227,3 +227,190 @@ func TestPushArgoApp(t *testing.T) {
 		})
 	}
 }
+
+func TestGetArgoAppStatus_Error_IntegrationFetchFailed(t *testing.T) {
+	t.Parallel()
+
+	oc := &OctantConnection{
+		argoClient: &mockArgoClient{
+			Err: errors.New("injected argo integration error"),
+		},
+	}
+
+	_, err := oc.getArgoAppStatus(context.Background(), "my-app", "default", OctantConnectionData{
+		Deployment: &Deployment{IntegrationName: "argo-test"},
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "injected argo integration error")
+}
+
+func TestGetArgoAppStatus_Error_RequestCreation(t *testing.T) {
+	t.Parallel()
+
+	oc := &OctantConnection{
+		argoClient: &mockArgoClient{
+			IntegrationData: &integration.ArgoCDIntegrationData{
+				APIUrl: "://invalid-url", // Forces http.NewRequestWithContext to fail
+			},
+		},
+	}
+
+	_, err := oc.getArgoAppStatus(context.Background(), "my-app", "default", OctantConnectionData{
+		Deployment: &Deployment{IntegrationName: "argo-test"},
+	})
+
+	require.Error(t, err)
+}
+
+func TestGetArgoAppStatus_Error_HTTPDoFailed(t *testing.T) {
+	t.Parallel()
+
+	// Create a server and immediately close it so httpClient.Do() fails on connection refused
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	ts.Close()
+
+	oc := &OctantConnection{
+		httpClient: ts.Client(),
+		argoClient: &mockArgoClient{
+			IntegrationData: &integration.ArgoCDIntegrationData{
+				APIUrl: ts.URL,
+			},
+		},
+	}
+
+	_, err := oc.getArgoAppStatus(context.Background(), "my-app", "default", OctantConnectionData{
+		Deployment: &Deployment{IntegrationName: "argo-test"},
+	})
+
+	require.Error(t, err)
+}
+
+func TestGetArgoAppStatus_Error_InvalidJSON(t *testing.T) {
+	t.Parallel()
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{ "invalid": json `)) // Malformed JSON to fail decode
+	}))
+	defer ts.Close()
+
+	oc := &OctantConnection{
+		httpClient: ts.Client(),
+		argoClient: &mockArgoClient{
+			IntegrationData: &integration.ArgoCDIntegrationData{APIUrl: ts.URL},
+		},
+	}
+
+	_, err := oc.getArgoAppStatus(context.Background(), "my-app", "default", OctantConnectionData{
+		Deployment: &Deployment{IntegrationName: "argo-test"},
+	})
+
+	require.Error(t, err)
+}
+
+func TestDeleteArgoApp_Error_IntegrationFetchFailed(t *testing.T) {
+	t.Parallel()
+
+	oc := &OctantConnection{
+		argoClient: &mockArgoClient{
+			Err: errors.New("injected argo integration error"),
+		},
+	}
+
+	err := oc.deleteArgoApp(context.Background(), "my-app", "default", OctantConnectionData{
+		Deployment: &Deployment{IntegrationName: "argo-test"},
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "injected argo integration error")
+}
+
+func TestDeleteArgoApp_Error_RequestCreation(t *testing.T) {
+	t.Parallel()
+
+	oc := &OctantConnection{
+		argoClient: &mockArgoClient{
+			IntegrationData: &integration.ArgoCDIntegrationData{
+				APIUrl: "://invalid-url", // Forces http.NewRequestWithContext to fail
+			},
+		},
+	}
+
+	err := oc.deleteArgoApp(context.Background(), "my-app", "default", OctantConnectionData{
+		Deployment: &Deployment{IntegrationName: "argo-test"},
+	})
+
+	require.Error(t, err)
+}
+
+func TestDeleteArgoApp_Error_HTTPDoFailed(t *testing.T) {
+	t.Parallel()
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	ts.Close() // Close immediately to force http.Do error
+
+	oc := &OctantConnection{
+		httpClient: ts.Client(),
+		argoClient: &mockArgoClient{
+			IntegrationData: &integration.ArgoCDIntegrationData{APIUrl: ts.URL},
+		},
+	}
+
+	err := oc.deleteArgoApp(context.Background(), "my-app", "default", OctantConnectionData{
+		Deployment: &Deployment{IntegrationName: "argo-test"},
+	})
+
+	require.Error(t, err)
+}
+
+func TestDeleteArgoApp_Error_BadStatusCode(t *testing.T) {
+	t.Parallel()
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer ts.Close()
+
+	oc := &OctantConnection{
+		httpClient: ts.Client(),
+		argoClient: &mockArgoClient{
+			IntegrationData: &integration.ArgoCDIntegrationData{APIUrl: ts.URL},
+		},
+	}
+
+	err := oc.deleteArgoApp(context.Background(), "my-app", "default", OctantConnectionData{
+		Deployment: &Deployment{IntegrationName: "argo-test"},
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unexpected status code: 500")
+}
+
+func TestPushArgoApp_Error_HTTPDoFailed(t *testing.T) {
+	t.Parallel()
+
+	// While TestPushArgoApp covers status code failures, this covers connection refused/client failures
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	ts.Close()
+
+	oc := &OctantConnection{
+		httpClient: ts.Client(),
+		argoClient: &mockArgoClient{
+			IntegrationData: &integration.ArgoCDIntegrationData{APIUrl: ts.URL},
+		},
+		datadogClient: &mockDatadogClient{
+			IntegrationData: &integration.DataDogIntegrationData{},
+		},
+	}
+
+	connData := OctantConnectionData{
+		Destinations: []OctantConnectionDestination{
+			{DestinationType: "datadog", IntegrationName: "dd-1"},
+		},
+		Deployment: &Deployment{IntegrationName: "argo-test"},
+	}
+
+	err := oc.pushArgoApp(context.Background(), "default", "my-test-app", connData)
+	require.Error(t, err)
+}
