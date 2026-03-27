@@ -31,7 +31,7 @@ type HandlerDeps struct {
 	OpAMPServer            *opamp.OpAMPControlServer
 	K8sClient              kubernetes.Interface
 	K8sNamespace           string
-	HTTPClient          *http.Client
+	HTTPClient             *http.Client
 }
 
 func NewRouter(ctx context.Context, deps HandlerDeps) *http.ServeMux {
