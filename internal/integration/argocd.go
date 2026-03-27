@@ -17,13 +17,6 @@ type ArgoCDIntegrationData struct {
 	AccountToken string `json:"accountToken"`
 }
 
-func (aid *ArgoCDIntegrationData) ToFields() map[string]any {
-	return map[string]any{
-		"apiUrl": aid.APIUrl,
-		"apiKey": aid.AccountToken,
-	}
-}
-
 type ArgoCDIntegration struct {
 	K8sClient kubernetes.Interface
 }
