@@ -65,3 +65,5 @@ spec:
               key: NATS_PASSWORD
         - name: LOG_LEVEL
           value: "{{ .Values.logLevel }}"
+        - name: PROMETHEUS_ENDPOINT
+          value: http://kube-prometheus-stack-prometheus.mdai.svc.cluster.local:9090

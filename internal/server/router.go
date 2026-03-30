@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	promv1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"net/http"
 	"strings"
 	"time"
@@ -31,6 +32,7 @@ type HandlerDeps struct {
 	OpAMPServer            *opamp.OpAMPControlServer
 	K8sClient              kubernetes.Interface
 	K8sNamespace           string
+	PrometheusClient       promv1.API
 }
 
 func NewRouter(ctx context.Context, deps HandlerDeps) *http.ServeMux {
@@ -70,13 +72,15 @@ func NewRouter(ctx context.Context, deps HandlerDeps) *http.ServeMux {
 	mainRouter.Handle("/integrations/argocd/", http.StripPrefix("/integrations/argocd", argocdRouter))
 
 	connectionsHandler := NewConnectionsHandler(&connection.OctantConnection{
-		K8sClient: deps.K8sClient,
+		K8sClient:  deps.K8sClient,
+		PromClient: deps.PrometheusClient,
 	}, deps.K8sNamespace, deps.Logger)
 
 	connectionsRouter := http.NewServeMux()
 	connectionsRouter.Handle("GET /{connectionName}", connectionsHandler.GetConnectionByName(ctx))
 	connectionsRouter.Handle("PUT /{connectionName}", connectionsHandler.SaveConnectionData(ctx))
 	connectionsRouter.Handle("DELETE /{connectionName}", connectionsHandler.DeleteConnectionByName(ctx))
+	connectionsRouter.Handle("GET /{connectionName}/status", connectionsHandler.GetConnectionStatus(ctx))
 
 	mainRouter.Handle("/connections/", http.StripPrefix("/connections", connectionsRouter))
 

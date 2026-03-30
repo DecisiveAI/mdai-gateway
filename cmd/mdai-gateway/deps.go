@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/prometheus/client_golang/api"
 	"os"
 	"strings"
 	"time"
@@ -19,6 +20,8 @@ import (
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
+
+	promv1 "github.com/prometheus/client_golang/api/prometheus/v1"
 )
 
 const (
@@ -80,6 +83,18 @@ func initDependencies(ctx context.Context) (deps server.HandlerDeps, cleanup fun
 		appLogger.Fatal("failed to start OpAMP server", zap.Error(err))
 	}
 
+	promEndpoint := os.Getenv("PROMETHEUS_ENDPOINT")
+	if promEndpoint == "" {
+		appLogger.Warn("prometheus endpoint is not set, octant connections API will not function properly")
+	}
+
+	client, err := api.NewClient(api.Config{
+		Address: promEndpoint,
+	})
+	if err != nil {
+		appLogger.Fatal("failed to create prometheus client", zap.Error(err))
+	}
+
 	deps = server.HandlerDeps{
 		Logger:                 appLogger,
 		ValkeyClient:           valkeyClient,
@@ -92,6 +107,7 @@ func initDependencies(ctx context.Context) (deps server.HandlerDeps, cleanup fun
 		OpAMPServer:            opampServer,
 		K8sClient:              clientset,
 		K8sNamespace:           getCurrentNamespace(),
+		PrometheusClient:       promv1.NewAPI(client),
 	}
 
 	cleanup = func() {
