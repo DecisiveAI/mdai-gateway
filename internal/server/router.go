@@ -74,6 +74,7 @@ func NewRouter(ctx context.Context, deps HandlerDeps) *http.ServeMux {
 	connectionsHandler := NewConnectionsHandler(&connection.OctantConnection{
 		K8sClient:  deps.K8sClient,
 		PromClient: deps.PrometheusClient,
+		Logger:     deps.Logger,
 	}, deps.K8sNamespace, deps.Logger)
 
 	connectionsRouter := http.NewServeMux()

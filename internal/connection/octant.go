@@ -7,6 +7,7 @@ import (
 	promv1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/common/model"
 	"github.com/samber/lo"
+	"go.uber.org/zap"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -33,6 +34,7 @@ var _ Connection[OctantConnectionData] = (*OctantConnection)(nil)
 type OctantConnection struct {
 	K8sClient  kubernetes.Interface
 	PromClient promv1.API
+	Logger     *zap.Logger
 }
 
 type ingressEgress int
@@ -40,6 +42,14 @@ type ingressEgress int
 const (
 	ingress ingressEgress = iota
 	egress
+)
+
+const (
+	fidelityCheckFail = "fail"
+	fidelityCheckPass = "pass"
+
+	fidelityMetricResult = "result"
+	fidelityMetricSignal = "signal"
 )
 
 func (oc *OctantConnection) GetConnectionStatus(ctx context.Context, namespace, connectionName string) (*Status, error) {
@@ -65,11 +75,66 @@ func (oc *OctantConnection) GetConnectionStatus(ctx context.Context, namespace, 
 		return nil, fmt.Errorf("querying telemetry egress status: %w", err)
 	}
 
+	dataIntegrity, err = oc.verifyDataIntegrity(ctx, connection.TelemetryTypes)
+	if err != nil {
+		return nil, fmt.Errorf("verifying data integrity: %w", err)
+	}
+
 	return &Status{
 		ReceivingData: receivingData,
 		SendingData:   sendingData,
 		DataIntegrity: dataIntegrity,
 	}, nil
+}
+
+func (oc *OctantConnection) verifyDataIntegrity(ctx context.Context, telemetryTypes []Telemetry) (bool, error) {
+	// compare now to 10 minutes ago
+	results, _, err := oc.PromClient.QueryRange(ctx, "mdai_fidelity_required_signal_checks_total", promv1.Range{
+		Start: time.Now().Add(-10 * time.Minute),
+		End:   time.Now(),
+		Step:  10 * time.Minute,
+	})
+	if err != nil {
+		return false, fmt.Errorf("failed to query prometheus: %w", err)
+	}
+	if results == nil {
+		return false, nil
+	}
+
+	resultMatrix, ok := results.(model.Matrix)
+	if !ok {
+		return false, fmt.Errorf("failed to convert result to model.Matrix")
+	}
+
+	for _, telemetryType := range telemetryTypes {
+		if !dataFidelityCheck(oc.Logger, resultMatrix, telemetryType) {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+func dataFidelityCheck(logger *zap.Logger, resultMatrix model.Matrix, telemetryType Telemetry) bool {
+	failed := lo.Filter(resultMatrix, func(item *model.SampleStream, _ int) bool {
+		return item.Metric[fidelityMetricResult] == fidelityCheckFail &&
+			string(item.Metric[fidelityMetricSignal]) == string(telemetryType)
+	})
+	passed := lo.Filter(resultMatrix, func(item *model.SampleStream, _ int) bool {
+		return item.Metric[fidelityMetricResult] == fidelityCheckPass &&
+			string(item.Metric[fidelityMetricSignal]) == string(telemetryType)
+	})
+
+	// sanity check... this shouldn't happen.
+	if len(failed) != 1 || len(passed) != 1 {
+		logger.Warn("unable to perform data fidelity check, expected 1 set of failed and passed fidelity metric values")
+		return false
+	}
+
+	// if the fidelity check failures are increasing OR the passed fidelity checks are NOT increasing, fail fast
+	if areSeriesValuesIncreasing(failed[0]) || !areSeriesValuesIncreasing(passed[0]) {
+		return false
+	}
+	return true
 }
 
 func (oc *OctantConnection) queryTelemetryStatus(ctx context.Context, ie ingressEgress, telemetryTypes []Telemetry) (bool, error) {
@@ -110,7 +175,7 @@ func (oc *OctantConnection) queryTelemetryStatus(ctx context.Context, ie ingress
 		}
 
 		var metricsIncreasing bool
-		metricsIncreasing, err = areMetricValuesIncreasing(results)
+		metricsIncreasing, err = areMatrixValuesIncreasing(results)
 		if err != nil {
 			return false, fmt.Errorf("analyzing query range results: %w", err)
 		}
@@ -123,7 +188,7 @@ func (oc *OctantConnection) queryTelemetryStatus(ctx context.Context, ie ingress
 	return true, nil
 }
 
-func areMetricValuesIncreasing(results model.Value) (bool, error) {
+func areMatrixValuesIncreasing(results model.Value) (bool, error) {
 	if results == nil {
 		return false, nil
 	}
@@ -132,21 +197,28 @@ func areMetricValuesIncreasing(results model.Value) (bool, error) {
 		return false, fmt.Errorf("failed to convert result to model.Matrix")
 	}
 
-	var metricsIncreasing bool
 	for _, series := range resultMatrix {
-		for i := 1; i < len(series.Values); i++ {
-			prev := series.Values[i-1]
-			curr := series.Values[i]
-
-			diff := float64(curr.Value) - float64(prev.Value)
-
-			if diff > 0 {
-				// we can return immediately if the values went up in our time range, no need to keep going.
-				return true, nil
-			}
+		// we can return immediately if the values went up in our time range, no need to keep going.
+		if areSeriesValuesIncreasing(series) {
+			return true, nil
 		}
 	}
-	return metricsIncreasing, nil
+	return false, nil
+}
+
+func areSeriesValuesIncreasing(series *model.SampleStream) bool {
+	for i := 1; i < len(series.Values); i++ {
+		prev := series.Values[i-1]
+		curr := series.Values[i]
+
+		diff := float64(curr.Value) - float64(prev.Value)
+
+		if diff > 0 {
+			// we can return immediately if the values went up in our time range, no need to keep going.
+			return true
+		}
+	}
+	return false
 }
 
 func (oc *OctantConnection) GetConnectionByName(ctx context.Context, namespace, name string) (*OctantConnectionData, error) {
