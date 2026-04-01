@@ -3,10 +3,11 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+
 	"github.com/mydecisive/mdai-gateway/internal/connection"
 	"github.com/mydecisive/mdai-gateway/internal/httputil"
 	"go.uber.org/zap"
-	"net/http"
 )
 
 type ConnectionsHandler struct {

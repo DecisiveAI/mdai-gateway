@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	promv1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"net/http"
 	"strings"
 	"time"
@@ -15,6 +14,7 @@ import (
 	"github.com/mydecisive/mdai-gateway/internal/integration"
 	"github.com/mydecisive/mdai-gateway/internal/opamp"
 	gatewayvalkey "github.com/mydecisive/mdai-gateway/internal/valkey"
+	promv1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/valkey-io/valkey-go"
 	"go.uber.org/zap"
 	"k8s.io/client-go/kubernetes"
@@ -71,11 +71,11 @@ func NewRouter(ctx context.Context, deps HandlerDeps) *http.ServeMux {
 	mainRouter.Handle("/integrations/datadog/", http.StripPrefix("/integrations/datadog", datadogRouter))
 	mainRouter.Handle("/integrations/argocd/", http.StripPrefix("/integrations/argocd", argocdRouter))
 
-	connectionsHandler := NewConnectionsHandler(&connection.OctantConnection{
-		K8sClient:  deps.K8sClient,
-		PromClient: deps.PrometheusClient,
-		Logger:     deps.Logger,
-	}, deps.K8sNamespace, deps.Logger)
+	connectionsHandler := NewConnectionsHandler(
+		connection.NewOctantConnection(deps.K8sClient, deps.PrometheusClient, deps.Logger),
+		deps.K8sNamespace,
+		deps.Logger,
+	)
 
 	connectionsRouter := http.NewServeMux()
 	connectionsRouter.Handle("GET /{connectionName}", connectionsHandler.GetConnectionByName(ctx))

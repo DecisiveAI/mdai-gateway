@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/prometheus/client_golang/api"
 	"os"
 	"strings"
 	"time"
@@ -17,11 +16,11 @@ import (
 	"github.com/mydecisive/mdai-gateway/internal/opamp"
 	"github.com/mydecisive/mdai-gateway/internal/server"
 	gatewayvalkey "github.com/mydecisive/mdai-gateway/internal/valkey"
+	"github.com/prometheus/client_golang/api"
+	promv1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
-
-	promv1 "github.com/prometheus/client_golang/api/prometheus/v1"
 )
 
 const (

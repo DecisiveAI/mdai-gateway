@@ -1,4 +1,4 @@
-package connection
+package telemetry
 
 import (
 	"encoding/json"
@@ -12,7 +12,7 @@ func TestUnmarshalJSON(t *testing.T) {
 	t.Parallel()
 
 	type testTelemetry struct {
-		TheTelemetry Telemetry `json:"theTelemetry"`
+		TheTelemetry MLT `json:"theTelemetry"`
 	}
 
 	t.Run("invalid telemetry", func(t *testing.T) {

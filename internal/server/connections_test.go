@@ -10,6 +10,7 @@ import (
 
 	"github.com/mydecisive/mdai-gateway/internal/connection"
 	connectionmock "github.com/mydecisive/mdai-gateway/internal/mock/connection"
+	"github.com/mydecisive/mdai-gateway/internal/telemetry"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -39,9 +40,9 @@ func TestGetConnectionByName(t *testing.T) {
 
 		expectedConnection := &connection.OctantConnectionData{
 			SourceType: "datadog",
-			TelemetryTypes: []connection.Telemetry{
-				connection.Logs,
-				connection.Traces,
+			TelemetryTypes: []telemetry.MLT{
+				telemetry.Logs,
+				telemetry.Traces,
 			},
 			Deployment: &connection.Deployment{
 				Type: "argocd",
@@ -94,9 +95,9 @@ func TestSaveConnectionData(t *testing.T) {
 
 		connectionToSave := &connection.OctantConnectionData{
 			SourceType: "datadog",
-			TelemetryTypes: []connection.Telemetry{
-				connection.Logs,
-				connection.Traces,
+			TelemetryTypes: []telemetry.MLT{
+				telemetry.Logs,
+				telemetry.Traces,
 			},
 			Deployment: &connection.Deployment{
 				Type: "argocd",
@@ -112,7 +113,7 @@ func TestSaveConnectionData(t *testing.T) {
 		connectionsMock.EXPECT().
 			SaveConnection(mock.Anything, mock.MatchedBy(func(theConnection connection.OctantConnectionData) bool {
 				matchingSource := theConnection.SourceType == "datadog"
-				matchingTelemetry := len(theConnection.TelemetryTypes) == 2 && theConnection.TelemetryTypes[0] == connection.Logs && theConnection.TelemetryTypes[1] == connection.Traces
+				matchingTelemetry := len(theConnection.TelemetryTypes) == 2 && theConnection.TelemetryTypes[0] == telemetry.Logs && theConnection.TelemetryTypes[1] == telemetry.Traces
 				matchingDeployment := theConnection.Deployment.Type == "argocd" && theConnection.Deployment.Fields["branch"] == "bestBranch"
 				return matchingSource && matchingTelemetry && matchingDeployment
 			}), "default", "coolConnection").
@@ -133,9 +134,9 @@ func TestSaveConnectionData(t *testing.T) {
 
 		connectionToSave := &connection.OctantConnectionData{
 			SourceType: "datadog",
-			TelemetryTypes: []connection.Telemetry{
-				connection.Logs,
-				connection.Traces,
+			TelemetryTypes: []telemetry.MLT{
+				telemetry.Logs,
+				telemetry.Traces,
 			},
 			Deployment: &connection.Deployment{
 				Type: "argocd",
@@ -151,7 +152,7 @@ func TestSaveConnectionData(t *testing.T) {
 		connectionsMock.EXPECT().
 			SaveConnection(mock.Anything, mock.MatchedBy(func(theConnection connection.OctantConnectionData) bool {
 				matchingSource := theConnection.SourceType == "datadog"
-				matchingTelemetry := len(theConnection.TelemetryTypes) == 2 && theConnection.TelemetryTypes[0] == connection.Logs && theConnection.TelemetryTypes[1] == connection.Traces
+				matchingTelemetry := len(theConnection.TelemetryTypes) == 2 && theConnection.TelemetryTypes[0] == telemetry.Logs && theConnection.TelemetryTypes[1] == telemetry.Traces
 				matchingDeployment := theConnection.Deployment.Type == "argocd" && theConnection.Deployment.Fields["branch"] == "bestBranch"
 				return matchingSource && matchingTelemetry && matchingDeployment
 			}), "default", "coolConnection").

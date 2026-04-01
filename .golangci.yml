@@ -125,8 +125,10 @@ linters:
           - dupl
           - forcetypeassert
           - funlen
+          - gochecknoglobals
           - goconst
           - maintidx
+          - tagliatelle
           - unparam
       - path: mocks/*
         linters:
