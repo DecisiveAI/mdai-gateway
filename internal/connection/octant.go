@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
 
 	"github.com/mydecisive/mdai-gateway/internal/integration"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -109,6 +110,9 @@ func (oc *OctantConnection) GetConnectionManifestsByName(ctx context.Context, na
 }
 
 func (oc *OctantConnection) SaveConnection(ctx context.Context, connection OctantConnectionData, namespace, connectionName string) error {
+	if !slices.Contains(validDeploymentTypes, connection.Deployment.Type) {
+		return fmt.Errorf("invalid deployment type: %s", connection.Deployment.Type)
+	}
 	jsonData, err := json.Marshal(connection)
 	if err != nil {
 		return fmt.Errorf("failed to marshal connection data: %w", err)
