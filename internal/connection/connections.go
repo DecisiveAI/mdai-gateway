@@ -13,6 +13,7 @@ const connectionsConfigmapName = "mdai-octant-connections"
 
 type Connection[T any] interface {
 	GetConnectionByName(ctx context.Context, namespace, name string) (*T, error)
+	GetConnectionManifestsByName(ctx context.Context, namespace, name string) (*map[string][]byte, error)
 	SaveConnection(ctx context.Context, connection T, namespace, connectionName string) error
 	DeleteConnection(ctx context.Context, namespace, connectionName string) error
 }

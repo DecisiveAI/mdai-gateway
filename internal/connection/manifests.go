@@ -3,28 +3,24 @@ package connection
 import (
 	"bytes"
 	_ "embed"
+	"errors"
+	"fmt"
 	"text/template"
 
 	"github.com/mydecisive/mdai-gateway/internal/integration"
 	"sigs.k8s.io/yaml"
 )
 
-//go:embed templates/argo-app.yaml
+//go:embed templates/argo-app.yaml.tmpl
 var argoAppTemplate string
 
-//go:embed templates/primary-collector.yaml
+//go:embed templates/collector.yaml.tmpl
 var primaryCollectorTemplate string
 
-//go:embed templates/envoy-config.yaml
-var envoyConfigTemplate string
+//go:embed templates/validator.yaml.tmpl
+var validatorTemplate string
 
-//go:embed templates/envoy-deployment.yaml
-var envoyDeploymentTemplate string
-
-//go:embed templates/envoy-service.yaml
-var envoyServiceTemplate string
-
-//go:embed templates/secret.yaml
+//go:embed templates/secret.yaml.tmpl
 var secretTemplate string
 
 type ArgoTemplateData struct {
@@ -32,10 +28,21 @@ type ArgoTemplateData struct {
 	Namespace              string
 	ConnectionData         OctantConnectionData
 	DatadogIntegrationData *integration.DataDogIntegrationData
+	ValidatorEnabled       bool
 	IsArgoSideload         bool
 }
 
-func (*OctantConnection) renderArgoAppManifest(templateData *ArgoTemplateData) ([]byte, error) {
+type ManifestOutputFormat string
+
+const (
+	YAMLOutputFormat ManifestOutputFormat = "yaml"
+	JSONOutputFormat ManifestOutputFormat = "json"
+)
+
+func (*OctantConnection) renderArgoAppManifest(templateData *ArgoTemplateData, outputFormat ManifestOutputFormat) ([]byte, error) {
+	if outputFormat == "" {
+		return []byte{}, errors.New("no output format specified")
+	}
 	appManifestTemplate, err := template.New("argo-app").Parse(argoAppTemplate)
 	if err != nil {
 		return []byte{}, err
@@ -45,39 +52,55 @@ func (*OctantConnection) renderArgoAppManifest(templateData *ArgoTemplateData) (
 		return []byte{}, templateErr
 	}
 
-	renderedJSON, err := yaml.YAMLToJSON(renderedYaml.Bytes())
-	if err != nil {
-		return []byte{}, err
+	switch outputFormat {
+	case YAMLOutputFormat:
+		return renderedYaml.Bytes(), nil
+	case JSONOutputFormat:
+		renderedJSON, err := yaml.YAMLToJSON(renderedYaml.Bytes())
+		if err != nil {
+			return []byte{}, err
+		}
+
+		return renderedJSON, nil
 	}
 
-	return renderedJSON, nil
+	return renderedYaml.Bytes(), nil
 }
 
-func (*OctantConnection) renderSyncManifests(templateData *ArgoTemplateData) ([]string, error) {
-	var manifests []string
+func (*OctantConnection) renderSyncManifests(templateData *ArgoTemplateData, outputFormat ManifestOutputFormat) (*map[string][]byte, error) {
+	if outputFormat == "" {
+		return nil, errors.New("no output format specified")
+	}
+
+	manifests := make(map[string][]byte)
 	for templateName, templateString := range map[string]string{
-		"primary-collector": primaryCollectorTemplate,
-		"envoy-config":      envoyConfigTemplate,
-		"envoy-deployment":  envoyDeploymentTemplate,
-		"envoy-service":     envoyServiceTemplate,
-		"secret":            secretTemplate,
+		"collector": primaryCollectorTemplate,
+		"validator": validatorTemplate,
+		"secret":    secretTemplate,
 	} {
 		appManifestTemplate, err := template.New(templateName).Parse(templateString)
 		if err != nil {
-			return manifests, err
+			return &manifests, err
 		}
 		var renderedYaml bytes.Buffer
 		if templateErr := appManifestTemplate.Execute(&renderedYaml, templateData); templateErr != nil {
-			return manifests, templateErr
+			return &manifests, templateErr
 		}
 
-		renderedJSON, err := yaml.YAMLToJSON(renderedYaml.Bytes())
-		if err != nil {
-			return manifests, err
+		filename := fmt.Sprintf("%s.%s", templateName, outputFormat)
+		switch outputFormat {
+		case YAMLOutputFormat:
+			manifests[filename] = renderedYaml.Bytes()
+		case JSONOutputFormat:
+			renderedJSON, err := yaml.YAMLToJSON(renderedYaml.Bytes())
+			if err != nil {
+				return &manifests, err
+			}
+
+			manifests[filename] = renderedJSON
 		}
 
-		manifests = append(manifests, string(renderedJSON))
 	}
 
-	return manifests, nil
+	return &manifests, nil
 }

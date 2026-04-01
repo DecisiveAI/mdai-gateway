@@ -41,7 +41,7 @@ func TestRenderArgoAppManifest(t *testing.T) {
 		Namespace: "team-a-namespace",
 	}
 
-	result, err := oc.renderArgoAppManifest(&templateData)
+	result, err := oc.renderArgoAppManifest(&templateData, JSONOutputFormat)
 	require.NoError(t, err)
 	require.NotEmpty(t, result)
 
@@ -113,11 +113,11 @@ func TestRenderSyncManifests(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			manifests, err := oc.renderSyncManifests(&tt.templateData)
+			manifests, err := oc.renderSyncManifests(&tt.templateData, JSONOutputFormat)
 			require.NoError(t, err)
 
 			parsedManifests := make(map[string]map[string]any)
-			for _, manifestStr := range manifests {
+			for _, manifestStr := range *manifests {
 				var parsed map[string]any
 				err = json.Unmarshal([]byte(manifestStr), &parsed)
 				require.NoError(t, err, "Each sync manifest should be valid JSON")
@@ -153,7 +153,7 @@ func TestRenderSyncManifests(t *testing.T) {
 				assert.Equal(t, tt.templateData.DatadogIntegrationData.DDUrl, stringData["site-url"])
 			}
 
-			otelKey := fmt.Sprintf("OpenTelemetryCollector/%s-primary", appName)
+			otelKey := fmt.Sprintf("OpenTelemetryCollector/%s", appName)
 			otel, exists := parsedManifests[otelKey]
 			require.True(t, exists, "Primary Collector manifest not found")
 

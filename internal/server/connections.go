@@ -1,8 +1,11 @@
 package server
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/mydecisive/mdai-gateway/internal/connection"
@@ -42,6 +45,56 @@ func (ch *ConnectionsHandler) GetConnectionByName(ctx context.Context) http.Hand
 		}
 
 		httputil.WriteJSONResponse(w, ch.logger, http.StatusOK, theConnection)
+	}
+}
+
+func (ch *ConnectionsHandler) GetConnectionManifestsByName(ctx context.Context) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		connectionName := req.PathValue("connectionName")
+
+		manifestsMap, err := ch.octantConnection.GetConnectionManifestsByName(ctx, ch.k8sNamespace, connectionName)
+		if err != nil {
+			ch.logger.Error("failed to get connection", zap.Error(err))
+			http.Error(w, "failed to get connection", http.StatusInternalServerError)
+			return
+		}
+
+		if manifestsMap == nil || len(*manifestsMap) == 0 {
+			ch.logger.Warn("connection not found", zap.String("connectionName", connectionName))
+			http.Error(w, "connection not found", http.StatusNotFound)
+			return
+		}
+
+		var buf bytes.Buffer
+		zipWriter := zip.NewWriter(&buf)
+
+		for filename, content := range *manifestsMap {
+			fWriter, err := zipWriter.Create(filename)
+			if err != nil {
+				ch.logger.Error("failed to create file in zip archive", zap.Error(err), zap.String("filename", filename))
+				http.Error(w, "failed to generate zip file", http.StatusInternalServerError)
+				return
+			}
+
+			if _, err := fWriter.Write(content); err != nil {
+				ch.logger.Error("failed to write content to zip archive", zap.Error(err), zap.String("filename", filename))
+				http.Error(w, "failed to generate zip file", http.StatusInternalServerError)
+				return
+			}
+		}
+
+		if err := zipWriter.Close(); err != nil {
+			ch.logger.Error("failed to close zip writer", zap.Error(err))
+			http.Error(w, "failed to finalize zip file", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/zip")
+		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s-manifests.zip"`, connectionName))
+
+		if _, err := w.Write(buf.Bytes()); err != nil {
+			ch.logger.Error("failed to send zip file to client", zap.Error(err))
+		}
 	}
 }
 

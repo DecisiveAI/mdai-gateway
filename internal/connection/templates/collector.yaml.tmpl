@@ -1,17 +1,17 @@
 apiVersion: opentelemetry.io/v1alpha1
 kind: OpenTelemetryCollector
 metadata:
-  name: {{ .AppName }}-primary
+  name: {{ .AppName }}
   labels:
-    app: {{ .AppName }}-primary
-    app.kubernetes.io/instance: {{ .AppName }}-primary
+    app: {{ .AppName }}
+    app.kubernetes.io/instance: {{ .AppName }}
   {{- if .IsArgoSideload }}
   annotations:
-    argocd.argoproj.io/tracking-id: {{ .AppName }}:opentelemetry.io/OpenTelemetryCollector:mdai/{{ .AppName }}-primary
+    argocd.argoproj.io/tracking-id: {{ .AppName }}:opentelemetry.io/OpenTelemetryCollector:mdai/{{ .AppName }}
   {{- end }}
 spec:
   podLabels:
-    app: {{ .AppName }}-primary-collector
+    app: {{ .AppName }}-collector
   image: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:0.147.0
   env:
     {{- if .DatadogIntegrationData }}

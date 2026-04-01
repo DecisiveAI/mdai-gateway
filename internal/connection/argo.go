@@ -64,36 +64,14 @@ func (oc *OctantConnection) getArgoAppStatus(ctx context.Context, name string, n
 }
 
 func (oc *OctantConnection) pushArgoApp(ctx context.Context, namespace, name string, connection OctantConnectionData) error {
-	if len(connection.Destinations) != 1 {
-		// TODO: Implement multiple destination handling and handling of non-dd integrations
-		return errors.New("pushing argo application to multiple destinations is currently unsupported")
-	}
-	var datadogIntegration *integration.DataDogIntegrationData
-	for _, destination := range connection.Destinations {
-		switch destination.DestinationType {
-		case "datadog":
-			foundDDIntegration, getDDIntErr := oc.datadogClient.GetIntegrationByName(ctx, namespace, destination.IntegrationName)
-			if getDDIntErr != nil {
-				return getDDIntErr
-			}
-			datadogIntegration = foundDDIntegration
-		default:
-			return fmt.Errorf("unknown destination type: %s", destination.DestinationType)
-		}
+	templateData, err := oc.createTemplateData(ctx, namespace, name, connection)
+	if err != nil {
+		return err
 	}
 
 	argoIntegration, getArgoIntErr := oc.argoClient.GetIntegrationByName(ctx, namespace, connection.Deployment.IntegrationName)
 	if getArgoIntErr != nil {
 		return getArgoIntErr
-	}
-
-	templateData := ArgoTemplateData{
-		AppName:                name,
-		Namespace:              namespace,
-		ConnectionData:         connection,
-		DatadogIntegrationData: datadogIntegration,
-		// Tells template to manually inject Argo tracking annotations. We only want these for direct sync force push
-		IsArgoSideload: true,
 	}
 
 	appCreateErr := oc.doArgoAppCreation(ctx, templateData, argoIntegration)
@@ -109,10 +87,46 @@ func (oc *OctantConnection) pushArgoApp(ctx context.Context, namespace, name str
 	return nil
 }
 
-func (oc *OctantConnection) doArgoAppSync(ctx context.Context, templateData ArgoTemplateData, argoIntegration *integration.ArgoCDIntegrationData, name string) error {
-	manifests, err := oc.renderSyncManifests(&templateData)
+func (oc *OctantConnection) createTemplateData(ctx context.Context, namespace string, name string, connection OctantConnectionData) (*ArgoTemplateData, error) {
+	if len(connection.Destinations) != 1 {
+		// TODO: Implement multiple destination handling and handling of non-dd integrations
+		return nil, errors.New("pushing argo application to multiple destinations is currently unsupported")
+	}
+	var datadogIntegration *integration.DataDogIntegrationData
+	for _, destination := range connection.Destinations {
+		switch destination.DestinationType {
+		case "datadog":
+			foundDDIntegration, getDDIntErr := oc.datadogClient.GetIntegrationByName(ctx, namespace, destination.IntegrationName)
+			if getDDIntErr != nil {
+				return nil, getDDIntErr
+			}
+			datadogIntegration = foundDDIntegration
+		default:
+			return nil, fmt.Errorf("unknown destination type: %s", destination.DestinationType)
+		}
+	}
+
+	templateData := ArgoTemplateData{
+		AppName:                name,
+		Namespace:              namespace,
+		ConnectionData:         connection,
+		DatadogIntegrationData: datadogIntegration,
+		ValidatorEnabled:       connection.Deployment.Type == ArgoSideloadDeploymentType,
+		// Tells template to manually inject Argo tracking annotations. We only want these for direct sync force push
+		IsArgoSideload: true,
+	}
+	return &templateData, nil
+}
+
+func (oc *OctantConnection) doArgoAppSync(ctx context.Context, templateData *ArgoTemplateData, argoIntegration *integration.ArgoCDIntegrationData, name string) error {
+	manifests, err := oc.renderSyncManifests(templateData, JSONOutputFormat)
 	if err != nil {
 		return err
+	}
+
+	var manifestsSlice []string
+	for _, manifest := range *manifests {
+		manifestsSlice = append(manifestsSlice, string(manifest))
 	}
 
 	syncPayload := map[string]any{
@@ -124,7 +138,7 @@ func (oc *OctantConnection) doArgoAppSync(ctx context.Context, templateData Argo
 				"force": false,
 			},
 		},
-		"manifests": manifests,
+		"manifests": manifestsSlice,
 	}
 	syncPayloadJSON, err := json.Marshal(syncPayload)
 	if err != nil {
@@ -150,8 +164,8 @@ func (oc *OctantConnection) doArgoAppSync(ctx context.Context, templateData Argo
 	return nil
 }
 
-func (oc *OctantConnection) doArgoAppCreation(ctx context.Context, templateData ArgoTemplateData, argoIntegration *integration.ArgoCDIntegrationData) error {
-	appJSON, err := oc.renderArgoAppManifest(&templateData)
+func (oc *OctantConnection) doArgoAppCreation(ctx context.Context, templateData *ArgoTemplateData, argoIntegration *integration.ArgoCDIntegrationData) error {
+	appJSON, err := oc.renderArgoAppManifest(templateData, JSONOutputFormat)
 	if err != nil {
 		return err
 	}

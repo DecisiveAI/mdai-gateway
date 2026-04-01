@@ -67,6 +67,47 @@ func (oc *OctantConnection) GetConnectionByName(ctx context.Context, namespace, 
 	return &connection, nil
 }
 
+func (oc *OctantConnection) GetConnectionManifestsByName(ctx context.Context, namespace, name string) (*map[string][]byte, error) {
+	configmap, getCmErr := oc.k8sClient.CoreV1().ConfigMaps(namespace).Get(ctx, connectionsConfigmapName, metav1.GetOptions{})
+	if getCmErr != nil {
+		if k8serrors.IsNotFound(getCmErr) {
+			return nil, nil // nolint: nilnil
+		}
+		return nil, fmt.Errorf("failed to get configmap %s: %w", connectionsConfigmapName, getCmErr)
+	}
+
+	if _, ok := configmap.Data[name]; !ok {
+		return nil, nil // nolint: nilnil
+	}
+
+	var connection OctantConnectionData
+	if err := json.Unmarshal([]byte(configmap.Data[name]), &connection); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal connection data: %w", err)
+	}
+
+	// TODO: This should be refactored to a more robust deployment-based task system
+	if connection.Deployment != nil && connection.Deployment.Type == ArgoSideloadDeploymentType {
+		argoApp, err := oc.getArgoAppStatus(ctx, name, namespace, connection)
+		if err != nil {
+			return nil, err
+		}
+
+		connection.Status = argoApp
+	}
+
+	templateData, err := oc.createTemplateData(ctx, namespace, name, connection)
+	if err != nil {
+		return nil, err
+	}
+
+	manifests, err := oc.renderSyncManifests(templateData, YAMLOutputFormat)
+	if err != nil {
+		return nil, err
+	}
+
+	return manifests, nil
+}
+
 func (oc *OctantConnection) SaveConnection(ctx context.Context, connection OctantConnectionData, namespace, connectionName string) error {
 	jsonData, err := json.Marshal(connection)
 	if err != nil {
