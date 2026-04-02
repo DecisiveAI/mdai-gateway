@@ -69,7 +69,7 @@ func (oc *OctantConnection) GetConnectionByName(ctx context.Context, namespace, 
 }
 
 func (oc *OctantConnection) SaveConnection(ctx context.Context, connection OctantConnectionData, namespace, connectionName string) error {
-	if !slices.Contains(validDeploymentTypes, connection.Deployment.Type) {
+	if !slices.Contains(([]DeploymentType{ArgoManifestsDeploymentType, ArgoSideloadDeploymentType}), connection.Deployment.Type) {
 		return fmt.Errorf("invalid deployment type: %s", connection.Deployment.Type)
 	}
 	jsonData, err := json.Marshal(connection)

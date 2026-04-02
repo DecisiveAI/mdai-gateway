@@ -15,8 +15,6 @@ import (
 	"go.uber.org/zap"
 )
 
-var validManifestOutputFormats = []connection.ManifestOutputFormat{connection.YAMLOutputFormat, connection.JSONOutputFormat}
-
 type ConnectionsHandler struct {
 	octantConnection connection.Connection[connection.OctantConnectionData]
 	k8sNamespace     string
@@ -63,7 +61,7 @@ func (ch *ConnectionsHandler) GenerateManifestsForGivenConnection() http.Handler
 		connectionName := req.PathValue("connectionName")
 		formatStr := req.PathValue("format")
 		format := connection.ManifestOutputFormat(formatStr)
-		if !slices.Contains(validManifestOutputFormats, format) {
+		if !slices.Contains(([]connection.ManifestOutputFormat{connection.YAMLOutputFormat, connection.JSONOutputFormat}), format) {
 			http.Error(w, fmt.Sprintf("invalid format %s, expected yaml or json", format), http.StatusBadRequest)
 			return
 		}
@@ -86,11 +84,11 @@ func (ch *ConnectionsHandler) GenerateManifestsForGivenConnection() http.Handler
 	}
 }
 
-func GenerateManifestZipResponse(w http.ResponseWriter, manifestsMap *map[string][]byte, ch *ConnectionsHandler, connectionName string) {
+func GenerateManifestZipResponse(w http.ResponseWriter, manifestsMap map[string][]byte, ch *ConnectionsHandler, connectionName string) {
 	var buf bytes.Buffer
 	zipWriter := zip.NewWriter(&buf)
 
-	for filename, content := range *manifestsMap {
+	for filename, content := range manifestsMap {
 		fWriter, err := zipWriter.Create(filename)
 		if err != nil {
 			ch.logger.Error("failed to create file in zip archive", zap.Error(err), zap.String("filename", filename))

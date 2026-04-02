@@ -62,7 +62,7 @@ func TestRenderManifestFormats(t *testing.T) {
 			}
 
 			for _, file := range expectedFiles {
-				bytes, exists := (*manifests)[file]
+				bytes, exists := (manifests)[file]
 				require.True(t, exists, "Expected file %s to exist in map", file)
 
 				// STRICT FORMAT ENFORCEMENT
@@ -119,7 +119,7 @@ func TestRenderSecretManifest(t *testing.T) {
 
 		manifests, err := renderCollectorDeploymentManifests(&templateData, YAMLOutputFormat)
 		require.NoError(t, err)
-		secretBytes := (*manifests)["secret.yaml"]
+		secretBytes := (manifests)["secret.yaml"]
 
 		var secret map[string]any
 		require.NoError(t, yaml.Unmarshal(secretBytes, &secret))
@@ -146,7 +146,7 @@ func TestRenderSecretManifest(t *testing.T) {
 
 		manifests, err := renderCollectorDeploymentManifests(&templateData, YAMLOutputFormat)
 		require.NoError(t, err)
-		secretBytes := (*manifests)["secret.yaml"]
+		secretBytes := (manifests)["secret.yaml"]
 
 		var secret map[string]any
 		require.NoError(t, yaml.Unmarshal(secretBytes, &secret))
@@ -180,7 +180,7 @@ func TestRenderCollectorManifest(t *testing.T) {
 
 		manifests, err := renderCollectorDeploymentManifests(&templateData, YAMLOutputFormat)
 		require.NoError(t, err)
-		collectorBytes := (*manifests)["collector.yaml"]
+		collectorBytes := (manifests)["collector.yaml"]
 
 		var otel map[string]any
 		require.NoError(t, yaml.Unmarshal(collectorBytes, &otel))
@@ -220,7 +220,7 @@ func TestRenderCollectorManifest(t *testing.T) {
 
 		manifests, err := renderCollectorDeploymentManifests(&templateData, YAMLOutputFormat)
 		require.NoError(t, err)
-		collectorBytes := (*manifests)["collector.yaml"]
+		collectorBytes := (manifests)["collector.yaml"]
 
 		var otel map[string]any
 		require.NoError(t, yaml.Unmarshal(collectorBytes, &otel))
@@ -263,7 +263,7 @@ func TestRenderValidatorManifest(t *testing.T) {
 
 		manifests, err := renderCollectorDeploymentManifests(&templateData, YAMLOutputFormat)
 		require.NoError(t, err)
-		validatorBytes := (*manifests)["validator.yaml"]
+		validatorBytes := (manifests)["validator.yaml"]
 
 		var validator map[string]any
 		require.NoError(t, yaml.Unmarshal(validatorBytes, &validator))
@@ -295,7 +295,7 @@ func TestRenderValidatorManifest(t *testing.T) {
 
 		manifests, err := renderCollectorDeploymentManifests(&templateData, YAMLOutputFormat)
 		require.NoError(t, err)
-		validatorBytes := (*manifests)["validator.yaml"]
+		validatorBytes := (manifests)["validator.yaml"]
 
 		var validator map[string]any
 		require.NoError(t, yaml.Unmarshal(validatorBytes, &validator))
@@ -330,7 +330,7 @@ func TestCreateExportableArgoManifests(t *testing.T) {
 	manifests, err := CreateExportableArgoManifests("test-namespace", "test-app", connection, YAMLOutputFormat)
 	require.NoError(t, err)
 
-	secretBytes, exists := (*manifests)["secret.yaml"]
+	secretBytes, exists := (manifests)["secret.yaml"]
 	require.True(t, exists, "Exportable secret manifest missing")
 
 	var secret map[string]any

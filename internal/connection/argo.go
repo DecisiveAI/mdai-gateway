@@ -96,7 +96,7 @@ func (oc *OctantConnection) doArgoAppSync(ctx context.Context, templateData *Arg
 	}
 
 	var manifestsSlice []string
-	for _, manifest := range *manifests {
+	for _, manifest := range manifests {
 		manifestsSlice = append(manifestsSlice, string(manifest))
 	}
 

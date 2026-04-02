@@ -71,7 +71,7 @@ func (oc *OctantConnection) createTemplateData(ctx context.Context, namespace st
 	return &templateData, nil
 }
 
-func CreateExportableArgoManifests(namespace string, name string, connection OctantConnectionData, format ManifestOutputFormat) (*map[string][]byte, error) {
+func CreateExportableArgoManifests(namespace string, name string, connection OctantConnectionData, format ManifestOutputFormat) (map[string][]byte, error) {
 	templateData, err := CreateExportableTemplateData(namespace, name, connection)
 	if err != nil {
 		return nil, err
@@ -131,7 +131,7 @@ func renderArgoAppManifest(templateData *ArgoTemplateData, outputFormat Manifest
 	return renderedYaml.Bytes(), nil
 }
 
-func renderCollectorDeploymentManifests(templateData *ArgoTemplateData, outputFormat ManifestOutputFormat) (*map[string][]byte, error) {
+func renderCollectorDeploymentManifests(templateData *ArgoTemplateData, outputFormat ManifestOutputFormat) (map[string][]byte, error) {
 	if outputFormat == "" {
 		return nil, errors.New("no output format specified")
 	}
@@ -144,12 +144,12 @@ func renderCollectorDeploymentManifests(templateData *ArgoTemplateData, outputFo
 	} {
 		appManifestTemplate, err := template.New(templateName).Parse(templateString)
 		if err != nil {
-			return &manifests, err
+			return manifests, err
 		}
 
 		var renderedYaml bytes.Buffer
 		if templateErr := appManifestTemplate.Execute(&renderedYaml, templateData); templateErr != nil {
-			return &manifests, templateErr
+			return manifests, templateErr
 		}
 
 		filename := fmt.Sprintf("%s.%s", templateName, outputFormat)
@@ -159,14 +159,14 @@ func renderCollectorDeploymentManifests(templateData *ArgoTemplateData, outputFo
 		case JSONOutputFormat:
 			renderedJSON, err := yaml.YAMLToJSON(renderedYaml.Bytes())
 			if err != nil {
-				return &manifests, err
+				return manifests, err
 			}
 
 			manifests[filename] = renderedJSON
 		default:
-			return &manifests, errors.New("unknown output format")
+			return manifests, errors.New("unknown output format")
 		}
 	}
 
-	return &manifests, nil
+	return manifests, nil
 }

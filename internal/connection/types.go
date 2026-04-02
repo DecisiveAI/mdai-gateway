@@ -20,8 +20,6 @@ const (
 	ArgoManifestsDeploymentType DeploymentType = "argocd-manifests"
 )
 
-var validDeploymentTypes = []DeploymentType{ArgoManifestsDeploymentType, ArgoSideloadDeploymentType}
-
 type OctantConnectionDestination struct {
 	DestinationType string `json:"type"`
 	IntegrationName string `json:"integrationName"`
