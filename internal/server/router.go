@@ -75,7 +75,7 @@ func NewRouter(ctx context.Context, deps HandlerDeps) *http.ServeMux {
 	connectionsRouter := http.NewServeMux()
 	connectionsRouter.Handle("GET /{connectionName}", connectionsHandler.GetConnectionByName(ctx))
 	connectionsRouter.Handle("PUT /{connectionName}", connectionsHandler.SaveConnectionData(ctx))
-	connectionsRouter.Handle("POST /{connectionName}/manifests/{format}", connectionsHandler.GenerateManifestsForGivenConnection(ctx))
+	connectionsRouter.Handle("POST /{connectionName}/manifests/{format}", connectionsHandler.GenerateManifestsForGivenConnection())
 	connectionsRouter.Handle("DELETE /{connectionName}", connectionsHandler.DeleteConnectionByName(ctx))
 
 	mainRouter.Handle("/connections/", http.StripPrefix("/connections", connectionsRouter))

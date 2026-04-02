@@ -1,10 +1,10 @@
 package connection
 
 import (
+	"encoding/json"
 	"fmt"
 	"testing"
 
-	"encoding/json"
 	"github.com/mydecisive/mdai-gateway/internal/integration"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

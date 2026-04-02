@@ -27,15 +27,15 @@ type mockArgoClient struct {
 	Err             error
 }
 
-func (m *mockArgoClient) GetIntegrations(ctx context.Context, namespace string) (map[string]integration.ArgoCDIntegrationData, error) {
+func (*mockArgoClient) GetIntegrations(ctx context.Context, namespace string) (map[string]integration.ArgoCDIntegrationData, error) {
 	panic("implement me")
 }
 
-func (m *mockArgoClient) SetIntegration(ctx context.Context, namespace, integrationName string, integrationData integration.ArgoCDIntegrationData) error {
+func (*mockArgoClient) SetIntegration(ctx context.Context, namespace, integrationName string, integrationData integration.ArgoCDIntegrationData) error {
 	panic("implement me")
 }
 
-func (m *mockArgoClient) DeleteIntegration(ctx context.Context, namespace, integrationName string) error {
+func (*mockArgoClient) DeleteIntegration(ctx context.Context, namespace, integrationName string) error {
 	panic("implement me")
 }
 
@@ -48,15 +48,15 @@ type mockDatadogClient struct {
 	Err             error
 }
 
-func (m *mockDatadogClient) GetIntegrations(ctx context.Context, namespace string) (map[string]integration.DataDogIntegrationData, error) {
+func (*mockDatadogClient) GetIntegrations(ctx context.Context, namespace string) (map[string]integration.DataDogIntegrationData, error) {
 	panic("implement me")
 }
 
-func (m *mockDatadogClient) SetIntegration(ctx context.Context, namespace, integrationName string, integrationData integration.DataDogIntegrationData) error {
+func (*mockDatadogClient) SetIntegration(ctx context.Context, namespace, integrationName string, integrationData integration.DataDogIntegrationData) error {
 	panic("implement me")
 }
 
-func (m *mockDatadogClient) DeleteIntegration(ctx context.Context, namespace, integrationName string) error {
+func (*mockDatadogClient) DeleteIntegration(ctx context.Context, namespace, integrationName string) error {
 	panic("implement me")
 }
 

@@ -6,13 +6,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/mydecisive/mdai-gateway/internal/connection"
-	"github.com/mydecisive/mdai-gateway/internal/httputil"
-	"go.uber.org/zap"
 	"net/http"
 	"slices"
 	"time"
+
+	"github.com/mydecisive/mdai-gateway/internal/connection"
+	"github.com/mydecisive/mdai-gateway/internal/httputil"
+	"go.uber.org/zap"
 )
+
+var validManifestOutputFormats = []connection.ManifestOutputFormat{connection.YAMLOutputFormat, connection.JSONOutputFormat}
 
 type ConnectionsHandler struct {
 	octantConnection connection.Connection[connection.OctantConnectionData]
@@ -49,7 +52,7 @@ func (ch *ConnectionsHandler) GetConnectionByName(ctx context.Context) http.Hand
 	}
 }
 
-func (ch *ConnectionsHandler) GenerateManifestsForGivenConnection(ctx context.Context) http.HandlerFunc {
+func (ch *ConnectionsHandler) GenerateManifestsForGivenConnection() http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		defer func() {
 			if err := req.Body.Close(); err != nil {
@@ -60,7 +63,7 @@ func (ch *ConnectionsHandler) GenerateManifestsForGivenConnection(ctx context.Co
 		connectionName := req.PathValue("connectionName")
 		formatStr := req.PathValue("format")
 		format := connection.ManifestOutputFormat(formatStr)
-		if !slices.Contains(connection.ValidManifestOutputFormats, format) {
+		if !slices.Contains(validManifestOutputFormats, format) {
 			http.Error(w, fmt.Sprintf("invalid format %s, expected yaml or json", format), http.StatusBadRequest)
 			return
 		}

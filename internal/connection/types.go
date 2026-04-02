@@ -15,8 +15,10 @@ type DeploymentType string
 // type DeploymentTask func(ctx context.Context, name string, namespace string, connection OctantConnectionData) (any, error)
 // type DeploymentTaskSet map[string][]DeploymentTask.
 
-const ArgoSideloadDeploymentType DeploymentType = "argocd-sideload"
-const ArgoManifestsDeploymentType DeploymentType = "argocd-manifests"
+const (
+	ArgoSideloadDeploymentType  DeploymentType = "argocd-sideload"
+	ArgoManifestsDeploymentType DeploymentType = "argocd-manifests"
+)
 
 var validDeploymentTypes = []DeploymentType{ArgoManifestsDeploymentType, ArgoSideloadDeploymentType}
 

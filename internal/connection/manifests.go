@@ -40,10 +40,6 @@ const (
 	JSONOutputFormat ManifestOutputFormat = "json"
 )
 
-var (
-	ValidManifestOutputFormats = []ManifestOutputFormat{YAMLOutputFormat, JSONOutputFormat}
-)
-
 func (oc *OctantConnection) createTemplateData(ctx context.Context, namespace string, name string, connection OctantConnectionData) (*ArgoTemplateData, error) {
 	if len(connection.Destinations) != 1 {
 		// TODO: Implement multiple destination handling and handling of non-dd integrations
@@ -83,8 +79,8 @@ func CreateExportableArgoManifests(namespace string, name string, connection Oct
 	return renderCollectorDeploymentManifests(templateData, format)
 }
 
-// TODO: Combine these template data methods instead of copypasta
-// CreateExportableTemplateData is like the other function but doesn't inject secrets
+// CreateExportableTemplateData TODO: Combine these template data methods instead of copypasta
+// CreateExportableTemplateData is like the other function but doesn't inject secrets.
 func CreateExportableTemplateData(namespace string, name string, connection OctantConnectionData) (*ArgoTemplateData, error) {
 	if len(connection.Destinations) != 1 {
 		// TODO: Implement multiple destination handling and handling of non-dd integrations
@@ -150,6 +146,7 @@ func renderCollectorDeploymentManifests(templateData *ArgoTemplateData, outputFo
 		if err != nil {
 			return &manifests, err
 		}
+
 		var renderedYaml bytes.Buffer
 		if templateErr := appManifestTemplate.Execute(&renderedYaml, templateData); templateErr != nil {
 			return &manifests, templateErr
@@ -166,8 +163,9 @@ func renderCollectorDeploymentManifests(templateData *ArgoTemplateData, outputFo
 			}
 
 			manifests[filename] = renderedJSON
+		default:
+			return &manifests, errors.New("unknown output format")
 		}
-
 	}
 
 	return &manifests, nil

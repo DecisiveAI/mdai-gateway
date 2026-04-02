@@ -126,7 +126,7 @@ func TestGenerateManifestsForGivenConnection(t *testing.T) {
 		assert.Equal(t, http.StatusOK, resp.Code)
 		assert.Equal(t, "application/zip", resp.Header().Get("Content-Type"))
 		assert.Contains(t, resp.Header().Get("Content-Disposition"), `attachment; filename="coolConnection-manifests-`)
-		assert.Greater(t, resp.Body.Len(), 0)
+		assert.Positive(t, resp.Body.Len())
 	})
 }
 
@@ -266,7 +266,7 @@ func setupConnectionsRouter(t *testing.T, theConnection connection.Connection[co
 
 	mainRouter := http.NewServeMux()
 	mainRouter.Handle("/getConnection/{connectionName}", connectionsHandler.GetConnectionByName(t.Context()))
-	mainRouter.Handle("/generateManifests/{connectionName}/{format}", connectionsHandler.GenerateManifestsForGivenConnection(t.Context()))
+	mainRouter.Handle("/generateManifests/{connectionName}/{format}", connectionsHandler.GenerateManifestsForGivenConnection())
 	mainRouter.Handle("/saveConnection/{connectionName}", connectionsHandler.SaveConnectionData(t.Context()))
 	mainRouter.Handle("/deleteConnection/{connectionName}", connectionsHandler.DeleteConnectionByName(t.Context()))
 	return mainRouter
