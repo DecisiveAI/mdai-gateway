@@ -72,7 +72,7 @@ func (ch *ConnectionsHandler) GenerateManifestsForGivenConnection(ctx context.Co
 			return
 		}
 
-		manifestsMap, err := connection.CreateExportableArgoManifests(ch.k8sNamespace, connectionName, theConnection, connection.YAMLOutputFormat)
+		manifestsMap, err := connection.CreateExportableArgoManifests(ch.k8sNamespace, connectionName, theConnection, format)
 		if err != nil {
 			ch.logger.Error("failed to update connection", zap.Error(err))
 			http.Error(w, "Failed to update connection", http.StatusInternalServerError)
