@@ -67,6 +67,69 @@ func TestGetConnectionByName(t *testing.T) {
 	})
 }
 
+func TestGenerateManifestsForGivenConnection(t *testing.T) {
+	t.Parallel()
+
+	t.Run("invalid format parameter", func(t *testing.T) {
+		t.Parallel()
+
+		connectionsMock := connectionmock.NewMockConnection[connection.OctantConnectionData](t)
+		validPayload, err := json.Marshal(connection.OctantConnectionData{})
+		require.NoError(t, err)
+
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/generateManifests/coolConnection/xml", bytes.NewBuffer(validPayload))
+		resp := httptest.NewRecorder()
+
+		router := setupConnectionsRouter(t, connectionsMock)
+		router.ServeHTTP(resp, req)
+
+		assert.Equal(t, http.StatusBadRequest, resp.Code)
+		assert.Contains(t, resp.Body.String(), "invalid format xml")
+	})
+
+	t.Run("invalid request payload", func(t *testing.T) {
+		t.Parallel()
+
+		connectionsMock := connectionmock.NewMockConnection[connection.OctantConnectionData](t)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/generateManifests/coolConnection/yaml", bytes.NewBufferString("invalid json"))
+		resp := httptest.NewRecorder()
+
+		router := setupConnectionsRouter(t, connectionsMock)
+		router.ServeHTTP(resp, req)
+
+		assert.Equal(t, http.StatusBadRequest, resp.Code)
+		assert.Contains(t, resp.Body.String(), "request payload was invalid")
+	})
+
+	t.Run("happy path", func(t *testing.T) {
+		t.Parallel()
+
+		connectionsMock := connectionmock.NewMockConnection[connection.OctantConnectionData](t)
+
+		goodConnection := connection.OctantConnectionData{
+			Destinations: []connection.OctantConnectionDestination{
+				{DestinationType: "datadog", IntegrationName: "test-dd"},
+			},
+			Deployment: &connection.Deployment{
+				Type: connection.ArgoManifestsDeploymentType,
+			},
+		}
+		payload, err := json.Marshal(goodConnection)
+		require.NoError(t, err)
+
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/generateManifests/coolConnection/yaml", bytes.NewBuffer(payload))
+		resp := httptest.NewRecorder()
+
+		router := setupConnectionsRouter(t, connectionsMock)
+		router.ServeHTTP(resp, req)
+
+		assert.Equal(t, http.StatusOK, resp.Code)
+		assert.Equal(t, "application/zip", resp.Header().Get("Content-Type"))
+		assert.Contains(t, resp.Header().Get("Content-Disposition"), `attachment; filename="coolConnection-manifests-`)
+		assert.Greater(t, resp.Body.Len(), 0)
+	})
+}
+
 func TestSaveConnectionData(t *testing.T) {
 	t.Parallel()
 
@@ -203,6 +266,7 @@ func setupConnectionsRouter(t *testing.T, theConnection connection.Connection[co
 
 	mainRouter := http.NewServeMux()
 	mainRouter.Handle("/getConnection/{connectionName}", connectionsHandler.GetConnectionByName(t.Context()))
+	mainRouter.Handle("/generateManifests/{connectionName}/{format}", connectionsHandler.GenerateManifestsForGivenConnection(t.Context()))
 	mainRouter.Handle("/saveConnection/{connectionName}", connectionsHandler.SaveConnectionData(t.Context()))
 	mainRouter.Handle("/deleteConnection/{connectionName}", connectionsHandler.DeleteConnectionByName(t.Context()))
 	return mainRouter
