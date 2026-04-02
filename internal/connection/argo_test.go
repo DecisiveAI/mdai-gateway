@@ -115,7 +115,7 @@ func TestPushArgoApp(t *testing.T) {
 				{DestinationType: "datadog", IntegrationName: "dd-1"},
 				{DestinationType: "datadog", IntegrationName: "dd-2"},
 			},
-			expectedErr: "pushing argo application to multiple destinations is currently unsupported",
+			expectedErr: "pushing argo application with multiple destinations is currently unsupported",
 		},
 		{
 			name: "unknown destination type",

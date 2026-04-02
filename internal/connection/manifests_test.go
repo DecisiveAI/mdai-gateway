@@ -34,14 +34,12 @@ func getNestedField(m map[string]any, keys ...string) (any, bool) {
 }
 
 func TestRenderArgoAppManifest(t *testing.T) {
-	oc := &OctantConnection{}
-
 	templateData := ArgoTemplateData{
 		AppName:   "test-app",
 		Namespace: "team-a-namespace",
 	}
 
-	result, err := oc.RenderArgoAppManifest(&templateData, JSONOutputFormat)
+	result, err := renderArgoAppManifest(&templateData, JSONOutputFormat)
 	require.NoError(t, err)
 	require.NotEmpty(t, result)
 
@@ -61,8 +59,6 @@ func TestRenderArgoAppManifest(t *testing.T) {
 }
 
 func TestRenderSyncManifests(t *testing.T) {
-	oc := &OctantConnection{}
-
 	tests := []struct {
 		name         string
 		templateData ArgoTemplateData
@@ -113,7 +109,7 @@ func TestRenderSyncManifests(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			manifests, err := oc.RenderCollectorDeploymentManifests(&tt.templateData, JSONOutputFormat)
+			manifests, err := renderCollectorDeploymentManifests(&tt.templateData, JSONOutputFormat)
 			require.NoError(t, err)
 
 			parsedManifests := make(map[string]map[string]any)
