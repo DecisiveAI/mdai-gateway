@@ -73,6 +73,9 @@ func (oc *OctantConnection) pushArgoApp(ctx context.Context, namespace, name str
 	if getArgoIntErr != nil {
 		return getArgoIntErr
 	}
+	if argoIntegration == nil {
+		return fmt.Errorf("no ArgoCD integration found with name %s", connection.Deployment.IntegrationName)
+	}
 
 	appCreateErr := oc.doArgoAppCreation(ctx, templateData, argoIntegration)
 	if appCreateErr != nil {

@@ -7,7 +7,9 @@ spec:
   collectorRef:
     name: {{ .AppName }}
   signals:
-    {{ .ConnectionData.TelemetryTypes }}
+    {{- range .ConnectionData.TelemetryTypes }}
+    - {{ . }}
+    {{ end }}
   shadowCollector:
     enabled: true
   ingressCapture:

@@ -1,7 +1,6 @@
 package connection
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/mydecisive/mdai-gateway/internal/integration"
@@ -17,6 +16,7 @@ type DeploymentType string
 // type DeploymentTaskSet map[string][]DeploymentTask.
 
 const ArgoSideloadDeploymentType DeploymentType = "argocd-sideload"
+const ArgoManifestsDeploymentType DeploymentType = "argocd-manifests"
 
 var validDeploymentTypes = []DeploymentType{ArgoManifestsDeploymentType, ArgoSideloadDeploymentType}
 
@@ -38,18 +38,11 @@ type Deployment struct {
 	IntegrationName string         `json:"integrationName"`
 }
 
-type ArgoIntegrationClient interface {
-	GetIntegrationByName(ctx context.Context, namespace, name string) (*integration.ArgoCDIntegrationData, error)
-}
-
-type DatadogIntegrationClient interface {
-	GetIntegrationByName(ctx context.Context, namespace, name string) (*integration.DataDogIntegrationData, error)
-}
 type OctantConnection struct {
 	httpClient    *http.Client
 	k8sClient     kubernetes.Interface
-	argoClient    ArgoIntegrationClient
-	datadogClient DatadogIntegrationClient
+	argoClient    integration.Integration[integration.ArgoCDIntegrationData]
+	datadogClient integration.Integration[integration.DataDogIntegrationData]
 	// TODO: Refactor connection operations to use tasksets/plans instead of if-argo-then
 	// taskSets      map[DeploymentType]DeploymentTaskSet
 }
