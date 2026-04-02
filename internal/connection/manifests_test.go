@@ -41,7 +41,7 @@ func TestRenderArgoAppManifest(t *testing.T) {
 		Namespace: "team-a-namespace",
 	}
 
-	result, err := oc.renderArgoAppManifest(&templateData, JSONOutputFormat)
+	result, err := oc.RenderArgoAppManifest(&templateData, JSONOutputFormat)
 	require.NoError(t, err)
 	require.NotEmpty(t, result)
 
@@ -113,7 +113,7 @@ func TestRenderSyncManifests(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			manifests, err := oc.renderSyncManifests(&tt.templateData, JSONOutputFormat)
+			manifests, err := oc.RenderCollectorDeploymentManifests(&tt.templateData, JSONOutputFormat)
 			require.NoError(t, err)
 
 			parsedManifests := make(map[string]map[string]any)

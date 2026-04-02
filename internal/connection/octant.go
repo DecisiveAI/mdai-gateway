@@ -101,7 +101,7 @@ func (oc *OctantConnection) GetConnectionManifestsByName(ctx context.Context, na
 		return nil, err
 	}
 
-	manifests, err := oc.renderSyncManifests(templateData, YAMLOutputFormat)
+	manifests, err := renderCollectorDeploymentManifests(templateData, YAMLOutputFormat)
 	if err != nil {
 		return nil, err
 	}

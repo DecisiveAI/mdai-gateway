@@ -2,6 +2,7 @@ package connection
 
 import (
 	"bytes"
+	"context"
 	_ "embed"
 	"errors"
 	"fmt"
@@ -39,7 +40,74 @@ const (
 	JSONOutputFormat ManifestOutputFormat = "json"
 )
 
-func (*OctantConnection) renderArgoAppManifest(templateData *ArgoTemplateData, outputFormat ManifestOutputFormat) ([]byte, error) {
+var (
+	ValidManifestOutputFormats = []ManifestOutputFormat{YAMLOutputFormat, JSONOutputFormat}
+)
+
+func (oc *OctantConnection) createTemplateData(ctx context.Context, namespace string, name string, connection OctantConnectionData) (*ArgoTemplateData, error) {
+	if len(connection.Destinations) != 1 {
+		// TODO: Implement multiple destination handling and handling of non-dd integrations
+		return nil, errors.New("pushing argo application with multiple destinations is currently unsupported")
+	}
+	var datadogIntegration *integration.DataDogIntegrationData
+	for _, destination := range connection.Destinations {
+		switch destination.DestinationType {
+		case "datadog":
+			foundDDIntegration, getDDIntErr := oc.datadogClient.GetIntegrationByName(ctx, namespace, destination.IntegrationName)
+			if getDDIntErr != nil {
+				return nil, getDDIntErr
+			}
+			datadogIntegration = foundDDIntegration
+		default:
+			return nil, fmt.Errorf("unknown destination type: %s", destination.DestinationType)
+		}
+	}
+
+	templateData := ArgoTemplateData{
+		AppName:                name,
+		Namespace:              namespace,
+		ConnectionData:         connection,
+		DatadogIntegrationData: datadogIntegration,
+		ValidatorEnabled:       true,
+		// Tells template to manually inject Argo tracking annotations. We only want these for direct sync force push
+		IsArgoSideload: connection.Deployment.Type == ArgoSideloadDeploymentType,
+	}
+	return &templateData, nil
+}
+
+func CreateExportableArgoManifests(namespace string, name string, connection OctantConnectionData, format ManifestOutputFormat) (*map[string][]byte, error) {
+	templateData, err := CreateExportableTemplateData(namespace, name, connection)
+	if err != nil {
+		return nil, err
+	}
+	return renderCollectorDeploymentManifests(templateData, format)
+}
+
+// TODO: Combine these template data methods instead of copypasta
+// CreateExportableTemplateData is like the other function but doesn't inject secrets
+func CreateExportableTemplateData(namespace string, name string, connection OctantConnectionData) (*ArgoTemplateData, error) {
+	if len(connection.Destinations) != 1 {
+		// TODO: Implement multiple destination handling and handling of non-dd integrations
+		return nil, errors.New("pushing argo application with multiple destinations is currently unsupported")
+	}
+	datadogIntegration := integration.DataDogIntegrationData{
+		APIKey: "<YOUR_API_KEY>",
+		DDUrl:  "<YOUR_DD_URL>",
+	}
+
+	templateData := ArgoTemplateData{
+		AppName:                name,
+		Namespace:              namespace,
+		ConnectionData:         connection,
+		DatadogIntegrationData: &datadogIntegration,
+		ValidatorEnabled:       true,
+		// Tells template to manually inject Argo tracking annotations. We only want these for direct sync force push
+		IsArgoSideload: connection.Deployment.Type == ArgoSideloadDeploymentType,
+	}
+	return &templateData, nil
+}
+
+func renderArgoAppManifest(templateData *ArgoTemplateData, outputFormat ManifestOutputFormat) ([]byte, error) {
 	if outputFormat == "" {
 		return []byte{}, errors.New("no output format specified")
 	}
@@ -67,7 +135,7 @@ func (*OctantConnection) renderArgoAppManifest(templateData *ArgoTemplateData, o
 	return renderedYaml.Bytes(), nil
 }
 
-func (*OctantConnection) renderSyncManifests(templateData *ArgoTemplateData, outputFormat ManifestOutputFormat) (*map[string][]byte, error) {
+func renderCollectorDeploymentManifests(templateData *ArgoTemplateData, outputFormat ManifestOutputFormat) (*map[string][]byte, error) {
 	if outputFormat == "" {
 		return nil, errors.New("no output format specified")
 	}
