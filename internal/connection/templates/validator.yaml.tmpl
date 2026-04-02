@@ -6,6 +6,7 @@ spec:
   enabled: true
   collectorRef:
     name: {{ .AppName }}
+  validator: {}
   signals:
     {{- range .ConnectionData.TelemetryTypes }}
     - {{ . }}
