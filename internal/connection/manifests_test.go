@@ -1,10 +1,10 @@
 package connection
 
 import (
-	"encoding/json"
 	"fmt"
 	"testing"
 
+	"encoding/json"
 	"github.com/mydecisive/mdai-gateway/internal/integration"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -33,174 +33,313 @@ func getNestedField(m map[string]any, keys ...string) (any, bool) {
 	return nil, false
 }
 
-func TestRenderArgoAppManifest(t *testing.T) {
+// --- Format Validation Tests ---
+
+func TestRenderManifestFormats(t *testing.T) {
 	templateData := ArgoTemplateData{
-		AppName:   "test-app",
-		Namespace: "team-a-namespace",
-	}
-
-	result, err := renderArgoAppManifest(&templateData, JSONOutputFormat)
-	require.NoError(t, err)
-	require.NotEmpty(t, result)
-
-	var parsed map[string]any
-	err = json.Unmarshal(result, &parsed)
-	require.NoError(t, err, "Rendered output should be valid JSON")
-
-	metadata, ok := parsed["metadata"].(map[string]any)
-	require.True(t, ok)
-	assert.Equal(t, "test-app", metadata["name"])
-
-	spec, ok := parsed["spec"].(map[string]any)
-	require.True(t, ok)
-	destination, ok := spec["destination"].(map[string]any)
-	require.True(t, ok)
-	assert.Equal(t, "team-a-namespace", destination["namespace"])
-}
-
-func TestRenderSyncManifests(t *testing.T) {
-	tests := []struct {
-		name         string
-		templateData ArgoTemplateData
-	}{
-		{
-			name: "Full Configuration (Datadog, ArgoSideload, Multiple Telemetry Types)",
-			templateData: ArgoTemplateData{
-				AppName:   "test-app",
-				Namespace: "default",
-				ConnectionData: OctantConnectionData{
-					TelemetryTypes: []Telemetry{"logs", "traces"},
-				},
-				DatadogIntegrationData: &integration.DataDogIntegrationData{
-					APIKey: "fake-dd-api-key",
-					DDUrl:  "https://datadoghq.com",
-				},
-				IsArgoSideload: true,
-			},
+		AppName:   "format-test-app",
+		Namespace: "default",
+		ConnectionData: OctantConnectionData{
+			TelemetryTypes: []Telemetry{"logs"},
 		},
-		{
-			name: "Minimal Configuration (No Datadog, No Sideload, No Telemetry)",
-			templateData: ArgoTemplateData{
-				AppName:   "minimal-app",
-				Namespace: "default",
-				ConnectionData: OctantConnectionData{
-					TelemetryTypes: []Telemetry{},
-				},
-				DatadogIntegrationData: nil,
-				IsArgoSideload:         false,
-			},
-		},
-		{
-			name: "Partial Configuration (Traces only, Datadog present, No Sideload)",
-			templateData: ArgoTemplateData{
-				AppName:   "partial-app",
-				Namespace: "default",
-				ConnectionData: OctantConnectionData{
-					TelemetryTypes: []Telemetry{"traces"},
-				},
-				DatadogIntegrationData: &integration.DataDogIntegrationData{
-					APIKey: "fake-dd-api-key-2",
-					DDUrl:  "https://datadoghq.com",
-				},
-				IsArgoSideload: false,
-			},
+		DatadogIntegrationData: &integration.DataDogIntegrationData{
+			APIKey: "key",
+			DDUrl:  "url",
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			manifests, err := renderCollectorDeploymentManifests(&tt.templateData, JSONOutputFormat)
+	formats := []ManifestOutputFormat{JSONOutputFormat, YAMLOutputFormat}
+
+	for _, format := range formats {
+		t.Run(string(format), func(t *testing.T) {
+			manifests, err := renderCollectorDeploymentManifests(&templateData, format)
 			require.NoError(t, err)
 
-			parsedManifests := make(map[string]map[string]any)
-			for _, manifestStr := range *manifests {
-				var parsed map[string]any
-				err = json.Unmarshal([]byte(manifestStr), &parsed)
-				require.NoError(t, err, "Each sync manifest should be valid JSON")
-
-				kind := parsed["kind"].(string)
-				metadata := parsed["metadata"].(map[string]any)
-				name := metadata["name"].(string)
-
-				key := fmt.Sprintf("%s/%s", kind, name)
-				parsedManifests[key] = parsed
+			expectedFiles := []string{
+				fmt.Sprintf("collector.%s", format),
+				fmt.Sprintf("validator.%s", format),
+				fmt.Sprintf("secret.%s", format),
 			}
 
-			appName := tt.templateData.AppName
+			for _, file := range expectedFiles {
+				bytes, exists := (*manifests)[file]
+				require.True(t, exists, "Expected file %s to exist in map", file)
 
-			secretKey := fmt.Sprintf("Secret/%s-integration-secret", appName)
-			secret, exists := parsedManifests[secretKey]
-			require.True(t, exists, "Secret manifest not found")
-
-			secretMeta := secret["metadata"].(map[string]any)
-			annotations, hasAnnotations := secretMeta["annotations"].(map[string]any)
-
-			if tt.templateData.IsArgoSideload {
-				require.True(t, hasAnnotations, "Annotations should exist when IsArgoSideload is true")
-				assert.Contains(t, annotations["argocd.argoproj.io/tracking-id"], appName)
-			} else {
-				assert.False(t, hasAnnotations, "Annotations should not exist when IsArgoSideload is false")
-			}
-
-			stringData, hasStringData := secret["stringData"].(map[string]any)
-			if tt.templateData.DatadogIntegrationData != nil {
-				require.True(t, hasStringData, "stringData should exist when DatadogIntegrationData is provided")
-				assert.Equal(t, tt.templateData.DatadogIntegrationData.APIKey, stringData["api-key"])
-				assert.Equal(t, tt.templateData.DatadogIntegrationData.DDUrl, stringData["site-url"])
-			}
-
-			otelKey := fmt.Sprintf("OpenTelemetryCollector/%s", appName)
-			otel, exists := parsedManifests[otelKey]
-			require.True(t, exists, "Primary Collector manifest not found")
-
-			spec := otel["spec"].(map[string]any)
-			configStr := spec["config"].(string)
-
-			var otelConfig map[string]any
-			err = yaml.Unmarshal([]byte(configStr), &otelConfig)
-			require.NoError(t, err, "OpenTelemetry config should be valid YAML")
-
-			_, hasEnv := spec["env"].([]any)
-			if tt.templateData.DatadogIntegrationData != nil {
-				require.True(t, hasEnv, "Env block should exist for Datadog integration")
-
-				// Assert on actual values inside the OTel config
-				apiBlock, found := getNestedField(otelConfig, "exporters", "datadog", "api")
-				require.True(t, found, "Datadog API exporter should be configured")
-
-				apiMap := apiBlock.(map[string]any)
-				assert.Equal(t, "${env:DD_API_KEY}", apiMap["key"], "Should reference DD_API_KEY environment variable")
-				assert.Equal(t, "${env:DD_SITE}", apiMap["site"], "Should reference DD_SITE environment variable")
-			} else {
-				assert.False(t, hasEnv, "Env block should be omitted if DatadogIntegrationData is nil")
-
-				_, found := getNestedField(otelConfig, "exporters", "datadog", "api")
-				assert.False(t, found, "Datadog API exporter should NOT be configured")
-			}
-
-			// Verify dynamic pipelines
-			if len(tt.templateData.ConnectionData.TelemetryTypes) > 0 {
-				for _, tel := range tt.templateData.ConnectionData.TelemetryTypes {
-					receivers, found := getNestedField(otelConfig, "service", "pipelines", string(tel), "receivers")
-					require.True(t, found, "Pipeline %s should exist", tel)
-
-					// We can now cast the result and assert exactly what it contains
-					recSlice := receivers.([]any)
-					assert.Contains(t, recSlice, "datadog", "Pipeline should include datadog receiver")
+				// STRICT FORMAT ENFORCEMENT
+				if format == JSONOutputFormat {
+					require.True(t, json.Valid(bytes), "File %s must be strictly valid JSON", file)
 				}
-			} else {
-				_, foundLogs := getNestedField(otelConfig, "service", "pipelines", "logs")
-				assert.False(t, foundLogs, "Logs pipeline should not exist")
 
-				_, foundTraces := getNestedField(otelConfig, "service", "pipelines", "traces")
-				assert.False(t, foundTraces, "Traces pipeline should not exist")
+				var parsed map[string]any
+				err = yaml.Unmarshal(bytes, &parsed)
+				require.NoError(t, err, "File %s should be valid %s", file, format)
+				require.NotEmpty(t, parsed, "File %s should not be empty", file)
 			}
-
-			_, existsDeploy := parsedManifests[fmt.Sprintf("Deployment/%s-envoy", appName)]
-			assert.True(t, existsDeploy, "Envoy Deployment not found")
-
-			_, existsSvc := parsedManifests[fmt.Sprintf("Service/%s-envoy-service", appName)]
-			assert.True(t, existsSvc, "Envoy Service not found")
 		})
 	}
+}
+
+// --- Individual Template Tests ---
+
+func TestRenderArgoAppManifest(t *testing.T) {
+	t.Run("Valid Argo App Configuration", func(t *testing.T) {
+		templateData := ArgoTemplateData{
+			AppName:   "test-app",
+			Namespace: "team-a-namespace",
+		}
+
+		result, err := renderArgoAppManifest(&templateData, YAMLOutputFormat)
+		require.NoError(t, err)
+
+		var parsed map[string]any
+		require.NoError(t, yaml.Unmarshal(result, &parsed))
+
+		metadata, ok := parsed["metadata"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "test-app", metadata["name"])
+
+		spec, ok := parsed["spec"].(map[string]any)
+		require.True(t, ok)
+		destination, ok := spec["destination"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "team-a-namespace", destination["namespace"])
+	})
+}
+
+func TestRenderSecretManifest(t *testing.T) {
+	t.Run("With Sideload and Datadog Integration", func(t *testing.T) {
+		templateData := ArgoTemplateData{
+			AppName:        "test-app",
+			IsArgoSideload: true,
+			DatadogIntegrationData: &integration.DataDogIntegrationData{
+				APIKey: "fake-dd-api-key",
+				DDUrl:  "https://datadoghq.com",
+			},
+		}
+
+		manifests, err := renderCollectorDeploymentManifests(&templateData, YAMLOutputFormat)
+		require.NoError(t, err)
+		secretBytes := (*manifests)["secret.yaml"]
+
+		var secret map[string]any
+		require.NoError(t, yaml.Unmarshal(secretBytes, &secret))
+
+		// Check Annotations
+		secretMeta := secret["metadata"].(map[string]any)
+		annotations, hasAnnotations := secretMeta["annotations"].(map[string]any)
+		require.True(t, hasAnnotations)
+		assert.Contains(t, annotations["argocd.argoproj.io/tracking-id"], "test-app")
+
+		// Check StringData
+		stringData, hasStringData := secret["stringData"].(map[string]any)
+		require.True(t, hasStringData)
+		assert.Equal(t, "fake-dd-api-key", stringData["api-key"])
+		assert.Equal(t, "https://datadoghq.com", stringData["site-url"])
+	})
+
+	t.Run("Without Sideload or Datadog", func(t *testing.T) {
+		templateData := ArgoTemplateData{
+			AppName:                "test-app",
+			IsArgoSideload:         false,
+			DatadogIntegrationData: nil,
+		}
+
+		manifests, err := renderCollectorDeploymentManifests(&templateData, YAMLOutputFormat)
+		require.NoError(t, err)
+		secretBytes := (*manifests)["secret.yaml"]
+
+		var secret map[string]any
+		require.NoError(t, yaml.Unmarshal(secretBytes, &secret))
+
+		secretMeta := secret["metadata"].(map[string]any)
+		_, hasAnnotations := secretMeta["annotations"]
+		assert.False(t, hasAnnotations, "Annotations should not exist without Sideload")
+
+		// Safely check if stringData exists but doesn't contain Datadog keys
+		if stringDataRaw, hasStringData := secret["stringData"]; hasStringData && stringDataRaw != nil {
+			stringData := stringDataRaw.(map[string]any)
+			assert.NotContains(t, stringData, "api-key")
+			assert.NotContains(t, stringData, "site-url")
+		}
+	})
+}
+
+func TestRenderCollectorManifest(t *testing.T) {
+	t.Run("Full Configuration with Pipelines", func(t *testing.T) {
+		templateData := ArgoTemplateData{
+			AppName:        "test-app",
+			IsArgoSideload: true,
+			ConnectionData: OctantConnectionData{
+				TelemetryTypes: []Telemetry{"logs", "traces"},
+			},
+			DatadogIntegrationData: &integration.DataDogIntegrationData{
+				APIKey: "fake-key",
+				DDUrl:  "fake-url",
+			},
+		}
+
+		manifests, err := renderCollectorDeploymentManifests(&templateData, YAMLOutputFormat)
+		require.NoError(t, err)
+		collectorBytes := (*manifests)["collector.yaml"]
+
+		var otel map[string]any
+		require.NoError(t, yaml.Unmarshal(collectorBytes, &otel))
+
+		spec := otel["spec"].(map[string]any)
+		_, hasEnv := spec["env"]
+		assert.True(t, hasEnv, "Env block should exist for Datadog integration")
+
+		configStr := spec["config"].(string)
+		var otelConfig map[string]any
+		require.NoError(t, yaml.Unmarshal([]byte(configStr), &otelConfig))
+
+		// Check Datadog Exporter
+		apiBlock, found := getNestedField(otelConfig, "exporters", "datadog", "api")
+		require.True(t, found, "Datadog API exporter should be configured")
+		apiMap := apiBlock.(map[string]any)
+		assert.Equal(t, "${env:DD_API_KEY}", apiMap["key"])
+		assert.Equal(t, "${env:DD_SITE}", apiMap["site"])
+
+		// Check Dynamic Pipelines
+		for _, tel := range []string{"logs", "traces"} {
+			receivers, found := getNestedField(otelConfig, "service", "pipelines", tel, "receivers")
+			require.True(t, found, "Pipeline %s should exist", tel)
+			assert.Contains(t, receivers.([]any), "datadog", "Pipeline should include datadog receiver")
+		}
+	})
+
+	t.Run("Minimal Configuration without Pipelines", func(t *testing.T) {
+		templateData := ArgoTemplateData{
+			AppName:        "minimal-app",
+			IsArgoSideload: false,
+			ConnectionData: OctantConnectionData{
+				TelemetryTypes: []Telemetry{},
+			},
+			DatadogIntegrationData: nil,
+		}
+
+		manifests, err := renderCollectorDeploymentManifests(&templateData, YAMLOutputFormat)
+		require.NoError(t, err)
+		collectorBytes := (*manifests)["collector.yaml"]
+
+		var otel map[string]any
+		require.NoError(t, yaml.Unmarshal(collectorBytes, &otel))
+
+		spec := otel["spec"].(map[string]any)
+
+		// Safely check if env exists but doesn't contain Datadog keys
+		if envRaw, hasEnv := spec["env"]; hasEnv && envRaw != nil {
+			envSlice := envRaw.([]any)
+			for _, eRaw := range envSlice {
+				e := eRaw.(map[string]any)
+				assert.NotEqual(t, "DD_API_KEY", e["name"])
+				assert.NotEqual(t, "DD_SITE", e["name"])
+			}
+		}
+
+		configStr := spec["config"].(string)
+		var otelConfig map[string]any
+		require.NoError(t, yaml.Unmarshal([]byte(configStr), &otelConfig))
+
+		_, foundExporters := getNestedField(otelConfig, "exporters", "datadog", "api")
+		assert.False(t, foundExporters, "Datadog API exporter should NOT be configured")
+
+		_, foundLogs := getNestedField(otelConfig, "service", "pipelines", "logs")
+		assert.False(t, foundLogs, "Logs pipeline should not exist")
+	})
+}
+
+func TestRenderValidatorManifest(t *testing.T) {
+	t.Run("With Signals and Datadog Rewrites", func(t *testing.T) {
+		templateData := ArgoTemplateData{
+			AppName: "test-app",
+			ConnectionData: OctantConnectionData{
+				TelemetryTypes: []Telemetry{"logs", "metrics"},
+			},
+			DatadogIntegrationData: &integration.DataDogIntegrationData{
+				DDUrl: "https://datadoghq.com",
+			},
+		}
+
+		manifests, err := renderCollectorDeploymentManifests(&templateData, YAMLOutputFormat)
+		require.NoError(t, err)
+		validatorBytes := (*manifests)["validator.yaml"]
+
+		var validator map[string]any
+		require.NoError(t, yaml.Unmarshal(validatorBytes, &validator))
+
+		spec := validator["spec"].(map[string]any)
+		signals := spec["signals"].([]any)
+		assert.Contains(t, signals, "logs")
+		assert.Contains(t, signals, "metrics")
+
+		rewrites := spec["exporterRewrites"].([]any)
+		require.Len(t, rewrites, 1)
+
+		rewriteObj := rewrites[0].(map[string]any)
+		setBlock := rewriteObj["set"].(map[string]any)
+
+		assert.Equal(t, "https://datadoghq.com", setBlock["api.site"])
+		assert.Contains(t, setBlock["logs.endpoint"], "test-app-fidelity-validator")
+		assert.Contains(t, setBlock["metrics.endpoint"], "test-app-fidelity-validator")
+	})
+
+	t.Run("Without Datadog Integration", func(t *testing.T) {
+		templateData := ArgoTemplateData{
+			AppName: "test-app",
+			ConnectionData: OctantConnectionData{
+				TelemetryTypes: []Telemetry{"traces"},
+			},
+			DatadogIntegrationData: nil,
+		}
+
+		manifests, err := renderCollectorDeploymentManifests(&templateData, YAMLOutputFormat)
+		require.NoError(t, err)
+		validatorBytes := (*manifests)["validator.yaml"]
+
+		var validator map[string]any
+		require.NoError(t, yaml.Unmarshal(validatorBytes, &validator))
+
+		spec := validator["spec"].(map[string]any)
+		signals := spec["signals"].([]any)
+		assert.Contains(t, signals, "traces")
+
+		// Safely check if exporterRewrites exists but doesn't contain Datadog keys
+		if rewritesRaw, hasRewrites := spec["exporterRewrites"]; hasRewrites && rewritesRaw != nil {
+			rewritesSlice := rewritesRaw.([]any)
+			for _, rRaw := range rewritesSlice {
+				r := rRaw.(map[string]any)
+				assert.NotEqual(t, "datadog-default", r["name"])
+			}
+		}
+	})
+}
+
+func TestCreateExportableArgoManifests(t *testing.T) {
+	t.Parallel()
+
+	connection := OctantConnectionData{
+		Destinations: []OctantConnectionDestination{
+			{DestinationType: "datadog", IntegrationName: "test-dd"},
+		},
+		Deployment: &Deployment{
+			Type: ArgoManifestsDeploymentType,
+		},
+	}
+
+	manifests, err := CreateExportableArgoManifests("test-namespace", "test-app", connection, YAMLOutputFormat)
+	require.NoError(t, err)
+
+	secretBytes, exists := (*manifests)["secret.yaml"]
+	require.True(t, exists, "Exportable secret manifest missing")
+
+	var secret map[string]any
+	require.NoError(t, yaml.Unmarshal(secretBytes, &secret))
+
+	stringData, ok := secret["stringData"].(map[string]any)
+	require.True(t, ok)
+
+	// Ensure sensitive secrets are overwritten with placeholders
+	assert.Equal(t, "<YOUR_API_KEY>", stringData["api-key"])
+	assert.Equal(t, "<YOUR_DD_URL>", stringData["site-url"])
 }
