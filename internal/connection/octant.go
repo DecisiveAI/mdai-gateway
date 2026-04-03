@@ -79,13 +79,12 @@ func (oc *OctantConnection) SaveConnection(ctx context.Context, connection Octan
 
 	cm, err := oc.k8sClient.CoreV1().ConfigMaps(namespace).Get(ctx, connectionsConfigmapName, metav1.GetOptions{})
 	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			// Create the confmap if it does not exist
-			if createErr := createConnectionConfigMap(ctx, oc.k8sClient, namespace, connectionsConfigmapName, connectionName, string(jsonData)); createErr != nil {
-				return createErr
-			}
-		} else {
+		if !k8serrors.IsNotFound(err) {
 			return fmt.Errorf("failed to fetch configmap %s: %w", connectionsConfigmapName, err)
+		}
+		// Create the confmap if it does not exist
+		if createErr := createConnectionConfigMap(ctx, oc.k8sClient, namespace, connectionsConfigmapName, connectionName, string(jsonData)); createErr != nil {
+			return createErr
 		}
 	} else {
 		// Update the confmap if it already exists

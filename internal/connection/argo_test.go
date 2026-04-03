@@ -103,7 +103,7 @@ func TestDeleteArgoApp(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestPushArgoApp(t *testing.T) {
+func TestPushArgoApp(t *testing.T) { // nolint:gocognit
 	t.Parallel()
 
 	tests := []struct {
