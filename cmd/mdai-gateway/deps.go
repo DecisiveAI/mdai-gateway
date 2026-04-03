@@ -18,6 +18,8 @@ import (
 	"github.com/mydecisive/mdai-gateway/internal/opamp"
 	"github.com/mydecisive/mdai-gateway/internal/server"
 	gatewayvalkey "github.com/mydecisive/mdai-gateway/internal/valkey"
+	"github.com/prometheus/client_golang/api"
+	promv1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
@@ -91,6 +93,18 @@ func initDependencies(ctx context.Context) (deps server.HandlerDeps, cleanup fun
 		Transport: httpTransport,
 	}
 
+	promEndpoint := os.Getenv("PROMETHEUS_ENDPOINT")
+	if promEndpoint == "" {
+		appLogger.Warn("prometheus endpoint is not set, octant connections API will not function properly")
+	}
+
+	client, err := api.NewClient(api.Config{
+		Address: promEndpoint,
+	})
+	if err != nil {
+		appLogger.Fatal("failed to create prometheus client", zap.Error(err))
+	}
+
 	deps = server.HandlerDeps{
 		Logger:                 appLogger,
 		ValkeyClient:           valkeyClient,
@@ -104,6 +118,7 @@ func initDependencies(ctx context.Context) (deps server.HandlerDeps, cleanup fun
 		K8sClient:              clientset,
 		K8sNamespace:           getCurrentNamespace(),
 		HTTPClient:             httpClient,
+		PrometheusClient:       promv1.NewAPI(client),
 	}
 
 	cleanup = func() {

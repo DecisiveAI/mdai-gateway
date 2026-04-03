@@ -26,7 +26,11 @@ func NewConnectionsHandler(
 	k8sNamespace string,
 	logger *zap.Logger,
 ) *ConnectionsHandler {
-	return &ConnectionsHandler{octantConnection: octantConnection, k8sNamespace: k8sNamespace, logger: logger}
+	return &ConnectionsHandler{
+		octantConnection: octantConnection,
+		k8sNamespace:     k8sNamespace,
+		logger:           logger,
+	}
 }
 
 func (ch *ConnectionsHandler) GetConnectionByName(ctx context.Context) http.HandlerFunc {
@@ -157,5 +161,19 @@ func (ch *ConnectionsHandler) DeleteConnectionByName(ctx context.Context) http.H
 			return
 		}
 		httputil.WriteJSONResponse(w, ch.logger, http.StatusOK, "")
+	}
+}
+
+func (ch *ConnectionsHandler) GetConnectionStatus(ctx context.Context) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		connectionName := req.PathValue("connectionName")
+
+		connectionStatus, err := ch.octantConnection.GetConnectionStatus(ctx, ch.k8sNamespace, connectionName)
+		if err != nil {
+			ch.logger.Error("failed to get connection status", zap.Error(err))
+			http.Error(w, "failed to get connection status", http.StatusInternalServerError)
+			return
+		}
+		httputil.WriteJSONResponse(w, ch.logger, http.StatusOK, connectionStatus)
 	}
 }

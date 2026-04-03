@@ -8,6 +8,10 @@ import (
 	"net/http"
 	"slices"
 
+	"github.com/mydecisive/mdai-gateway/internal/metrics"
+	"github.com/mydecisive/mdai-gateway/internal/telemetry"
+	promv1 "github.com/prometheus/client_golang/api/prometheus/v1"
+	"go.uber.org/zap"
 	"github.com/mydecisive/mdai-gateway/internal/integration"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,6 +39,41 @@ func NewOctantConnection(httpClient *http.Client, k8sClient kubernetes.Interface
 			K8sClient: k8sClient,
 		},
 	}
+}
+
+func (oc *OctantConnection) GetConnectionStatus(ctx context.Context, namespace, connectionName string) (*Status, error) {
+	var (
+		receivingData bool
+		sendingData   bool
+		dataIntegrity bool
+	)
+	connection, err := oc.GetConnectionByName(ctx, namespace, connectionName)
+	if err != nil {
+		return nil, fmt.Errorf("getting connection: %w", err)
+	}
+
+	// for each telemetry type on the connection, check for increasing metrics on the receiver (receiving data)
+	receivingData, err = oc.connectionMetrics.IsTelemetryFlowing(ctx, metrics.Ingress, connection.TelemetryTypes)
+	if err != nil {
+		return nil, fmt.Errorf("querying telemetry ingress status: %w", err)
+	}
+
+	// for each telemetry type on the connection, check for increasing metrics on the exporter (sending data)
+	sendingData, err = oc.connectionMetrics.IsTelemetryFlowing(ctx, metrics.Egress, connection.TelemetryTypes)
+	if err != nil {
+		return nil, fmt.Errorf("querying telemetry egress status: %w", err)
+	}
+
+	dataIntegrity, err = oc.connectionMetrics.VerifyDataFidelity(ctx, connection.TelemetryTypes)
+	if err != nil {
+		return nil, fmt.Errorf("verifying data integrity: %w", err)
+	}
+
+	return &Status{
+		ReceivingData: receivingData,
+		SendingData:   sendingData,
+		DataIntegrity: dataIntegrity,
+	}, nil
 }
 
 func (oc *OctantConnection) GetConnectionByName(ctx context.Context, namespace, name string) (*OctantConnectionData, error) {

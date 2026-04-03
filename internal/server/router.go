@@ -14,6 +14,7 @@ import (
 	"github.com/mydecisive/mdai-gateway/internal/integration"
 	"github.com/mydecisive/mdai-gateway/internal/opamp"
 	gatewayvalkey "github.com/mydecisive/mdai-gateway/internal/valkey"
+	promv1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/valkey-io/valkey-go"
 	"go.uber.org/zap"
 	"k8s.io/client-go/kubernetes"
@@ -32,6 +33,7 @@ type HandlerDeps struct {
 	K8sClient              kubernetes.Interface
 	K8sNamespace           string
 	HTTPClient             *http.Client
+	PrometheusClient       promv1.API
 }
 
 func NewRouter(ctx context.Context, deps HandlerDeps) *http.ServeMux {
@@ -70,13 +72,18 @@ func NewRouter(ctx context.Context, deps HandlerDeps) *http.ServeMux {
 	mainRouter.Handle("/integrations/datadog/", http.StripPrefix("/integrations/datadog", datadogRouter))
 	mainRouter.Handle("/integrations/argocd/", http.StripPrefix("/integrations/argocd", argocdRouter))
 
-	connectionsHandler := NewConnectionsHandler(connection.NewOctantConnection(deps.HTTPClient, deps.K8sClient), deps.K8sNamespace, deps.Logger)
+	connectionsHandler := NewConnectionsHandler(
+		connection.NewOctantConnection(deps.K8sClient, deps.PrometheusClient, deps.Logger),
+		deps.K8sNamespace,
+		deps.Logger,
+	)
 
 	connectionsRouter := http.NewServeMux()
 	connectionsRouter.Handle("GET /{connectionName}", connectionsHandler.GetConnectionByName(ctx))
 	connectionsRouter.Handle("PUT /{connectionName}", connectionsHandler.SaveConnectionData(ctx))
 	connectionsRouter.Handle("POST /{connectionName}/manifests/{format}", connectionsHandler.GenerateManifestsForGivenConnection())
 	connectionsRouter.Handle("DELETE /{connectionName}", connectionsHandler.DeleteConnectionByName(ctx))
+	connectionsRouter.Handle("GET /{connectionName}/status", connectionsHandler.GetConnectionStatus(ctx))
 
 	mainRouter.Handle("/connections/", http.StripPrefix("/connections", connectionsRouter))
 
