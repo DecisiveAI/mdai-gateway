@@ -3,6 +3,7 @@ package connection
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/mydecisive/mdai-gateway/internal/telemetry"
 	"testing"
 
 	"github.com/mydecisive/mdai-gateway/internal/integration"
@@ -40,7 +41,7 @@ func TestRenderManifestFormats(t *testing.T) {
 		AppName:   "format-test-app",
 		Namespace: "default",
 		ConnectionData: OctantConnectionData{
-			TelemetryTypes: []Telemetry{"logs"},
+			TelemetryTypes: []telemetry.MLT{telemetry.Logs},
 		},
 		DatadogIntegrationData: &integration.DataDogIntegrationData{
 			APIKey: "key",
@@ -170,7 +171,7 @@ func TestRenderCollectorManifest(t *testing.T) {
 			AppName:        "test-app",
 			IsArgoSideload: true,
 			ConnectionData: OctantConnectionData{
-				TelemetryTypes: []Telemetry{"logs", "traces"},
+				TelemetryTypes: []telemetry.MLT{telemetry.Logs, telemetry.Traces},
 			},
 			DatadogIntegrationData: &integration.DataDogIntegrationData{
 				APIKey: "fake-key",
@@ -213,7 +214,7 @@ func TestRenderCollectorManifest(t *testing.T) {
 			AppName:        "minimal-app",
 			IsArgoSideload: false,
 			ConnectionData: OctantConnectionData{
-				TelemetryTypes: []Telemetry{},
+				TelemetryTypes: []telemetry.MLT{},
 			},
 			DatadogIntegrationData: nil,
 		}
@@ -254,7 +255,7 @@ func TestRenderValidatorManifest(t *testing.T) {
 		templateData := ArgoTemplateData{
 			AppName: "test-app",
 			ConnectionData: OctantConnectionData{
-				TelemetryTypes: []Telemetry{"logs", "metrics"},
+				TelemetryTypes: []telemetry.MLT{telemetry.Logs, telemetry.Metrics},
 			},
 			DatadogIntegrationData: &integration.DataDogIntegrationData{
 				DDUrl: "https://datadoghq.com",
@@ -288,7 +289,7 @@ func TestRenderValidatorManifest(t *testing.T) {
 		templateData := ArgoTemplateData{
 			AppName: "test-app",
 			ConnectionData: OctantConnectionData{
-				TelemetryTypes: []Telemetry{"traces"},
+				TelemetryTypes: []telemetry.MLT{telemetry.Traces},
 			},
 			DatadogIntegrationData: nil,
 		}

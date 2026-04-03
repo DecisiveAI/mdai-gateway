@@ -5,41 +5,14 @@ import (
 	_ "embed" // nolint: revive
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"slices"
 
 	"github.com/mydecisive/mdai-gateway/internal/metrics"
-	"github.com/mydecisive/mdai-gateway/internal/telemetry"
-	promv1 "github.com/prometheus/client_golang/api/prometheus/v1"
-	"go.uber.org/zap"
-	"github.com/mydecisive/mdai-gateway/internal/integration"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 )
 
 var _ Connection[OctantConnectionData] = (*OctantConnection)(nil)
-
-func NewOctantConnection(httpClient *http.Client, k8sClient kubernetes.Interface) *OctantConnection {
-	// TODO: Refactor connection operations to use tasksets/plans instead of if-argo-then
-	// taskSets := map[DeploymentType]DeploymentTaskSet{
-	//	ArgoForceSyncDeploymentType: {
-	//		"GET": ...,
-	//		"POST": ...,
-	//		"DELETE": ...,
-	//	},
-	// }
-	return &OctantConnection{
-		httpClient: httpClient,
-		k8sClient:  k8sClient,
-		argoClient: &integration.ArgoCDIntegration{
-			K8sClient: k8sClient,
-		},
-		datadogClient: &integration.DataDogIntegration{
-			K8sClient: k8sClient,
-		},
-	}
-}
 
 func (oc *OctantConnection) GetConnectionStatus(ctx context.Context, namespace, connectionName string) (*Status, error) {
 	var (
