@@ -3,10 +3,10 @@ package connection
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/mydecisive/mdai-gateway/internal/telemetry"
 	"testing"
 
 	"github.com/mydecisive/mdai-gateway/internal/integration"
+	"github.com/mydecisive/mdai-gateway/internal/telemetry"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/yaml"

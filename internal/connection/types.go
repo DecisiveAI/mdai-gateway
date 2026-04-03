@@ -1,13 +1,13 @@
 package connection
 
 import (
-	"github.com/mydecisive/mdai-gateway/internal/metrics"
-	"github.com/mydecisive/mdai-gateway/internal/telemetry"
-	"go.uber.org/zap"
 	"net/http"
 
 	"github.com/mydecisive/mdai-gateway/internal/integration"
+	"github.com/mydecisive/mdai-gateway/internal/metrics"
+	"github.com/mydecisive/mdai-gateway/internal/telemetry"
 	promv1 "github.com/prometheus/client_golang/api/prometheus/v1"
+	"go.uber.org/zap"
 	"k8s.io/client-go/kubernetes"
 )
 

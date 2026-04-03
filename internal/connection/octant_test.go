@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"go.uber.org/zap"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -15,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -60,6 +60,7 @@ type octantTestFixture struct {
 // setupFixture initializes a default set of dependencies for OctantConnection.
 // It accepts optional runtime objects to seed the fake Kubernetes client.
 func setupFixture(t *testing.T, objects ...runtime.Object) *octantTestFixture {
+	t.Helper()
 	return &octantTestFixture{
 		k8sClient:   fake.NewClientset(objects...),
 		argoMock:    integrationmock.NewMockIntegration[integration.ArgoCDIntegrationData](t),
@@ -75,12 +76,11 @@ func (f *octantTestFixture) build() *OctantConnection {
 		f.k8sClient,
 		f.argoMock,
 		f.datadogMock,
-		nil,          // promClient - currently unused in these tests
-		zap.NewNop(), // harmless default logger
+		nil,
+		zap.NewNop(),
 	)
 }
 
-// --- TESTS ---
 // --- TESTS ---
 
 func TestGetConnectionByName(t *testing.T) {
