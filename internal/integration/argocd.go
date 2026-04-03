@@ -13,14 +13,14 @@ import (
 const argocdSecretName = "mdai-argocd-integration" // nolint: gosec
 
 type ArgoCDIntegrationData struct {
-	AccountToken        string `json:"accountToken"`
-	ArgoClusterEndpoint string `json:"argoClusterEndpoint"`
+	APIUrl       string `json:"apiUrl"`
+	AccountToken string `json:"accountToken"`
 }
 
 func (aid *ArgoCDIntegrationData) ToFields() map[string]any {
 	return map[string]any{
 		"accountToken":        aid.AccountToken,
-		"argoClusterEndpoint": aid.ArgoClusterEndpoint,
+		"argoClusterEndpoint": aid.APIUrl,
 	}
 }
 

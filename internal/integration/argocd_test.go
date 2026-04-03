@@ -16,8 +16,8 @@ func TestArgoCD_GetIntegrations(t *testing.T) {
 	t.Parallel()
 
 	validInt := ArgoCDIntegrationData{
-		AccountToken:        "abc123",
-		ArgoClusterEndpoint: "http://localhost:12345",
+		AccountToken: "abc123",
+		APIUrl:       "http://localhost:12345",
 	}
 	validIntBytes, err := json.Marshal(validInt)
 	require.NoError(t, err)
@@ -90,8 +90,8 @@ func TestArgoCD_SetIntegration(t *testing.T) {
 	t.Parallel()
 
 	newIntegration := ArgoCDIntegrationData{
-		AccountToken:        "abc123",
-		ArgoClusterEndpoint: "http://localhost:12345",
+		AccountToken: "abc123",
+		APIUrl:       "http://localhost:12345",
 	}
 
 	t.Run("creates secret when it does not exist", func(t *testing.T) {
@@ -130,7 +130,7 @@ func TestArgoCD_SetIntegration(t *testing.T) {
 			&corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{Name: argocdSecretName, Namespace: defaultNamespace},
 				Data: map[string][]byte{
-					"team-a": []byte(`{"accountToken":"old-account-token", "argoClusterEndpoint":"http://localhost:12345"}`),
+					"team-a": []byte(`{"accountToken":"old-account-token", "apiUrl":"http://localhost:12345"}`),
 				},
 			},
 		}
@@ -190,7 +190,7 @@ func TestArgoCD_DeleteIntegration(t *testing.T) {
 			&corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{Name: argocdSecretName, Namespace: defaultNamespace},
 				Data: map[string][]byte{
-					"team-a": []byte(`{"accountToken":"abc123-token", "argoClusterEndpoint":"http://localhost:12345"}`),
+					"team-a": []byte(`{"accountToken":"abc123-token", "apiUrl":"http://localhost:12345"}`),
 				},
 			},
 		}
@@ -217,8 +217,8 @@ func TestArgoCD_DeleteIntegration(t *testing.T) {
 			&corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{Name: argocdSecretName, Namespace: defaultNamespace},
 				Data: map[string][]byte{
-					"team-a": []byte(`{"accountToken":"abc123-token"}`),
-					"team-b": []byte(`{"accountToken":"xyz999-token"}`),
+					"team-a": []byte(`{"accountToken":"abc123-token", "apiUrl": "http://localhost:12345"}`),
+					"team-b": []byte(`{"accountToken":"xyz999-token", "apiUrl": "http://localhost:12345"}`),
 				},
 			},
 		}
