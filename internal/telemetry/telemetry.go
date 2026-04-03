@@ -1,25 +1,25 @@
-package connection
+package telemetry
 
 import (
 	"encoding/json"
 	"fmt"
 )
 
-type Telemetry string
+type MLT string
 
 const (
-	Metrics Telemetry = "metrics"
-	Logs    Telemetry = "logs"
-	Traces  Telemetry = "traces"
+	Metrics MLT = "metrics"
+	Logs    MLT = "logs"
+	Traces  MLT = "traces"
 )
 
-func (t *Telemetry) UnmarshalJSON(b []byte) error {
+func (t *MLT) UnmarshalJSON(b []byte) error {
 	var val string
 	if err := json.Unmarshal(b, &val); err != nil {
 		return err
 	}
 
-	telemetry := Telemetry(val)
+	telemetry := MLT(val)
 	switch telemetry {
 	case Metrics, Logs, Traces:
 		*t = telemetry

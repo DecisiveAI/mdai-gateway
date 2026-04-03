@@ -10,6 +10,7 @@ import (
 
 	"github.com/mydecisive/mdai-gateway/internal/connection"
 	connectionmock "github.com/mydecisive/mdai-gateway/internal/mock/connection"
+	"github.com/mydecisive/mdai-gateway/internal/telemetry"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -39,9 +40,9 @@ func TestGetConnectionByName(t *testing.T) {
 
 		expectedConnection := &connection.OctantConnectionData{
 			SourceType: "datadog",
-			TelemetryTypes: []connection.Telemetry{
-				connection.Logs,
-				connection.Traces,
+			TelemetryTypes: []telemetry.MLT{
+				telemetry.Logs,
+				telemetry.Traces,
 			},
 			Deployment: &connection.Deployment{
 				Type: "argocd",
@@ -80,7 +81,7 @@ func TestSaveConnectionData(t *testing.T) {
 		invalidPayoad, err := json.Marshal("not valid json")
 		require.NoError(t, err)
 
-		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/saveConnection/coolConnection", bytes.NewBuffer(invalidPayoad))
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPut, "/saveConnection/coolConnection", bytes.NewBuffer(invalidPayoad))
 		resp := httptest.NewRecorder()
 
 		router := setupConnectionsRouter(t, connectionsMock)
@@ -94,9 +95,9 @@ func TestSaveConnectionData(t *testing.T) {
 
 		connectionToSave := &connection.OctantConnectionData{
 			SourceType: "datadog",
-			TelemetryTypes: []connection.Telemetry{
-				connection.Logs,
-				connection.Traces,
+			TelemetryTypes: []telemetry.MLT{
+				telemetry.Logs,
+				telemetry.Traces,
 			},
 			Deployment: &connection.Deployment{
 				Type: "argocd",
@@ -112,7 +113,7 @@ func TestSaveConnectionData(t *testing.T) {
 		connectionsMock.EXPECT().
 			SaveConnection(mock.Anything, mock.MatchedBy(func(theConnection connection.OctantConnectionData) bool {
 				matchingSource := theConnection.SourceType == "datadog"
-				matchingTelemetry := len(theConnection.TelemetryTypes) == 2 && theConnection.TelemetryTypes[0] == connection.Logs && theConnection.TelemetryTypes[1] == connection.Traces
+				matchingTelemetry := len(theConnection.TelemetryTypes) == 2 && theConnection.TelemetryTypes[0] == telemetry.Logs && theConnection.TelemetryTypes[1] == telemetry.Traces
 				matchingDeployment := theConnection.Deployment.Type == "argocd" && theConnection.Deployment.Fields["branch"] == "bestBranch"
 				return matchingSource && matchingTelemetry && matchingDeployment
 			}), "default", "coolConnection").
@@ -133,9 +134,9 @@ func TestSaveConnectionData(t *testing.T) {
 
 		connectionToSave := &connection.OctantConnectionData{
 			SourceType: "datadog",
-			TelemetryTypes: []connection.Telemetry{
-				connection.Logs,
-				connection.Traces,
+			TelemetryTypes: []telemetry.MLT{
+				telemetry.Logs,
+				telemetry.Traces,
 			},
 			Deployment: &connection.Deployment{
 				Type: "argocd",
@@ -151,7 +152,7 @@ func TestSaveConnectionData(t *testing.T) {
 		connectionsMock.EXPECT().
 			SaveConnection(mock.Anything, mock.MatchedBy(func(theConnection connection.OctantConnectionData) bool {
 				matchingSource := theConnection.SourceType == "datadog"
-				matchingTelemetry := len(theConnection.TelemetryTypes) == 2 && theConnection.TelemetryTypes[0] == connection.Logs && theConnection.TelemetryTypes[1] == connection.Traces
+				matchingTelemetry := len(theConnection.TelemetryTypes) == 2 && theConnection.TelemetryTypes[0] == telemetry.Logs && theConnection.TelemetryTypes[1] == telemetry.Traces
 				matchingDeployment := theConnection.Deployment.Type == "argocd" && theConnection.Deployment.Fields["branch"] == "bestBranch"
 				return matchingSource && matchingTelemetry && matchingDeployment
 			}), "default", "coolConnection").
@@ -202,14 +203,61 @@ func TestDeleteConnectionByName(t *testing.T) {
 	})
 }
 
+func TestGetConnectionStatus(t *testing.T) {
+	t.Parallel()
+
+	t.Run("error getting connection status", func(t *testing.T) {
+		t.Parallel()
+
+		connectionsMock := connectionmock.NewMockConnection[connection.OctantConnectionData](t)
+		connectionsMock.EXPECT().GetConnectionStatus(mock.Anything, "default", "coolConnection").Return(nil, assert.AnError).Times(1)
+
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/getConnection/coolConnection/status", http.NoBody)
+		resp := httptest.NewRecorder()
+
+		router := setupConnectionsRouter(t, connectionsMock)
+		router.ServeHTTP(resp, req)
+
+		assert.Equal(t, http.StatusInternalServerError, resp.Code)
+	})
+
+	t.Run("happy path", func(t *testing.T) {
+		t.Parallel()
+
+		connectionStatus := &connection.Status{
+			ReceivingData: true,
+			SendingData:   true,
+			DataIntegrity: false,
+			Details:       "",
+		}
+
+		connectionsMock := connectionmock.NewMockConnection[connection.OctantConnectionData](t)
+		connectionsMock.EXPECT().GetConnectionStatus(mock.Anything, "default", "coolConnection").Return(connectionStatus, nil).Times(1)
+
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/getConnection/coolConnection/status", http.NoBody)
+		resp := httptest.NewRecorder()
+
+		router := setupConnectionsRouter(t, connectionsMock)
+		router.ServeHTTP(resp, req)
+
+		assert.Equal(t, http.StatusOK, resp.Code)
+
+		var actualStatus connection.Status
+		err := json.Unmarshal(resp.Body.Bytes(), &actualStatus)
+		require.NoError(t, err)
+		assert.True(t, reflect.DeepEqual(connectionStatus, &actualStatus))
+	})
+}
+
 func setupConnectionsRouter(t *testing.T, theConnection connection.Connection[connection.OctantConnectionData]) *http.ServeMux {
 	t.Helper()
 
 	connectionsHandler := NewConnectionsHandler(theConnection, "default", zaptest.NewLogger(t))
 
 	mainRouter := http.NewServeMux()
-	mainRouter.Handle("/getConnection/{connectionName}", connectionsHandler.GetConnectionByName(t.Context()))
-	mainRouter.Handle("/saveConnection/{connectionName}", connectionsHandler.SaveConnectionData(t.Context()))
-	mainRouter.Handle("/deleteConnection/{connectionName}", connectionsHandler.DeleteConnectionByName(t.Context()))
+	mainRouter.Handle("GET /getConnection/{connectionName}", connectionsHandler.GetConnectionByName(t.Context()))
+	mainRouter.Handle("PUT /saveConnection/{connectionName}", connectionsHandler.SaveConnectionData(t.Context()))
+	mainRouter.Handle("DELETE /deleteConnection/{connectionName}", connectionsHandler.DeleteConnectionByName(t.Context()))
+	mainRouter.Handle("GET /getConnection/{connectionName}/status", connectionsHandler.GetConnectionStatus(t.Context()))
 	return mainRouter
 }
