@@ -73,7 +73,13 @@ func NewRouter(ctx context.Context, deps HandlerDeps) *http.ServeMux {
 	mainRouter.Handle("/integrations/argocd/", http.StripPrefix("/integrations/argocd", argocdRouter))
 
 	connectionsHandler := NewConnectionsHandler(
-		connection.NewOctantConnection(deps.K8sClient, deps.PrometheusClient, deps.Logger),
+		connection.NewOctantConnection(
+			deps.HTTPClient,
+			deps.K8sClient,
+			argocdIntegrationHandler.argocdIntegration,
+			ddIntegrationHandler.datadogIntegration,
+			deps.PrometheusClient,
+			deps.Logger),
 		deps.K8sNamespace,
 		deps.Logger,
 	)

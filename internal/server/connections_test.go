@@ -172,8 +172,11 @@ func TestSaveConnectionData(t *testing.T) {
 		connectionsMock.EXPECT().
 			SaveConnection(mock.Anything, mock.MatchedBy(func(theConnection connection.OctantConnectionData) bool {
 				matchingSource := theConnection.SourceType == "datadog"
-				matchingTelemetry := len(theConnection.TelemetryTypes) == 2 && theConnection.TelemetryTypes[0] == connection.Logs && theConnection.TelemetryTypes[1] == connection.Traces
-				matchingDeployment := theConnection.Deployment.Type == connection.ArgoSideloadDeploymentType && theConnection.Deployment.IntegrationName == "argo-test"
+				matchingTelemetry := len(theConnection.TelemetryTypes) == 2 &&
+					theConnection.TelemetryTypes[0] == telemetry.Logs &&
+					theConnection.TelemetryTypes[1] == telemetry.Traces
+				matchingDeployment := theConnection.Deployment.Type == connection.ArgoSideloadDeploymentType &&
+					theConnection.Deployment.IntegrationName == "argo-test"
 				return matchingSource && matchingTelemetry && matchingDeployment
 			}), "default", "coolConnection").
 			Return(assert.AnError).
@@ -209,8 +212,11 @@ func TestSaveConnectionData(t *testing.T) {
 		connectionsMock.EXPECT().
 			SaveConnection(mock.Anything, mock.MatchedBy(func(theConnection connection.OctantConnectionData) bool {
 				matchingSource := theConnection.SourceType == "datadog"
-				matchingTelemetry := len(theConnection.TelemetryTypes) == 2 && theConnection.TelemetryTypes[0] == connection.Logs && theConnection.TelemetryTypes[1] == connection.Traces
-				matchingDeployment := theConnection.Deployment.Type == connection.ArgoSideloadDeploymentType && theConnection.Deployment.IntegrationName == "argo-test"
+				matchingTelemetry := len(theConnection.TelemetryTypes) == 2 &&
+					theConnection.TelemetryTypes[0] == telemetry.Logs &&
+					theConnection.TelemetryTypes[1] == telemetry.Traces
+				matchingDeployment := theConnection.Deployment.Type == connection.ArgoSideloadDeploymentType &&
+					theConnection.Deployment.IntegrationName == "argo-test"
 				return matchingSource && matchingTelemetry && matchingDeployment
 			}), "default", "coolConnection").
 			Return(nil).
@@ -267,7 +273,10 @@ func TestGetConnectionStatus(t *testing.T) {
 		t.Parallel()
 
 		connectionsMock := connectionmock.NewMockConnection[connection.OctantConnectionData](t)
-		connectionsMock.EXPECT().GetConnectionStatus(mock.Anything, "default", "coolConnection").Return(nil, assert.AnError).Times(1)
+		connectionsMock.EXPECT().
+			GetConnectionStatus(mock.Anything, "default", "coolConnection").
+			Return(nil, assert.AnError).
+			Times(1)
 
 		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/getConnection/coolConnection/status", http.NoBody)
 		resp := httptest.NewRecorder()
@@ -313,9 +322,9 @@ func setupConnectionsRouter(t *testing.T, theConnection connection.Connection[co
 
 	mainRouter := http.NewServeMux()
 	mainRouter.Handle("GET /getConnection/{connectionName}", connectionsHandler.GetConnectionByName(t.Context()))
+	mainRouter.Handle("GET /getConnection/{connectionName}/status", connectionsHandler.GetConnectionStatus(t.Context()))
 	mainRouter.Handle("POST /generateManifests/{connectionName}/{format}", connectionsHandler.GenerateManifestsForGivenConnection())
 	mainRouter.Handle("PUT /saveConnection/{connectionName}", connectionsHandler.SaveConnectionData(t.Context()))
 	mainRouter.Handle("DELETE /deleteConnection/{connectionName}", connectionsHandler.DeleteConnectionByName(t.Context()))
-	mainRouter.Handle("GET /getConnection/{connectionName}", connectionsHandler.GetConnectionByName(t.Context()))
 	return mainRouter
 }
