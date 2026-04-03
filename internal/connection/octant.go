@@ -69,7 +69,7 @@ func (oc *OctantConnection) GetConnectionByName(ctx context.Context, namespace, 
 }
 
 func (oc *OctantConnection) SaveConnection(ctx context.Context, connection OctantConnectionData, namespace, connectionName string) error {
-	if !slices.Contains(([]DeploymentType{ArgoManifestsDeploymentType, ArgoSideloadDeploymentType}), connection.Deployment.Type) {
+	if !slices.Contains([]DeploymentType{ArgoManifestsDeploymentType, ArgoSideloadDeploymentType}, connection.Deployment.Type) {
 		return fmt.Errorf("invalid deployment type: %s", connection.Deployment.Type)
 	}
 	jsonData, err := json.Marshal(connection)
@@ -81,14 +81,17 @@ func (oc *OctantConnection) SaveConnection(ctx context.Context, connection Octan
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			// Create the confmap if it does not exist
-			return createConnectionConfigMap(ctx, oc.k8sClient, namespace, connectionsConfigmapName, connectionName, string(jsonData))
+			if createErr := createConnectionConfigMap(ctx, oc.k8sClient, namespace, connectionsConfigmapName, connectionName, string(jsonData)); createErr != nil {
+				return createErr
+			}
+		} else {
+			return fmt.Errorf("failed to fetch configmap %s: %w", connectionsConfigmapName, err)
 		}
-		return fmt.Errorf("failed to fetch configmap %s: %w", connectionsConfigmapName, err)
-	}
-	// Update the confmap if it already exists
-	updateConfigMapErr := updateConfigMapWithConnection(ctx, oc.k8sClient, namespace, cm, connectionName, string(jsonData))
-	if updateConfigMapErr != nil {
-		return updateConfigMapErr
+	} else {
+		// Update the confmap if it already exists
+		if updateErr := updateConfigMapWithConnection(ctx, oc.k8sClient, namespace, cm, connectionName, string(jsonData)); updateErr != nil {
+			return updateErr
+		}
 	}
 
 	// TODO: This should be refactored to a more robust deployment-based task system
