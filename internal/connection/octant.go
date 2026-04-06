@@ -5,12 +5,54 @@ import (
 	_ "embed" // nolint: revive
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"slices"
 
+	"github.com/mydecisive/mdai-gateway/internal/integration"
 	"github.com/mydecisive/mdai-gateway/internal/metrics"
+	"github.com/mydecisive/mdai-gateway/internal/telemetry"
+	promv1 "github.com/prometheus/client_golang/api/prometheus/v1"
+	"go.uber.org/zap"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 )
+
+type OctantConnectionDestination struct {
+	DestinationType string `json:"type"`
+	IntegrationName string `json:"integrationName"`
+}
+
+type OctantConnectionData struct {
+	SourceType     string                        `json:"sourceType"`
+	Destinations   []OctantConnectionDestination `json:"destinations"`
+	TelemetryTypes []telemetry.MLT               `json:"telemetryTypes"`
+	Deployment     *Deployment                   `json:"deployment,omitempty"`
+	Status         any                           `json:"status,omitempty"`
+}
+
+type OctantConnection struct {
+	httpClient        *http.Client
+	k8sClient         kubernetes.Interface
+	argoClient        integration.Integration[integration.ArgoCDIntegrationData]
+	datadogClient     integration.Integration[integration.DataDogIntegrationData]
+	PrometheusClient  promv1.API
+	logger            *zap.Logger
+	connectionMetrics *metrics.ConnectionStatus
+	// TODO: Refactor connection operations to use tasksets/plans instead of if-argo-then
+	// taskSets      map[DeploymentType]DeploymentTaskSet
+}
+
+func NewOctantConnection(httpClient *http.Client, k8sClient kubernetes.Interface, argoClient integration.Integration[integration.ArgoCDIntegrationData], datadogClient integration.Integration[integration.DataDogIntegrationData], promClient promv1.API, logger *zap.Logger) *OctantConnection {
+	return &OctantConnection{
+		httpClient:        httpClient,
+		k8sClient:         k8sClient,
+		argoClient:        argoClient,
+		datadogClient:     datadogClient,
+		logger:            logger,
+		connectionMetrics: metrics.NewConnectionStatus(promClient, logger),
+	}
+}
 
 var _ Connection[OctantConnectionData] = (*OctantConnection)(nil)
 

@@ -100,6 +100,7 @@ func (oc *OctantConnection) doArgoAppSync(ctx context.Context, templateData *Arg
 		manifestsSlice = append(manifestsSlice, string(manifest))
 	}
 
+	// TODO: Make a struct for this
 	syncPayload := map[string]any{
 		"revision": "HEAD",
 		"prune":    false,
@@ -124,12 +125,14 @@ func (oc *OctantConnection) doArgoAppSync(ctx context.Context, templateData *Arg
 	syncReq.Header.Set("Authorization", "Bearer "+argoIntegration.AccountToken)
 	syncResp, err := oc.httpClient.Do(syncReq)
 	if err != nil {
+		// TODO: Handle this error better
 		return err
 	}
 	defer func() {
 		_ = syncResp.Body.Close()
 	}()
 	if syncResp.StatusCode != http.StatusOK {
+		// TODO: Handle this error better. Return the argo response too, and/or pass along better messages
 		return fmt.Errorf("unexpected status code: %d", syncResp.StatusCode)
 	}
 	return nil
@@ -149,12 +152,14 @@ func (oc *OctantConnection) doArgoAppCreation(ctx context.Context, templateData 
 	req.Header.Set("Authorization", "Bearer "+argoIntegration.AccountToken)
 	resp, err := oc.httpClient.Do(req)
 	if err != nil {
+		// TODO: Handle this error better
 		return err
 	}
 	defer func() {
 		_ = resp.Body.Close()
 	}()
 	if resp.StatusCode != http.StatusOK {
+		// TODO: Handle this error better. Return the argo response too, and/or pass along better messages
 		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 	return nil
@@ -183,6 +188,7 @@ func (oc *OctantConnection) deleteArgoApp(ctx context.Context, name string, name
 		_ = resp.Body.Close()
 	}()
 	if resp.StatusCode != http.StatusOK {
+		// TODO: Handle this error better. Return the argo response too, and/or pass along better messages
 		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 	return nil
