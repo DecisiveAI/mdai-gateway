@@ -42,7 +42,6 @@ func TestGetArgoAppStatus(t *testing.T) {
 
 			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				assert.Equal(t, "/api/v1/applications/my-app", r.URL.Path)
-				assert.Equal(t, "upsert=true", r.URL.RawQuery)
 				assert.Equal(t, "Bearer fake-token", r.Header.Get("Authorization"))
 
 				w.WriteHeader(tc.serverResponse)

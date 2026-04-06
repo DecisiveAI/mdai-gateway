@@ -52,8 +52,7 @@ func (oc *OctantConnection) getArgoAppStatus(ctx context.Context, name string, n
 		return nil, getArgoIntErr
 	}
 
-	// GET APP
-	getAppURL := fmt.Sprintf("%s/api/v1/applications/%s?upsert=true", argoIntegration.APIUrl, name)
+	getAppURL := fmt.Sprintf("%s/api/v1/applications/%s", argoIntegration.APIUrl, name)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, getAppURL, http.NoBody)
 	if err != nil {
 		return nil, err
