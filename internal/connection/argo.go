@@ -80,11 +80,7 @@ func (oc *OctantConnection) pushArgoApp(ctx context.Context, namespace, name str
 		return appCreateErr
 	}
 
-	if syncErr := oc.doArgoAppSync(ctx, templateData, argoIntegration, name); syncErr != nil {
-		return syncErr
-	}
-
-	return nil
+	return oc.doArgoAppSync(ctx, templateData, argoIntegration, name)
 }
 
 func (oc *OctantConnection) doArgoAppSync(ctx context.Context, templateData *ArgoTemplateData, argoIntegration *integration.ArgoCDIntegrationData, name string) error {
