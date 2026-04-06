@@ -4,6 +4,7 @@ import (
 	"context"
 	_ "embed" // nolint: revive
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"slices"
@@ -126,6 +127,10 @@ func (oc *OctantConnection) GetConnectionByName(ctx context.Context, namespace, 
 }
 
 func (oc *OctantConnection) SaveConnection(ctx context.Context, connection OctantConnectionData, namespace, connectionName string) error {
+	if connection.Deployment == nil {
+		return errors.New("no deployment object found on octant connection; unable to create connection")
+	}
+
 	if !slices.Contains([]DeploymentType{ArgoManifestsDeploymentType, ArgoSideloadDeploymentType}, connection.Deployment.Type) {
 		return fmt.Errorf("invalid deployment type: %s", connection.Deployment.Type)
 	}
