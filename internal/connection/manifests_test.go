@@ -1,8 +1,11 @@
 package connection
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"github.com/stretchr/testify/mock"
 	"testing"
 
 	"github.com/mydecisive/mdai-gateway/internal/integration"
@@ -343,4 +346,62 @@ func TestCreateExportableArgoManifests(t *testing.T) {
 	// Ensure sensitive secrets are overwritten with placeholders
 	assert.Equal(t, "<YOUR_API_KEY>", stringData["api-key"])
 	assert.Equal(t, "<YOUR_DD_URL>", stringData["site-url"])
+}
+
+func TestCreateTemplateData(t *testing.T) {
+	t.Parallel()
+
+	t.Run("Multiple Destinations Error", func(t *testing.T) {
+		f := setupFixture(t)
+		oc := f.build()
+
+		connection := OctantConnectionData{
+			Destinations: []OctantConnectionDestination{
+				{DestinationType: "datadog"},
+				{DestinationType: "dogodat"},
+			},
+		}
+
+		data, err := oc.createTemplateData(context.Background(), "default", "test-app", connection)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "multiple destinations is currently unsupported")
+		assert.Nil(t, data)
+	})
+
+	t.Run("Unknown Destination Type Error", func(t *testing.T) {
+		f := setupFixture(t)
+		oc := f.build()
+
+		connection := OctantConnectionData{
+			Destinations: []OctantConnectionDestination{
+				{DestinationType: "new-relic", IntegrationName: "nr-test"},
+			},
+		}
+
+		data, err := oc.createTemplateData(context.Background(), "default", "test-app", connection)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "unknown destination type: new-relic")
+		assert.Nil(t, data)
+	})
+
+	t.Run("Datadog Integration Fetch Error", func(t *testing.T) {
+		f := setupFixture(t)
+		oc := f.build()
+
+		connection := OctantConnectionData{
+			Destinations: []OctantConnectionDestination{
+				{DestinationType: "datadog", IntegrationName: "broken-integration"},
+			},
+		}
+
+		f.datadogMock.EXPECT().
+			GetIntegrationByName(mock.Anything, "default", "broken-integration").
+			Return(nil, errors.New("injected api failure")).
+			Once()
+
+		data, err := oc.createTemplateData(context.Background(), "default", "test-app", connection)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "injected api failure")
+		assert.Nil(t, data)
+	})
 }
