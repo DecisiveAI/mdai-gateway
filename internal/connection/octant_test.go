@@ -538,7 +538,7 @@ func TestGetConnectionStatus_Success(t *testing.T) {
 	promServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"success","data":{"resultType":"matrix","result":[{"metric":{},"values":[[1712419691,"5"], [1712419751,"10"]]}]}}`))
+		w.Write([]byte(`{"status":"success","data":{"resultType":"matrix","result":[{"metric":{},"values":[[1712419691,"5"], [1712419751,"10"]]}]}}`)) // nolint: errcheck,gosec,revive
 	}))
 	defer promServer.Close()
 
