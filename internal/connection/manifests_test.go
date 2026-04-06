@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/stretchr/testify/mock"
 	"testing"
 
 	"github.com/mydecisive/mdai-gateway/internal/integration"
 	"github.com/mydecisive/mdai-gateway/internal/telemetry"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/yaml"
 )
@@ -352,6 +352,7 @@ func TestCreateTemplateData(t *testing.T) {
 	t.Parallel()
 
 	t.Run("Multiple Destinations Error", func(t *testing.T) {
+		t.Parallel()
 		f := setupFixture(t)
 		oc := f.build()
 
@@ -369,6 +370,7 @@ func TestCreateTemplateData(t *testing.T) {
 	})
 
 	t.Run("Unknown Destination Type Error", func(t *testing.T) {
+		t.Parallel()
 		f := setupFixture(t)
 		oc := f.build()
 
@@ -385,6 +387,7 @@ func TestCreateTemplateData(t *testing.T) {
 	})
 
 	t.Run("Datadog Integration Fetch Error", func(t *testing.T) {
+		t.Parallel()
 		f := setupFixture(t)
 		oc := f.build()
 
