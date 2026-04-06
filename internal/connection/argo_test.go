@@ -311,7 +311,7 @@ func TestDeleteArgoApp_Error_BadStatusCode_Unauthorized_Error(t *testing.T) {
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
-		w.Write([]byte(`{"error": "invalid session: token signature is invalid: signature is invalid","code": 16,"message": "invalid session: token signature is invalid: signature is invalid"}`))
+		w.Write([]byte(`{"error": "invalid session: token signature is invalid: signature is invalid","code": 16,"message": "invalid session: token signature is invalid: signature is invalid"}`)) // nolint: errcheck,gosec,revive
 	}))
 	defer ts.Close()
 
@@ -338,7 +338,7 @@ func TestDeleteArgoApp_Error_BadStatusCode_String_Error(t *testing.T) {
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(`ooky spooky`))
+		w.Write([]byte(`ooky spooky`)) // nolint: errcheck,gosec,revive
 	}))
 	defer ts.Close()
 
