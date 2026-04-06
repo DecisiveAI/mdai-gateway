@@ -45,10 +45,8 @@ func TestGetConnectionByName(t *testing.T) {
 				telemetry.Traces,
 			},
 			Deployment: &connection.Deployment{
-				Type: "argocd",
-				Fields: map[string]any{
-					"branch": "bestBranch",
-				},
+				Type:            connection.ArgoSideloadDeploymentType,
+				IntegrationName: "argo-test",
 			},
 		}
 
@@ -67,6 +65,69 @@ func TestGetConnectionByName(t *testing.T) {
 		err := json.Unmarshal(resp.Body.Bytes(), &actualConnection)
 		require.NoError(t, err)
 		assert.True(t, reflect.DeepEqual(expectedConnection, &actualConnection))
+	})
+}
+
+func TestGenerateManifestsForGivenConnection(t *testing.T) {
+	t.Parallel()
+
+	t.Run("invalid format parameter", func(t *testing.T) {
+		t.Parallel()
+
+		connectionsMock := connectionmock.NewMockConnection[connection.OctantConnectionData](t)
+		validPayload, err := json.Marshal(connection.OctantConnectionData{})
+		require.NoError(t, err)
+
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/generateManifests/coolConnection/xml", bytes.NewBuffer(validPayload))
+		resp := httptest.NewRecorder()
+
+		router := setupConnectionsRouter(t, connectionsMock)
+		router.ServeHTTP(resp, req)
+
+		assert.Equal(t, http.StatusBadRequest, resp.Code)
+		assert.Contains(t, resp.Body.String(), "invalid format xml")
+	})
+
+	t.Run("invalid request payload", func(t *testing.T) {
+		t.Parallel()
+
+		connectionsMock := connectionmock.NewMockConnection[connection.OctantConnectionData](t)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/generateManifests/coolConnection/yaml", bytes.NewBufferString("invalid json"))
+		resp := httptest.NewRecorder()
+
+		router := setupConnectionsRouter(t, connectionsMock)
+		router.ServeHTTP(resp, req)
+
+		assert.Equal(t, http.StatusBadRequest, resp.Code)
+		assert.Contains(t, resp.Body.String(), "request payload was invalid")
+	})
+
+	t.Run("happy path", func(t *testing.T) {
+		t.Parallel()
+
+		connectionsMock := connectionmock.NewMockConnection[connection.OctantConnectionData](t)
+
+		goodConnection := connection.OctantConnectionData{
+			Destinations: []connection.OctantConnectionDestination{
+				{DestinationType: "datadog", IntegrationName: "test-dd"},
+			},
+			Deployment: &connection.Deployment{
+				Type: connection.ArgoManifestsDeploymentType,
+			},
+		}
+		payload, err := json.Marshal(goodConnection)
+		require.NoError(t, err)
+
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/generateManifests/coolConnection/yaml", bytes.NewBuffer(payload))
+		resp := httptest.NewRecorder()
+
+		router := setupConnectionsRouter(t, connectionsMock)
+		router.ServeHTTP(resp, req)
+
+		assert.Equal(t, http.StatusOK, resp.Code)
+		assert.Equal(t, "application/zip", resp.Header().Get("Content-Type"))
+		assert.Contains(t, resp.Header().Get("Content-Disposition"), `attachment; filename="coolConnection-manifests-`)
+		assert.Positive(t, resp.Body.Len())
 	})
 }
 
@@ -100,10 +161,8 @@ func TestSaveConnectionData(t *testing.T) {
 				telemetry.Traces,
 			},
 			Deployment: &connection.Deployment{
-				Type: "argocd",
-				Fields: map[string]any{
-					"branch": "bestBranch",
-				},
+				Type:            connection.ArgoSideloadDeploymentType,
+				IntegrationName: "argo-test",
 			},
 		}
 		serializedConnection, err := json.Marshal(connectionToSave)
@@ -113,8 +172,11 @@ func TestSaveConnectionData(t *testing.T) {
 		connectionsMock.EXPECT().
 			SaveConnection(mock.Anything, mock.MatchedBy(func(theConnection connection.OctantConnectionData) bool {
 				matchingSource := theConnection.SourceType == "datadog"
-				matchingTelemetry := len(theConnection.TelemetryTypes) == 2 && theConnection.TelemetryTypes[0] == telemetry.Logs && theConnection.TelemetryTypes[1] == telemetry.Traces
-				matchingDeployment := theConnection.Deployment.Type == "argocd" && theConnection.Deployment.Fields["branch"] == "bestBranch"
+				matchingTelemetry := len(theConnection.TelemetryTypes) == 2 &&
+					theConnection.TelemetryTypes[0] == telemetry.Logs &&
+					theConnection.TelemetryTypes[1] == telemetry.Traces
+				matchingDeployment := theConnection.Deployment.Type == connection.ArgoSideloadDeploymentType &&
+					theConnection.Deployment.IntegrationName == "argo-test"
 				return matchingSource && matchingTelemetry && matchingDeployment
 			}), "default", "coolConnection").
 			Return(assert.AnError).
@@ -139,10 +201,8 @@ func TestSaveConnectionData(t *testing.T) {
 				telemetry.Traces,
 			},
 			Deployment: &connection.Deployment{
-				Type: "argocd",
-				Fields: map[string]any{
-					"branch": "bestBranch",
-				},
+				Type:            connection.ArgoSideloadDeploymentType,
+				IntegrationName: "argo-test",
 			},
 		}
 		serializedConnection, err := json.Marshal(connectionToSave)
@@ -152,8 +212,11 @@ func TestSaveConnectionData(t *testing.T) {
 		connectionsMock.EXPECT().
 			SaveConnection(mock.Anything, mock.MatchedBy(func(theConnection connection.OctantConnectionData) bool {
 				matchingSource := theConnection.SourceType == "datadog"
-				matchingTelemetry := len(theConnection.TelemetryTypes) == 2 && theConnection.TelemetryTypes[0] == telemetry.Logs && theConnection.TelemetryTypes[1] == telemetry.Traces
-				matchingDeployment := theConnection.Deployment.Type == "argocd" && theConnection.Deployment.Fields["branch"] == "bestBranch"
+				matchingTelemetry := len(theConnection.TelemetryTypes) == 2 &&
+					theConnection.TelemetryTypes[0] == telemetry.Logs &&
+					theConnection.TelemetryTypes[1] == telemetry.Traces
+				matchingDeployment := theConnection.Deployment.Type == connection.ArgoSideloadDeploymentType &&
+					theConnection.Deployment.IntegrationName == "argo-test"
 				return matchingSource && matchingTelemetry && matchingDeployment
 			}), "default", "coolConnection").
 			Return(nil).
@@ -210,7 +273,10 @@ func TestGetConnectionStatus(t *testing.T) {
 		t.Parallel()
 
 		connectionsMock := connectionmock.NewMockConnection[connection.OctantConnectionData](t)
-		connectionsMock.EXPECT().GetConnectionStatus(mock.Anything, "default", "coolConnection").Return(nil, assert.AnError).Times(1)
+		connectionsMock.EXPECT().
+			GetConnectionStatus(mock.Anything, "default", "coolConnection").
+			Return(nil, assert.AnError).
+			Times(1)
 
 		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/getConnection/coolConnection/status", http.NoBody)
 		resp := httptest.NewRecorder()
@@ -256,8 +322,9 @@ func setupConnectionsRouter(t *testing.T, theConnection connection.Connection[co
 
 	mainRouter := http.NewServeMux()
 	mainRouter.Handle("GET /getConnection/{connectionName}", connectionsHandler.GetConnectionByName(t.Context()))
+	mainRouter.Handle("GET /getConnection/{connectionName}/status", connectionsHandler.GetConnectionStatus(t.Context()))
+	mainRouter.Handle("POST /generateManifests/{connectionName}/{format}", connectionsHandler.GenerateManifestsForGivenConnection())
 	mainRouter.Handle("PUT /saveConnection/{connectionName}", connectionsHandler.SaveConnectionData(t.Context()))
 	mainRouter.Handle("DELETE /deleteConnection/{connectionName}", connectionsHandler.DeleteConnectionByName(t.Context()))
-	mainRouter.Handle("GET /getConnection/{connectionName}/status", connectionsHandler.GetConnectionStatus(t.Context()))
 	return mainRouter
 }

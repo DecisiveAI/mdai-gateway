@@ -32,6 +32,7 @@ type HandlerDeps struct {
 	OpAMPServer            *opamp.OpAMPControlServer
 	K8sClient              kubernetes.Interface
 	K8sNamespace           string
+	HTTPClient             *http.Client
 	PrometheusClient       promv1.API
 }
 
@@ -72,7 +73,13 @@ func NewRouter(ctx context.Context, deps HandlerDeps) *http.ServeMux {
 	mainRouter.Handle("/integrations/argocd/", http.StripPrefix("/integrations/argocd", argocdRouter))
 
 	connectionsHandler := NewConnectionsHandler(
-		connection.NewOctantConnection(deps.K8sClient, deps.PrometheusClient, deps.Logger),
+		connection.NewOctantConnection(
+			deps.HTTPClient,
+			deps.K8sClient,
+			argocdIntegrationHandler.argocdIntegration,
+			ddIntegrationHandler.datadogIntegration,
+			deps.PrometheusClient,
+			deps.Logger),
 		deps.K8sNamespace,
 		deps.Logger,
 	)
@@ -80,6 +87,7 @@ func NewRouter(ctx context.Context, deps HandlerDeps) *http.ServeMux {
 	connectionsRouter := http.NewServeMux()
 	connectionsRouter.Handle("GET /{connectionName}", connectionsHandler.GetConnectionByName(ctx))
 	connectionsRouter.Handle("PUT /{connectionName}", connectionsHandler.SaveConnectionData(ctx))
+	connectionsRouter.Handle("POST /{connectionName}/manifests/{format}", connectionsHandler.GenerateManifestsForGivenConnection())
 	connectionsRouter.Handle("DELETE /{connectionName}", connectionsHandler.DeleteConnectionByName(ctx))
 	connectionsRouter.Handle("GET /{connectionName}/status", connectionsHandler.GetConnectionStatus(ctx))
 

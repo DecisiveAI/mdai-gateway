@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -82,6 +84,15 @@ func initDependencies(ctx context.Context) (deps server.HandlerDeps, cleanup fun
 		appLogger.Fatal("failed to start OpAMP server", zap.Error(err))
 	}
 
+	httpTransport := &http.Transport{}
+	if os.Getenv("TLS_INSECURE") == "true" {
+		httpTransport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} // nolint:gosec
+	}
+
+	httpClient := &http.Client{
+		Transport: httpTransport,
+	}
+
 	promEndpoint := os.Getenv("PROMETHEUS_ENDPOINT")
 	if promEndpoint == "" {
 		appLogger.Warn("prometheus endpoint is not set, octant connections API will not function properly")
@@ -106,6 +117,7 @@ func initDependencies(ctx context.Context) (deps server.HandlerDeps, cleanup fun
 		OpAMPServer:            opampServer,
 		K8sClient:              clientset,
 		K8sNamespace:           getCurrentNamespace(),
+		HTTPClient:             httpClient,
 		PrometheusClient:       promv1.NewAPI(client),
 	}
 
