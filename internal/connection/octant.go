@@ -66,6 +66,9 @@ func (oc *OctantConnection) GetConnectionStatus(ctx context.Context, namespace, 
 	if err != nil {
 		return nil, fmt.Errorf("getting connection: %w", err)
 	}
+	if connection == nil {
+		return nil, fmt.Errorf("connection '%s' not found in namespace '%s'", connectionName, namespace)
+	}
 
 	// for each telemetry type on the connection, check for increasing metrics on the receiver (receiving data)
 	receivingData, err = oc.connectionMetrics.IsTelemetryFlowing(ctx, metrics.Ingress, connection.TelemetryTypes)

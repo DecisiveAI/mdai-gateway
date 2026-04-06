@@ -11,6 +11,8 @@ import (
 	"github.com/mydecisive/mdai-gateway/internal/integration"
 	integrationmock "github.com/mydecisive/mdai-gateway/internal/mock/integration"
 	"github.com/mydecisive/mdai-gateway/internal/telemetry"
+	"github.com/prometheus/client_golang/api"
+	promv1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -512,4 +514,124 @@ func TestDeleteConnection_Error_ConfigMapUpdateFailed(t *testing.T) {
 	updateErr := octantConnection.DeleteConnection(context.Background(), defaultNamespace, "team-a")
 	require.Error(t, updateErr)
 	assert.Contains(t, updateErr.Error(), "failed to update configmap")
+}
+
+func TestGetConnectionStatus_Success(t *testing.T) {
+	t.Parallel()
+
+	validConnection := OctantConnectionData{
+		SourceType: "datadog",
+		TelemetryTypes: []telemetry.MLT{
+			telemetry.Logs,
+		},
+	}
+	validConnectionBytes, err := json.Marshal(validConnection)
+	require.NoError(t, err)
+
+	f := setupFixture(t, &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: connectionsConfigmapName, Namespace: defaultNamespace},
+		Data: map[string]string{
+			"team-a": string(validConnectionBytes),
+		},
+	})
+
+	promServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"status":"success","data":{"resultType":"matrix","result":[{"metric":{},"values":[[1712419691,"5"], [1712419751,"10"]]}]}}`))
+	}))
+	defer promServer.Close()
+
+	promClient, err := api.NewClient(api.Config{Address: promServer.URL})
+	require.NoError(t, err)
+	promAPI := promv1.NewAPI(promClient)
+
+	octantConnection := NewOctantConnection(
+		f.httpClient,
+		f.k8sClient,
+		f.argoMock,
+		f.datadogMock,
+		promAPI,
+		zap.NewNop(),
+	)
+
+	status, err := octantConnection.GetConnectionStatus(context.Background(), defaultNamespace, "team-a")
+
+	require.NoError(t, err)
+	require.NotNil(t, status)
+	assert.True(t, status.ReceivingData)
+	assert.True(t, status.SendingData)
+}
+
+func TestGetConnectionStatus_Error_PrometheusFailed(t *testing.T) {
+	t.Parallel()
+
+	validConnection := OctantConnectionData{
+		TelemetryTypes: []telemetry.MLT{telemetry.Logs},
+	}
+	validConnectionBytes, err := json.Marshal(validConnection)
+	require.NoError(t, err)
+
+	f := setupFixture(t, &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: connectionsConfigmapName, Namespace: defaultNamespace},
+		Data: map[string]string{
+			"team-a": string(validConnectionBytes),
+		},
+	})
+
+	// Mock Prometheus server returning a 500 error
+	promServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer promServer.Close()
+
+	promClient, err := api.NewClient(api.Config{Address: promServer.URL})
+	require.NoError(t, err)
+	promAPI := promv1.NewAPI(promClient)
+
+	octantConnection := NewOctantConnection(
+		f.httpClient,
+		f.k8sClient,
+		f.argoMock,
+		f.datadogMock,
+		promAPI,
+		zap.NewNop(),
+	)
+
+	status, err := octantConnection.GetConnectionStatus(context.Background(), defaultNamespace, "team-a")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "querying telemetry")
+	assert.Nil(t, status)
+}
+
+func TestGetConnectionStatus_Error_K8sGetFailed(t *testing.T) {
+	t.Parallel()
+
+	f := setupFixture(t)
+	octantConnection := f.build()
+
+	// Force a hard K8s error so GetConnectionByName returns an actual error
+	f.k8sClient.PrependReactor("get", "configmaps", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, errors.New("k8s api failure")
+	})
+
+	status, err := octantConnection.GetConnectionStatus(context.Background(), defaultNamespace, "team-a")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "getting connection")
+	assert.Contains(t, err.Error(), "k8s api failure")
+	assert.Nil(t, status)
+}
+
+func TestGetConnectionStatus_NotFound_ReturnsError(t *testing.T) {
+	t.Parallel()
+
+	f := setupFixture(t) // Empty fixture, ConfigMap doesn't exist
+	octantConnection := f.build()
+
+	status, err := octantConnection.GetConnectionStatus(context.Background(), defaultNamespace, "missing-team")
+
+	require.Error(t, err)
+	assert.Nil(t, status)
 }
