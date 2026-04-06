@@ -11,26 +11,42 @@ import (
 	"github.com/mydecisive/mdai-gateway/internal/integration"
 )
 
-type ArgoApp struct {
-	Status ArgoAppStatus `json:"status"`
+type argoApp struct {
+	Status argoAppStatus `json:"status"`
 }
 
-type ArgoAppStatus struct {
-	Resources []ArgoAppResources `json:"resources"`
-	Health    ArgoAppHealth      `json:"health"`
+type argoAppStatus struct {
+	Resources []argoAppResources `json:"resources"`
+	Health    argoAppHealth      `json:"health"`
 }
 
-type ArgoAppHealth struct {
+type argoAppHealth struct {
 	Status             string    `json:"status"`
 	LastTransitionTime time.Time `json:"lastTransitionTime"`
 }
 
-type ArgoAppResources struct {
+type argoAppResources struct {
 	Kind string `json:"kind"`
 	Name string `json:"name"`
 }
 
-func (oc *OctantConnection) getArgoAppStatus(ctx context.Context, name string, namespace string, connection OctantConnectionData) (*ArgoApp, error) {
+type argoSyncPayload struct {
+	Revision  string           `json:"revision"`
+	Prune     bool             `json:"prune"`
+	DryRun    bool             `json:"dryRun"`
+	Strategy  argoSyncStrategy `json:"strategy"`
+	Manifests []string         `json:"manifests"`
+}
+
+type argoSyncStrategy struct {
+	Apply argoSyncApply `json:"apply"`
+}
+
+type argoSyncApply struct {
+	Force bool `json:"force"`
+}
+
+func (oc *OctantConnection) getArgoAppStatus(ctx context.Context, name string, namespace string, connection OctantConnectionData) (*argoApp, error) {
 	argoIntegration, getArgoIntErr := oc.argoClient.GetIntegrationByName(ctx, namespace, connection.Deployment.IntegrationName)
 	if getArgoIntErr != nil {
 		return nil, getArgoIntErr
@@ -54,7 +70,7 @@ func (oc *OctantConnection) getArgoAppStatus(ctx context.Context, name string, n
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
-	var app ArgoApp
+	var app argoApp
 	if err := json.NewDecoder(resp.Body).Decode(&app); err != nil {
 		return nil, err
 	}
@@ -95,17 +111,18 @@ func (oc *OctantConnection) doArgoAppSync(ctx context.Context, templateData *Arg
 	}
 
 	// TODO: Make a struct for this
-	syncPayload := map[string]any{
-		"revision": "HEAD",
-		"prune":    false,
-		"dryRun":   false,
-		"strategy": map[string]any{
-			"apply": map[string]bool{
-				"force": false,
+	syncPayload := argoSyncPayload{
+		Revision: "HEAD",
+		Prune:    false,
+		DryRun:   false,
+		Strategy: argoSyncStrategy{
+			Apply: argoSyncApply{
+				Force: false,
 			},
 		},
-		"manifests": manifestsSlice,
+		Manifests: manifestsSlice,
 	}
+
 	syncPayloadJSON, err := json.Marshal(syncPayload)
 	if err != nil {
 		return err
