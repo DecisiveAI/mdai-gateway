@@ -273,9 +273,8 @@ func TestRenderValidatorManifest(t *testing.T) {
 		require.NoError(t, yaml.Unmarshal(validatorBytes, &validator))
 
 		spec := validator["spec"].(map[string]any)
-		signals := spec["signals"].([]any)
-		assert.Contains(t, signals, "logs")
-		assert.Contains(t, signals, "metrics")
+		collectorRef := spec["collectorRef"].(map[string]any)
+		assert.Equal(t, "test-app", collectorRef["name"])
 	})
 }
 

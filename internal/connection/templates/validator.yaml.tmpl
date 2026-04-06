@@ -5,7 +5,3 @@ metadata:
 spec:
   collectorRef:
     name: {{ .AppName }}
-  signals:
-    {{- range .ConnectionData.TelemetryTypes }}
-    - {{ . }}
-    {{ end }}
