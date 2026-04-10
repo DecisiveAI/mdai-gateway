@@ -204,6 +204,10 @@ func TestRenderCollectorManifest(t *testing.T) {
 		assert.Equal(t, "${env:DD_API_KEY}", apiMap["key"])
 		assert.Equal(t, "${env:DD_SITE}", apiMap["site"])
 
+		connectionName, hasConnectionName := getNestedField(otelConfig, "service", "telemetry", "resource", "mdai-connection")
+		assert.True(t, hasConnectionName, "Connection name should be configured")
+		assert.Equal(t, "test-app-collector", connectionName)
+
 		// Check Dynamic Pipelines
 		for _, tel := range []string{"logs", "traces"} {
 			receivers, found := getNestedField(otelConfig, "service", "pipelines", tel, "receivers")
