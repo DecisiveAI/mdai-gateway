@@ -206,7 +206,7 @@ func TestRenderCollectorManifest(t *testing.T) {
 
 		connectionName, hasConnectionName := getNestedField(otelConfig, "service", "telemetry", "resource", "mdai-connection")
 		assert.True(t, hasConnectionName, "Connection name should be configured")
-		assert.Equal(t, "test-app-collector", connectionName)
+		assert.Equal(t, "test-app", connectionName)
 
 		// Check Dynamic Pipelines
 		for _, tel := range []string{"logs", "traces"} {
