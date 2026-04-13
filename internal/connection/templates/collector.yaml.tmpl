@@ -44,7 +44,7 @@ spec:
     service:
       telemetry:
         resource:
-          mdai-connection: "{{ .AppName }}"
+          mdai_connection: "{{ .AppName }}"
           service.name: "{{ .AppName }}-collector"
         metrics:
           readers:
@@ -55,7 +55,7 @@ spec:
                     port: 8888
                     with_resource_constant_labels:
                       included:
-                        - mdai-connection
+                        - mdai_connection
                         - service.name
       pipelines:
         {{- range .ConnectionData.TelemetryTypes }}
