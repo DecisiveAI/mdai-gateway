@@ -207,6 +207,18 @@ func TestRenderCollectorManifest(t *testing.T) {
 		connectionName, hasConnectionName := getNestedField(otelConfig, "service", "telemetry", "resource", "mdai-connection")
 		assert.True(t, hasConnectionName, "Connection name should be configured")
 		assert.Equal(t, "test-app", connectionName)
+		serviceName, hasServiceName := getNestedField(otelConfig, "service", "telemetry", "resource", "service.name")
+		assert.True(t, hasServiceName, "Service name should be configured")
+		assert.Equal(t, "test-app-collector", serviceName)
+
+		metricsReaders, hasMetricsReaders := getNestedField(otelConfig, "service", "telemetry", "metrics", "readers")
+		assert.True(t, hasMetricsReaders, "Metrics reader should be configured")
+		metricsReadersSlice := metricsReaders.([]any)
+		assert.Len(t, metricsReadersSlice, 1)
+		includedLabels, hasIncludedLabels := getNestedField(metricsReadersSlice[0].(map[string]any), "pull", "exporter", "prometheus", "with_resource_constant_labels", "included")
+		assert.True(t, hasIncludedLabels, "Prometheus pull exporter included labels should be configured")
+		assert.Contains(t, includedLabels, "mdai-connection")
+		assert.Contains(t, includedLabels, "service.name")
 
 		// Check Dynamic Pipelines
 		for _, tel := range []string{"logs", "traces"} {
