@@ -193,9 +193,9 @@ func TestRenderCollectorManifest(t *testing.T) {
 		_, hasEnv := spec["env"]
 		assert.True(t, hasEnv, "Env block should exist for Datadog integration")
 
-		configStr := spec["config"].(string)
-		var otelConfig map[string]any
-		require.NoError(t, yaml.Unmarshal([]byte(configStr), &otelConfig))
+		otelConfigRaw, hasOtelConfig := getNestedField(spec, "config")
+		assert.True(t, hasOtelConfig, "OTEL config should exist")
+		otelConfig := otelConfigRaw.(map[string]any)
 
 		// Check Datadog Exporter
 		apiBlock, found := getNestedField(otelConfig, "exporters", "datadog", "api")
@@ -257,9 +257,9 @@ func TestRenderCollectorManifest(t *testing.T) {
 			}
 		}
 
-		configStr := spec["config"].(string)
-		var otelConfig map[string]any
-		require.NoError(t, yaml.Unmarshal([]byte(configStr), &otelConfig))
+		otelConfigRaw, hasOtelConfig := getNestedField(spec, "config")
+		assert.True(t, hasOtelConfig, "OTEL config should exist")
+		otelConfig := otelConfigRaw.(map[string]any)
 
 		_, foundExporters := getNestedField(otelConfig, "exporters", "datadog", "api")
 		assert.False(t, foundExporters, "Datadog API exporter should NOT be configured")
