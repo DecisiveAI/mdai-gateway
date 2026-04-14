@@ -102,19 +102,19 @@ func (cs *ConnectionStatus) IsTelemetryFlowing(ctx context.Context, connectionNa
 			promQuery = lo.Ternary(
 				ie == Ingress,
 				fmt.Sprintf("otelcol_receiver_accepted_log_records_total{receiver=%q, mdai_connection=%q}", "datadog", connectionName),
-				fmt.Sprintf("otelcol_exporter_sent_log_records{exporter=%q, mdai_connection=%q}", "datadog", connectionName),
+				fmt.Sprintf("otelcol_exporter_sent_log_records_total{exporter=%q, mdai_connection=%q}", "datadog", connectionName),
 			)
 		case telemetry.Traces:
 			promQuery = lo.Ternary(
 				ie == Ingress,
 				fmt.Sprintf("otelcol_receiver_accepted_spans_total{receiver=%q, mdai_connection=%q}", "datadog", connectionName),
-				fmt.Sprintf("otelcol_exporter_sent_spans{exporter=%q, mdai_connection=%q}", "datadog", connectionName),
+				fmt.Sprintf("otelcol_exporter_sent_spans_total{exporter=%q, mdai_connection=%q}", "datadog", connectionName),
 			)
 		case telemetry.Metrics:
 			promQuery = lo.Ternary(
 				ie == Ingress,
 				fmt.Sprintf("otelcol_receiver_accepted_metric_points_total{receiver=%q, mdai_connection=%q}", "datadog", connectionName),
-				fmt.Sprintf("otelcol_exporter_sent_metric_points{exporter=%q, mdai_connection=%q}", "datadog", connectionName),
+				fmt.Sprintf("otelcol_exporter_sent_metric_points_total{exporter=%q, mdai_connection=%q}", "datadog", connectionName),
 			)
 		default:
 			return false, fmt.Errorf("unknown telemetry type: %s", connectionType)
