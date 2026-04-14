@@ -191,7 +191,7 @@ func TestRenderCollectorManifest(t *testing.T) {
 
 		labels, hasLabels := getNestedField(otel, "metadata", "labels")
 		assert.True(t, hasLabels)
-		assert.Equal(t, labels.(map[string]any)["hub.mydecisive.ai/role"], "connection-collector")
+		assert.Equal(t, "connection-collector", labels.(map[string]any)["hub.mydecisive.ai/role"])
 
 		spec := otel["spec"].(map[string]any)
 		_, hasEnv := spec["env"]
