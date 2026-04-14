@@ -254,7 +254,7 @@ func TestIsTelemetryFlowing(t *testing.T) {
 
 		mockPromAPI := v1mock.NewMockAPI(t)
 		mockPromAPI.EXPECT().
-			QueryRange(mock.Anything, "otelcol_receiver_accepted_log_records_total{receiver=\"datadog\", mdai_connection=\"foobar\"}", mock.Anything).
+			QueryRange(mock.Anything, "otelcol_receiver_accepted_log_records_total{receiver=\"datadog\", mdai_connection=\"foobar\", service_name=\"foobar-collector\", job=\"mdai-connection-collector-scrape\"}", mock.Anything).
 			Return(nil, nil, assert.AnError).
 			Times(1)
 
@@ -281,7 +281,7 @@ func TestIsTelemetryFlowing(t *testing.T) {
 		}
 		mockPromAPI := v1mock.NewMockAPI(t)
 		mockPromAPI.EXPECT().
-			QueryRange(mock.Anything, "otelcol_receiver_accepted_log_records_total{receiver=\"datadog\", mdai_connection=\"foobar\"}", mock.Anything).
+			QueryRange(mock.Anything, "otelcol_receiver_accepted_log_records_total{receiver=\"datadog\", mdai_connection=\"foobar\", service_name=\"foobar-collector\", job=\"mdai-connection-collector-scrape\"}", mock.Anything).
 			Return(queryResults, nil, nil).
 			Times(1)
 
@@ -334,11 +334,11 @@ func TestIsTelemetryFlowing(t *testing.T) {
 		}
 		mockPromAPI := v1mock.NewMockAPI(t)
 		mockPromAPI.EXPECT().
-			QueryRange(mock.Anything, "otelcol_receiver_accepted_log_records_total{receiver=\"datadog\", mdai_connection=\"foobar\"}", mock.Anything).
+			QueryRange(mock.Anything, "otelcol_receiver_accepted_log_records_total{receiver=\"datadog\", mdai_connection=\"foobar\", service_name=\"foobar-collector\", job=\"mdai-connection-collector-scrape\"}", mock.Anything).
 			Return(logsResults, nil, nil).
 			Times(1)
 		mockPromAPI.EXPECT().
-			QueryRange(mock.Anything, "otelcol_receiver_accepted_spans_total{receiver=\"datadog\", mdai_connection=\"foobar\"}", mock.Anything).
+			QueryRange(mock.Anything, "otelcol_receiver_accepted_spans_total{receiver=\"datadog\", mdai_connection=\"foobar\", service_name=\"foobar-collector\", job=\"mdai-connection-collector-scrape\"}", mock.Anything).
 			Return(tracesResults, nil, nil).
 			Times(1)
 
@@ -413,15 +413,15 @@ func TestIsTelemetryFlowing(t *testing.T) {
 		}
 		mockPromAPI := v1mock.NewMockAPI(t)
 		mockPromAPI.EXPECT().
-			QueryRange(mock.Anything, "otelcol_receiver_accepted_log_records_total{receiver=\"datadog\", mdai_connection=\"foobar\"}", mock.Anything).
+			QueryRange(mock.Anything, "otelcol_receiver_accepted_log_records_total{receiver=\"datadog\", mdai_connection=\"foobar\", service_name=\"foobar-collector\", job=\"mdai-connection-collector-scrape\"}", mock.Anything).
 			Return(logsResults, nil, nil).
 			Times(1)
 		mockPromAPI.EXPECT().
-			QueryRange(mock.Anything, "otelcol_receiver_accepted_spans_total{receiver=\"datadog\", mdai_connection=\"foobar\"}", mock.Anything).
+			QueryRange(mock.Anything, "otelcol_receiver_accepted_spans_total{receiver=\"datadog\", mdai_connection=\"foobar\", service_name=\"foobar-collector\", job=\"mdai-connection-collector-scrape\"}", mock.Anything).
 			Return(tracesResults, nil, nil).
 			Times(1)
 		mockPromAPI.EXPECT().
-			QueryRange(mock.Anything, "otelcol_receiver_accepted_metric_points_total{receiver=\"datadog\", mdai_connection=\"foobar\"}", mock.Anything).
+			QueryRange(mock.Anything, "otelcol_receiver_accepted_metric_points_total{receiver=\"datadog\", mdai_connection=\"foobar\", service_name=\"foobar-collector\", job=\"mdai-connection-collector-scrape\"}", mock.Anything).
 			Return(metricsResults, nil, nil).
 			Times(1)
 

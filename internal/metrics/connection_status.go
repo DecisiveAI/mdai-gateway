@@ -101,31 +101,45 @@ func (cs *ConnectionStatus) IsTelemetryFlowing(ctx context.Context, connectionNa
 		case telemetry.Logs:
 			promQuery = lo.Ternary(
 				ie == Ingress,
-				fmt.Sprintf("otelcol_receiver_accepted_log_records_total{receiver=%q, mdai_connection=%q}", "datadog", connectionName),
-				fmt.Sprintf("otelcol_exporter_sent_log_records_total{exporter=%q, mdai_connection=%q}", "datadog", connectionName),
+				// TODO: `job="mdai-connection-collector-scrape" is brittle and depends on the exact scrape job being present, but if we don't include that, we get repeat results
+				fmt.Sprintf(
+					"otelcol_receiver_accepted_log_records_total{receiver=%q, mdai_connection=%q, service_name=%q, job=\"mdai-connection-collector-scrape\"}",
+					"datadog", connectionName, connectionName+"-collector"),
+				fmt.Sprintf(
+					"otelcol_exporter_sent_log_records_total{exporter=%q, mdai_connection=%q, service_name=%q, job=\"mdai-connection-collector-scrape\"}",
+					"datadog", connectionName, connectionName+"-collector"),
 			)
 		case telemetry.Traces:
 			promQuery = lo.Ternary(
 				ie == Ingress,
-				fmt.Sprintf("otelcol_receiver_accepted_spans_total{receiver=%q, mdai_connection=%q}", "datadog", connectionName),
-				fmt.Sprintf("otelcol_exporter_sent_spans_total{exporter=%q, mdai_connection=%q}", "datadog", connectionName),
+				// TODO: `job="mdai-connection-collector-scrape" is brittle and depends on the exact scrape job being present, but if we don't include that, we get repeat results
+				fmt.Sprintf(
+					"otelcol_receiver_accepted_spans_total{receiver=%q, mdai_connection=%q, service_name=%q, job=\"mdai-connection-collector-scrape\"}",
+					"datadog", connectionName, connectionName+"-collector"),
+				fmt.Sprintf(
+					"otelcol_exporter_sent_spans_total{exporter=%q, mdai_connection=%q, service_name=%q, job=\"mdai-connection-collector-scrape\"}",
+					"datadog", connectionName, connectionName+"-collector"),
 			)
 		case telemetry.Metrics:
 			promQuery = lo.Ternary(
 				ie == Ingress,
-				fmt.Sprintf("otelcol_receiver_accepted_metric_points_total{receiver=%q, mdai_connection=%q}", "datadog", connectionName),
-				fmt.Sprintf("otelcol_exporter_sent_metric_points_total{exporter=%q, mdai_connection=%q}", "datadog", connectionName),
+				// TODO: `job="mdai-connection-collector-scrape" is brittle and depends on the exact scrape job being present, but if we don't include that, we get repeat results
+				fmt.Sprintf(
+					"otelcol_receiver_accepted_metric_points_total{receiver=%q, mdai_connection=%q, service_name=%q, job=\"mdai-connection-collector-scrape\"}",
+					"datadog", connectionName, connectionName+"-collector"),
+				fmt.Sprintf(
+					"otelcol_exporter_sent_metric_points_total{exporter=%q, mdai_connection=%q, service_name=%q, job=\"mdai-connection-collector-scrape\"}",
+					"datadog", connectionName, connectionName+"-collector"),
 			)
 		default:
 			return false, fmt.Errorf("unknown telemetry type: %s", connectionType)
 		}
 
-		// TODO: figure out how to query a label to get EXACTLY the collector we want to look at, don't want to sum across multiple collectors
 		// compare the last minute of results
 		results, _, err := cs.promClient.QueryRange(ctx, promQuery, promv1.Range{
-			Start: time.Now().Add(-1 * time.Minute),
+			Start: time.Now().Add(-5 * time.Minute),
 			End:   time.Now(),
-			Step:  time.Minute,
+			Step:  5 * time.Minute,
 		})
 		if err != nil {
 			return false, fmt.Errorf("failed to query prometheus: %w", err)
