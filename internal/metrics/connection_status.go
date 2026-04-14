@@ -139,7 +139,7 @@ func (cs *ConnectionStatus) IsTelemetryFlowing(ctx context.Context, connectionNa
 		results, _, err := cs.promClient.QueryRange(ctx, promQuery, promv1.Range{
 			Start: time.Now().Add(-5 * time.Minute),
 			End:   time.Now(),
-			Step:  5 * time.Minute,
+			Step:  15 * time.Second,
 		})
 		if err != nil {
 			return false, fmt.Errorf("failed to query prometheus: %w", err)
