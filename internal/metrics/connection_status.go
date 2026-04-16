@@ -21,6 +21,37 @@ const (
 	Egress
 )
 
+type collectorMetric string
+
+const (
+	logsAcceptedMetric    collectorMetric = "otelcol_receiver_accepted_log_records_total"
+	logsSentMetric        collectorMetric = "otelcol_exporter_sent_log_records_total"
+	metricsAcceptedMetric collectorMetric = "otelcol_receiver_accepted_metric_points_total"
+	metricsSentMetric     collectorMetric = "otelcol_exporter_sent_metric_points_total"
+	spansAcceptedMetric   collectorMetric = "otelcol_receiver_accepted_spans_total"
+	spansSentMetric       collectorMetric = "otelcol_exporter_sent_spans_total"
+)
+
+var metricTable = map[telemetry.MLT]map[IngressEgress]collectorMetric{
+	telemetry.Logs: {
+		Ingress: logsAcceptedMetric,
+		Egress:  logsSentMetric,
+	},
+	telemetry.Metrics: {
+		Ingress: metricsAcceptedMetric,
+		Egress:  metricsSentMetric,
+	},
+	telemetry.Traces: {
+		Ingress: spansAcceptedMetric,
+		Egress:  spansSentMetric,
+	},
+}
+
+var ingressEgressToReceiverExporter = map[IngressEgress]string{
+	Ingress: "receiver",
+	Egress:  "exporter",
+}
+
 const (
 	fidelityCheckFail = "fail"
 	fidelityCheckPass = "pass"
@@ -94,62 +125,41 @@ func dataFidelityCheck(logger *zap.Logger, resultMatrix model.Matrix, telemetryT
 	return true
 }
 
+func buildQuery(connectionName string, ingressEgress IngressEgress, telemetryType telemetry.MLT) string {
+	return fmt.Sprintf(
+		"increase(%s{%s=%q, mdai_connection=%q, service_name=%q}[10m])",
+		metricTable[telemetryType][ingressEgress],
+		ingressEgressToReceiverExporter[ingressEgress],
+		"datadog", connectionName,
+		connectionName+"-collector",
+	)
+}
+
 func (cs *ConnectionStatus) IsTelemetryFlowing(ctx context.Context, connectionName string, ie IngressEgress, telemetryTypes []telemetry.MLT) (bool, error) {
 	for _, connectionType := range telemetryTypes {
 		var promQuery string
 		switch connectionType {
 		case telemetry.Logs:
-			promQuery = lo.Ternary(
-				ie == Ingress,
-				// TODO: `job="mdai-connection-collector-scrape" is brittle and depends on the exact scrape job being present, but if we don't include that, we get repeat results
-				fmt.Sprintf(
-					"otelcol_receiver_accepted_log_records_total{receiver=%q, mdai_connection=%q, service_name=%q, job=\"mdai-connection-collector-scrape\"}",
-					"datadog", connectionName, connectionName+"-collector"),
-				fmt.Sprintf(
-					"otelcol_exporter_sent_log_records_total{exporter=%q, mdai_connection=%q, service_name=%q, job=\"mdai-connection-collector-scrape\"}",
-					"datadog", connectionName, connectionName+"-collector"),
-			)
+			promQuery = buildQuery(connectionName, ie, telemetry.Logs)
 		case telemetry.Traces:
-			promQuery = lo.Ternary(
-				ie == Ingress,
-				// TODO: `job="mdai-connection-collector-scrape" is brittle and depends on the exact scrape job being present, but if we don't include that, we get repeat results
-				fmt.Sprintf(
-					"otelcol_receiver_accepted_spans_total{receiver=%q, mdai_connection=%q, service_name=%q, job=\"mdai-connection-collector-scrape\"}",
-					"datadog", connectionName, connectionName+"-collector"),
-				fmt.Sprintf(
-					"otelcol_exporter_sent_spans_total{exporter=%q, mdai_connection=%q, service_name=%q, job=\"mdai-connection-collector-scrape\"}",
-					"datadog", connectionName, connectionName+"-collector"),
-			)
+			promQuery = buildQuery(connectionName, ie, telemetry.Traces)
 		case telemetry.Metrics:
-			promQuery = lo.Ternary(
-				ie == Ingress,
-				// TODO: `job="mdai-connection-collector-scrape" is brittle and depends on the exact scrape job being present, but if we don't include that, we get repeat results
-				fmt.Sprintf(
-					"otelcol_receiver_accepted_metric_points_total{receiver=%q, mdai_connection=%q, service_name=%q, job=\"mdai-connection-collector-scrape\"}",
-					"datadog", connectionName, connectionName+"-collector"),
-				fmt.Sprintf(
-					"otelcol_exporter_sent_metric_points_total{exporter=%q, mdai_connection=%q, service_name=%q, job=\"mdai-connection-collector-scrape\"}",
-					"datadog", connectionName, connectionName+"-collector"),
-			)
+			promQuery = buildQuery(connectionName, ie, telemetry.Metrics)
 		default:
 			return false, fmt.Errorf("unknown telemetry type: %s", connectionType)
 		}
 
 		// compare the last minute of results
-		results, _, err := cs.promClient.QueryRange(ctx, promQuery, promv1.Range{
-			Start: time.Now().Add(-5 * time.Minute),
-			End:   time.Now(),
-			Step:  15 * time.Second,
-		})
+		results, _, err := cs.promClient.Query(ctx, promQuery, time.Now())
 		if err != nil {
 			return false, fmt.Errorf("failed to query prometheus: %w", err)
 		}
 
-		var metricsIncreasing bool
-		metricsIncreasing, err = areMatrixValuesIncreasing(results)
-		if err != nil {
-			return false, fmt.Errorf("analyzing query range results: %w", err)
+		resultVector, ok := results.(model.Vector)
+		if !ok || len(resultVector) == 0 {
+			return false, nil
 		}
+		metricsIncreasing := float64(resultVector[0].Value) > 0
 
 		// return immediately if one of the telemetry types isn't increasing, we don't need to keep checking
 		if !metricsIncreasing {
