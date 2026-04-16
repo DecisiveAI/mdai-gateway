@@ -32,24 +32,34 @@ const (
 	spansSentMetric       collectorMetric = "otelcol_exporter_sent_spans_total"
 )
 
-var metricTable = map[telemetry.MLT]map[IngressEgress]collectorMetric{
-	telemetry.Logs: {
-		Ingress: logsAcceptedMetric,
-		Egress:  logsSentMetric,
-	},
-	telemetry.Metrics: {
-		Ingress: metricsAcceptedMetric,
-		Egress:  metricsSentMetric,
-	},
-	telemetry.Traces: {
-		Ingress: spansAcceptedMetric,
-		Egress:  spansSentMetric,
-	},
+func getCollectorMetric(telemetryType telemetry.MLT, ingressEgress IngressEgress) collectorMetric {
+	// this is fugly, but gochecknoglobals decreed that my map was no good 🙃
+	switch telemetryType {
+	case telemetry.Logs:
+		if ingressEgress == Ingress {
+			return logsAcceptedMetric
+		}
+		return logsSentMetric
+	case telemetry.Metrics:
+		if ingressEgress == Ingress {
+			return metricsAcceptedMetric
+		}
+		return metricsSentMetric
+	case telemetry.Traces:
+		if ingressEgress == Ingress {
+			return spansAcceptedMetric
+		}
+		return spansSentMetric
+	default:
+		return ""
+	}
 }
 
-var ingressEgressToReceiverExporter = map[IngressEgress]string{
-	Ingress: "receiver",
-	Egress:  "exporter",
+func getReceiverExporter(ie IngressEgress) string {
+	if ie == Ingress {
+		return "receiver"
+	}
+	return "exporter"
 }
 
 const (
@@ -59,7 +69,7 @@ const (
 	fidelityMetricResult = "result"
 	fidelityMetricSignal = "signal"
 
-	tenMinutes = 10 * time.Minute
+	tenMinutes = 10 * time.Minute // nolint: revive
 )
 
 type ConnectionStatus struct {
@@ -128,8 +138,8 @@ func dataFidelityCheck(logger *zap.Logger, resultMatrix model.Matrix, telemetryT
 func buildQuery(connectionName string, ingressEgress IngressEgress, telemetryType telemetry.MLT) string {
 	return fmt.Sprintf(
 		"increase(%s{%s=%q, mdai_connection=%q, service_name=%q}[10m])",
-		metricTable[telemetryType][ingressEgress],
-		ingressEgressToReceiverExporter[ingressEgress],
+		getCollectorMetric(telemetryType, ingressEgress),
+		getReceiverExporter(ingressEgress),
 		"datadog", connectionName,
 		connectionName+"-collector",
 	)

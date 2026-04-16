@@ -538,12 +538,8 @@ func TestGetConnectionStatus_Success(t *testing.T) {
 	})
 
 	promServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		bodyBytes, err := io.ReadAll(r.Body)
-		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		defer r.Body.Close()
+		bodyBytes, _ := io.ReadAll(r.Body)
+		defer r.Body.Close() // nolint: errcheck
 		bodyString := string(bodyBytes)
 
 		responseString := `{"status":"success","data":{"resultType":"vector","result":[{"metric":{},"value":[1712419691,"5"]}]}}`
