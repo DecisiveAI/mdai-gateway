@@ -4,17 +4,28 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	"strings"
 )
 
 const datadogSecretName = "mdai-datadog-integration" // nolint: gosec
 
+var knownDatadogSites = []string{"datadoghq.com", "datadoghq.eu", "ddog-gov.com"}
+
 type DataDogIntegrationData struct {
 	APIKey string `json:"apiKey"`
 	DDUrl  string `json:"url"`
+}
+
+func (d DataDogIntegrationData) IsDatadog() bool {
+	for _, site := range knownDatadogSites {
+		if strings.Contains(d.DDUrl, site) {
+			return true
+		}
+	}
+	return false
 }
 
 func (ddid *DataDogIntegrationData) ToFields() map[string]any {
