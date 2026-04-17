@@ -35,7 +35,7 @@ spec:
         api:
           key: ${env:DD_API_KEY}
           site: "${env:DD_SITE}"
-        {{- if not .DatadogIntegrationData.IsDatadog }}
+        {{- if not .DatadogIntegrationData.IsKnownDatadogTLD }}
         traces:
           endpoint: "http://${env:DD_SITE}:8126"
         logs:

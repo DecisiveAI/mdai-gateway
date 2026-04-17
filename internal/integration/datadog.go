@@ -18,7 +18,7 @@ type DataDogIntegrationData struct {
 	DDUrl  string `json:"url"`
 }
 
-func (d DataDogIntegrationData) IsDatadog() bool {
+func (d DataDogIntegrationData) IsKnownDatadogTLD() bool {
 	knownDatadogSites := []string{"datadoghq.com", "datadoghq.eu", "ddog-gov.com"}
 	for _, site := range knownDatadogSites {
 		if strings.Contains(d.DDUrl, site) {
