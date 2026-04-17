@@ -69,7 +69,7 @@ const (
 	fidelityMetricResult = "result"
 	fidelityMetricSignal = "signal"
 
-	tenMinutes = 10 * time.Minute // nolint: revive
+	tenMinutes = 10 * time.Minute //nolint: revive
 )
 
 type ConnectionStatus struct {

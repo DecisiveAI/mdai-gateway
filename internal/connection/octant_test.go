@@ -539,7 +539,7 @@ func TestGetConnectionStatus_Success(t *testing.T) {
 
 	promServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		bodyBytes, _ := io.ReadAll(r.Body)
-		defer r.Body.Close() // nolint: errcheck
+		defer r.Body.Close() //nolint: errcheck
 		bodyString := string(bodyBytes)
 
 		responseString := `{"status":"success","data":{"resultType":"vector","result":[{"metric":{},"value":[1712419691,"5"]}]}}`
@@ -549,7 +549,7 @@ func TestGetConnectionStatus_Success(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(responseString)) // nolint: errcheck,gosec,revive
+		w.Write([]byte(responseString)) //nolint: errcheck,gosec,revive
 	}))
 	defer promServer.Close()
 
