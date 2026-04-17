@@ -551,7 +551,7 @@ func TestGetCollectorMetric(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			actual := getCollectorMetric(tc.telemetryType, tc.ingressEgress)
+			actual := tc.ingressEgress.getCollectorMLTMetric(tc.telemetryType)
 			assert.Equal(t, tc.expected, actual)
 		})
 	}
@@ -562,12 +562,12 @@ func TestGetReceiverExporter(t *testing.T) {
 
 	t.Run("Ingress returns receiver", func(t *testing.T) {
 		t.Parallel()
-		assert.Equal(t, "receiver", getReceiverExporter(Ingress))
+		assert.Equal(t, "receiver", Ingress.getComponentType())
 	})
 
 	t.Run("Egress returns exporter", func(t *testing.T) {
 		t.Parallel()
-		assert.Equal(t, "exporter", getReceiverExporter(Egress))
+		assert.Equal(t, "exporter", Egress.getComponentType())
 	})
 }
 

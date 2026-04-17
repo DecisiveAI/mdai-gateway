@@ -32,21 +32,21 @@ const (
 	spansSentMetric       collectorMetric = "otelcol_exporter_sent_spans_total"
 )
 
-func getCollectorMetric(telemetryType telemetry.MLT, ingressEgress IngressEgress) collectorMetric {
+func (ie IngressEgress) getCollectorMLTMetric(telemetryType telemetry.MLT) collectorMetric {
 	// this is fugly, but gochecknoglobals decreed that my map was no good 🙃
 	switch telemetryType {
 	case telemetry.Logs:
-		if ingressEgress == Ingress {
+		if ie == Ingress {
 			return logsAcceptedMetric
 		}
 		return logsSentMetric
 	case telemetry.Metrics:
-		if ingressEgress == Ingress {
+		if ie == Ingress {
 			return metricsAcceptedMetric
 		}
 		return metricsSentMetric
 	case telemetry.Traces:
-		if ingressEgress == Ingress {
+		if ie == Ingress {
 			return spansAcceptedMetric
 		}
 		return spansSentMetric
@@ -55,7 +55,7 @@ func getCollectorMetric(telemetryType telemetry.MLT, ingressEgress IngressEgress
 	}
 }
 
-func getReceiverExporter(ie IngressEgress) string {
+func (ie IngressEgress) getComponentType() string {
 	if ie == Ingress {
 		return "receiver"
 	}
@@ -138,8 +138,8 @@ func dataFidelityCheck(logger *zap.Logger, resultMatrix model.Matrix, telemetryT
 func buildQuery(connectionName string, ingressEgress IngressEgress, telemetryType telemetry.MLT) string {
 	return fmt.Sprintf(
 		"increase(%s{%s=%q, mdai_connection=%q, service_name=%q}[10m])",
-		getCollectorMetric(telemetryType, ingressEgress),
-		getReceiverExporter(ingressEgress),
+		ingressEgress.getCollectorMLTMetric(telemetryType),
+		ingressEgress.getComponentType(),
 		"datadog", connectionName,
 		connectionName+"-collector",
 	)
