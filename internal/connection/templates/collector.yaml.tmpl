@@ -27,23 +27,65 @@ spec:
     {{- end }}
   config:
     receivers:
+      {{- if .DatadogIntegrationData }}
       datadog:
         endpoint: "0.0.0.0:8126"
+      {{- else }}
+      otlp:
+        protocols:
+          grpc:
+            endpoint: "0.0.0.0:4317"
+          http:
+            endpoint: "0.0.0.0:4318"
+      {{- end }}
+
+    {{- if .DatadogIntegrationData }}
+    processors:
+      transform/format_telemetry:
+        error_mode: ignore
+        trace_statements:
+          - context: resource
+            statements:
+              - set(attributes["datadog.host.name"], attributes["host.name"]) where attributes["host.name"] != nil
+              - set(attributes["datadog.host.name"], attributes["hostname"]) where attributes["hostname"] != nil
+        metric_statements:
+          - context: resource
+            statements:
+              - set(attributes["datadog.host.name"], attributes["host.name"]) where attributes["host.name"] != nil
+              - set(attributes["datadog.host.name"], attributes["hostname"]) where attributes["hostname"] != nil
+        log_statements:
+          - context: resource
+            statements:
+              - set(attributes["datadog.host.name"], attributes["host.name"]) where attributes["host.name"] != nil
+              - set(attributes["datadog.host.name"], attributes["hostname"]) where attributes["hostname"] != nil
+          - context: log
+            statements:
+              - merge_maps(attributes, ParseJSON(body), "upsert") where IsString(body) and IsMatch(body, "^\\s*\\{.*\\}\\s*$")
+              - set(body, attributes["message"]) where IsString(attributes["message"])
+              - delete_key(attributes, "message")
+    {{- end }}
+
     exporters:
      {{- if .DatadogIntegrationData }}
       datadog:
         api:
           key: ${env:DD_API_KEY}
           site: "${env:DD_SITE}"
+        metrics:
+          resource_attributes_as_tags: true
+          {{- if not .DatadogIntegrationData.IsKnownDatadogTLD }}
+          endpoint: "http://${env:DD_SITE}:8126"
+          {{- end }}
         {{- if not .DatadogIntegrationData.IsKnownDatadogTLD }}
         traces:
           endpoint: "http://${env:DD_SITE}:8126"
         logs:
           endpoint: "http://${env:DD_SITE}:8126"
-        metrics:
-          endpoint: "http://${env:DD_SITE}:8126"
         {{- end }}
+     {{- else }}
+      debug: {}
      {{- end }}
+
     service:
       telemetry:
         resource:
@@ -62,7 +104,21 @@ spec:
                         - service.name
       pipelines:
         {{- range .ConnectionData.TelemetryTypes }}
-          {{ . }}:
-            receivers: [datadog]
-            exporters: [datadog]
+        {{ . }}:
+          receivers:
+            {{- if $.DatadogIntegrationData }}
+            - datadog
+            {{- else }}
+            - otlp
+            {{- end }}
+          {{- if $.DatadogIntegrationData }}
+          processors:
+            - transform/format_telemetry
+          {{- end }}
+          exporters:
+            {{- if $.DatadogIntegrationData }}
+            - datadog
+            {{- else }}
+            - debug
+            {{- end }}
         {{- end }}
