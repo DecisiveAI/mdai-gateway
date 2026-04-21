@@ -3,6 +3,7 @@ package connection
 import (
 	"context"
 	"fmt"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -10,6 +11,8 @@ import (
 )
 
 const connectionsConfigmapName = "mdai-octant-connections"
+const connectionsConfigmapConnectionNameKey = "connectionName"
+const connectionsConfigmapLastEditedKey = "%s-last-edited"
 
 type Status struct {
 	ReceivingData bool   `json:"receivingData"`
@@ -30,6 +33,8 @@ func updateConfigMapWithConnection(ctx context.Context, k8sClient kubernetes.Int
 		cm.Data = make(map[string]string)
 	}
 	cm.Data[connectionName] = connectionData
+	cm.Data[connectionsConfigmapConnectionNameKey] = connectionName
+	cm.Data[fmt.Sprintf(connectionsConfigmapLastEditedKey, connectionName)] = fmt.Sprintf("%v", time.Now().UTC().Unix())
 
 	if _, err := k8sClient.CoreV1().ConfigMaps(namespace).Update(ctx, cm, metav1.UpdateOptions{}); err != nil {
 		return fmt.Errorf("error while updating configmap: %w", err)
