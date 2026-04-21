@@ -10,9 +10,11 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-const connectionsConfigmapName = "mdai-octant-connections"
-const connectionsConfigmapConnectionNameKey = "connectionName"
-const connectionsConfigmapLastEditedKey = "%s-last-edited"
+const (
+	connectionsConfigmapName              = "mdai-octant-connections"
+	connectionsConfigmapConnectionNameKey = "connectionName"
+	connectionsConfigmapLastEditedKey     = "%s-last-edited"
+)
 
 type Status struct {
 	ReceivingData bool   `json:"receivingData"`
