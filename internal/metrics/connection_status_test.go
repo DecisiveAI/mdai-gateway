@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"strings"
 	"testing"
 
 	v1mock "github.com/mydecisive/mdai-gateway/internal/mock/v1"
@@ -161,7 +162,6 @@ func TestVerifyDataFidelity(t *testing.T) {
 			promClient: mockPromAPI,
 		}
 		result, _, err := theThing.VerifyDataFidelity(t.Context(), "test-conn", []telemetry.MLT{telemetry.Logs})
-
 		require.ErrorContains(t, err, "checking attribute fidelity")
 		require.False(t, result)
 	})
@@ -206,15 +206,14 @@ func TestVerifyDataFidelity(t *testing.T) {
 		require.False(t, result)
 	})
 
-	t.Run("happy path - data fidelity is NOT good", func(t *testing.T) {
+	t.Run("data integrity is false when BOTH signal parity and policy fail", func(t *testing.T) {
 		t.Parallel()
 
 		failVector := model.Vector{
 			{
 				Metric: model.Metric{
-					fidelityMetricResult:    fidelityCheckFail,
-					fidelityMetricSignal:    model.LabelValue(telemetry.Traces),
-					fidelityMetricAttribute: "span_id",
+					fidelityMetricResult: fidelityCheckFail,
+					fidelityMetricSignal: model.LabelValue(telemetry.Traces),
 				},
 				Value: 5.0,
 			},
@@ -234,13 +233,10 @@ func TestVerifyDataFidelity(t *testing.T) {
 		require.NoError(t, err)
 		require.False(t, result)
 		require.False(t, validations[telemetry.Traces].Parity)
-
-		val, exists := validations[telemetry.Traces].Attributes.Parity["span_id"]
-		require.True(t, exists)
-		require.False(t, val)
+		require.False(t, validations[telemetry.Traces].Policy)
 	})
 
-	t.Run("happy path - data fidelity is good", func(t *testing.T) {
+	t.Run("data integrity is true when ONLY ONE signal check fails", func(t *testing.T) {
 		t.Parallel()
 
 		passVector := model.Vector{
@@ -252,22 +248,94 @@ func TestVerifyDataFidelity(t *testing.T) {
 				Value: 5.0,
 			},
 		}
+		failVector := model.Vector{
+			{
+				Metric: model.Metric{
+					fidelityMetricResult: fidelityCheckFail,
+					fidelityMetricSignal: model.LabelValue(telemetry.Traces),
+				},
+				Value: 5.0,
+			},
+		}
 
 		mockPromAPI := v1mock.NewMockAPI(t)
+
 		mockPromAPI.EXPECT().
-			Query(mock.Anything, mock.Anything, mock.Anything).
+			Query(mock.Anything, mock.MatchedBy(func(q string) bool { return strings.Contains(q, "attribute") }), mock.Anything).
 			Return(passVector, nil, nil).
-			Times(4)
+			Times(2)
+
+		mockPromAPI.EXPECT().
+			Query(mock.Anything, mock.MatchedBy(func(q string) bool { return strings.Contains(q, "mdai_fidelity_signal_checks_total") }), mock.Anything).
+			Return(failVector, nil, nil).
+			Times(1)
+
+		mockPromAPI.EXPECT().
+			Query(mock.Anything, mock.MatchedBy(func(q string) bool { return strings.Contains(q, "mdai_fidelity_required_signal_checks_total") }), mock.Anything).
+			Return(passVector, nil, nil).
+			Times(1)
 
 		theThing := &ConnectionStatus{
 			logger:     zaptest.NewLogger(t),
 			promClient: mockPromAPI,
 		}
 		result, validations, err := theThing.VerifyDataFidelity(t.Context(), "test-conn", []telemetry.MLT{telemetry.Traces})
+
+		require.NoError(t, err)
+		require.True(t, result)
+		require.False(t, validations[telemetry.Traces].Parity)
+		require.True(t, validations[telemetry.Traces].Policy)
+	})
+
+	t.Run("data integrity is true when signals pass but attributes fail", func(t *testing.T) {
+		t.Parallel()
+
+		passVector := model.Vector{
+			{
+				Metric: model.Metric{
+					fidelityMetricResult: fidelityCheckPass,
+					fidelityMetricSignal: model.LabelValue(telemetry.Traces),
+				},
+				Value: 5.0,
+			},
+		}
+		failAttrVector := model.Vector{
+			{
+				Metric: model.Metric{
+					fidelityMetricResult:    fidelityCheckFail,
+					fidelityMetricSignal:    model.LabelValue(telemetry.Traces),
+					fidelityMetricAttribute: "span_id",
+				},
+				Value: 5.0,
+			},
+		}
+
+		mockPromAPI := v1mock.NewMockAPI(t)
+
+		mockPromAPI.EXPECT().
+			Query(mock.Anything, mock.MatchedBy(func(q string) bool { return strings.Contains(q, "attribute") }), mock.Anything).
+			Return(failAttrVector, nil, nil).
+			Times(2)
+
+		mockPromAPI.EXPECT().
+			Query(mock.Anything, mock.MatchedBy(func(q string) bool { return strings.Contains(q, "signal") && !strings.Contains(q, "attribute") }), mock.Anything).
+			Return(passVector, nil, nil).
+			Times(2)
+
+		theThing := &ConnectionStatus{
+			logger:     zaptest.NewLogger(t),
+			promClient: mockPromAPI,
+		}
+		result, validations, err := theThing.VerifyDataFidelity(t.Context(), "test-conn", []telemetry.MLT{telemetry.Traces})
+
 		require.NoError(t, err)
 		require.True(t, result)
 		require.True(t, validations[telemetry.Traces].Parity)
 		require.True(t, validations[telemetry.Traces].Policy)
+
+		val, exists := validations[telemetry.Traces].Attributes.Parity["span_id"]
+		require.True(t, exists)
+		require.False(t, val)
 	})
 }
 

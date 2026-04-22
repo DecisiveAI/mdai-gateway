@@ -98,18 +98,8 @@ func (cs *ConnectionStatus) VerifyDataFidelity(ctx context.Context, connectionNa
 			},
 		}
 
-		if !res.Parity || !res.Policy {
+		if !res.Parity && !res.Policy {
 			dataIntegrity = false
-		}
-		for _, passed := range res.Attributes.Parity {
-			if !passed {
-				dataIntegrity = false
-			}
-		}
-		for _, passed := range res.Attributes.Policy {
-			if !passed {
-				dataIntegrity = false
-			}
 		}
 
 		results[t] = res
