@@ -108,6 +108,36 @@ func (cs *ConnectionStatus) VerifyDataFidelity(ctx context.Context, connectionNa
 	return dataIntegrity, results, nil
 }
 
+func (cs *ConnectionStatus) IsTelemetryFlowing(ctx context.Context, connectionName string, ie IngressEgress, telemetryTypes []telemetry.MLT) (bool, error) {
+	for _, connectionType := range telemetryTypes {
+		var promQuery string
+		switch connectionType {
+		case telemetry.Logs:
+			promQuery = buildFlowQuery(connectionName, ie, telemetry.Logs)
+		case telemetry.Traces:
+			promQuery = buildFlowQuery(connectionName, ie, telemetry.Traces)
+		case telemetry.Metrics:
+			promQuery = buildFlowQuery(connectionName, ie, telemetry.Metrics)
+		default:
+			return false, fmt.Errorf("unknown telemetry type: %s", connectionType)
+		}
+
+		resultVector, err := cs.queryVector(ctx, promQuery)
+		if err != nil {
+			return false, fmt.Errorf("failed to query prometheus: %w", err)
+		}
+
+		if len(resultVector) == 0 {
+			return false, nil
+		}
+
+		if float64(resultVector[0].Value) <= 0 {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
 func (cs *ConnectionStatus) checkAttributeFidelity(ctx context.Context, connectionName string, telemetryTypes []telemetry.MLT) (map[telemetry.MLT]map[string]map[string]bool, error) {
 	attrs := make(map[telemetry.MLT]map[string]map[string]bool)
 	for _, t := range telemetryTypes {
@@ -201,48 +231,21 @@ func (cs *ConnectionStatus) checkSignalFidelity(ctx context.Context, connectionN
 			}
 
 			result := string(sample.Metric[fidelityMetricResult])
-			if result == fidelityCheckFail {
+			switch result {
+			case fidelityCheckFail:
 				signals[signal][vType] = false
 				failsSeen[signal][vType] = true
-			} else if result == fidelityCheckPass {
+			case fidelityCheckPass:
 				if !failsSeen[signal][vType] {
 					signals[signal][vType] = true
 				}
+			default:
+				cs.logger.Info(fmt.Sprintf("encountered unexpected fidelity check metric label %s=%q for metric name %s data type %s", fidelityMetricResult, result, metricName, signal))
 			}
 		}
 	}
 
 	return signals, nil
-}
-
-func (cs *ConnectionStatus) IsTelemetryFlowing(ctx context.Context, connectionName string, ie IngressEgress, telemetryTypes []telemetry.MLT) (bool, error) {
-	for _, connectionType := range telemetryTypes {
-		var promQuery string
-		switch connectionType {
-		case telemetry.Logs:
-			promQuery = buildFlowQuery(connectionName, ie, telemetry.Logs)
-		case telemetry.Traces:
-			promQuery = buildFlowQuery(connectionName, ie, telemetry.Traces)
-		case telemetry.Metrics:
-			promQuery = buildFlowQuery(connectionName, ie, telemetry.Metrics)
-		default:
-			return false, fmt.Errorf("unknown telemetry type: %s", connectionType)
-		}
-
-		resultVector, err := cs.queryVector(ctx, promQuery)
-		if err != nil {
-			return false, fmt.Errorf("failed to query prometheus: %w", err)
-		}
-
-		if len(resultVector) == 0 {
-			return false, nil
-		}
-
-		if float64(resultVector[0].Value) <= 0 {
-			return false, nil
-		}
-	}
-	return true, nil
 }
 
 func (cs *ConnectionStatus) queryVector(ctx context.Context, query string) (model.Vector, error) {
