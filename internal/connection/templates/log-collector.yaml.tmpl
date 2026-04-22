@@ -49,7 +49,7 @@ spec:
         error_mode: ignore
         log_statements:
           - context: log
-            statements:
+            statements: # TODO: we need to test this -- we might have got the 0 vs. 100 wrong.
               - set(attributes["sampling.priority"], 0) where "${env:LOGS_PERSIST_ERRORS}" == "true" and (severity_number >= SEVERITY_NUMBER_ERROR or attributes["status"] == "Error")
       probabilistic_sampler/logs:
         mode: hash_seed
