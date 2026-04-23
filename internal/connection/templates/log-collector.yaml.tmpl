@@ -5,6 +5,7 @@ metadata:
   labels:
     app: {{ .AppName }}
     app.kubernetes.io/instance: {{ .AppName }}-log-sampling
+    mydecisive.ai/hub-name: {{ .AppName }}
   {{- if .IsArgoSideload }}
   annotations:
     argocd.argoproj.io/tracking-id: {{ .AppName }}:opentelemetry.io/OpenTelemetryCollector:mdai/{{ .AppName }}-log-sampling
