@@ -5,28 +5,23 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"strconv"
+
+	variables "github.com/mydecisive/mdai-data-core/variables"
 )
 
-type (
-	VariableType string
-	CommandType  string
-)
+type CommandType string
 
 const (
-	VariableTypeSet              VariableType = "set"
-	VariableTypeMap              VariableType = "map"
-	VariableTypeBool             VariableType = "boolean"
-	VariableTypeInt              VariableType = "int"
-	VariableTypeStr              VariableType = "string"
-	VariableTypeMetaHashSet      VariableType = "metaHashSet"
-	VariableTypeMetaPriorityList VariableType = "metaPriorityList"
-
 	CommandAdd CommandType = "add"
 	CommandDel CommandType = "remove"
 )
 
-var errUnsupportedVariableType = errors.New("unsupported variable type")
+var (
+	errUnsupportedVariableType = errors.New("unsupported variable type")
+	errFloatNotFinite          = errors.New("NaN and ±Inf are not allowed for float variables")
+)
 
 type ParseFn func(json.RawMessage) (any, error)
 
@@ -52,21 +47,35 @@ func unmarshalToAndTransform[T any](errMsg string, transform func(T) any) ParseF
 	}
 }
 
-func GetParser(varType VariableType, command CommandType) (ParseFn, error) {
-	parsers := map[VariableType]map[CommandType]ParseFn{
-		VariableTypeSet: {
+func parseFloat(data json.RawMessage) (any, error) {
+	var v float64
+	if err := json.Unmarshal(data, &v); err != nil {
+		return nil, errors.New("float expected")
+	}
+	if math.IsNaN(v) || math.IsInf(v, 0) {
+		return nil, errFloatNotFinite
+	}
+	if v == 0 {
+		v = 0 // normalize -0 → 0
+	}
+	return strconv.FormatFloat(v, 'g', -1, 64), nil
+}
+
+func GetParser(varType variables.DataType, command CommandType) (ParseFn, error) {
+	parsers := map[variables.DataType]map[CommandType]ParseFn{
+		variables.DataTypeSet: {
 			CommandAdd: unmarshalTo[[]string]("list expected"),
 			CommandDel: unmarshalTo[[]string]("list expected"),
 		},
-		VariableTypeMap: {
+		variables.DataTypeMap: {
 			CommandAdd: unmarshalTo[map[string]string]("map expected"),
 			CommandDel: unmarshalTo[[]string]("list expected"),
 		},
-		VariableTypeStr: {
+		variables.DataTypeString: {
 			CommandAdd: unmarshalTo[string]("string expected"),
 			CommandDel: unmarshalTo[string]("string expected"),
 		},
-		VariableTypeInt: {
+		variables.DataTypeInt: {
 			CommandAdd: unmarshalToAndTransform[int]("int expected", func(v int) any {
 				return strconv.Itoa(v)
 			}),
@@ -74,13 +83,17 @@ func GetParser(varType VariableType, command CommandType) (ParseFn, error) {
 				return strconv.Itoa(v)
 			}),
 		},
-		VariableTypeBool: {
+		variables.DataTypeBoolean: {
 			CommandAdd: unmarshalToAndTransform[bool]("boolean expected", func(v bool) any {
 				return strconv.FormatBool(v)
 			}),
 			CommandDel: unmarshalToAndTransform[bool]("boolean expected", func(v bool) any {
 				return strconv.FormatBool(v)
 			}),
+		},
+		variables.DataTypeFloat: {
+			CommandAdd: parseFloat,
+			CommandDel: parseFloat,
 		},
 	}
 
@@ -126,25 +139,29 @@ func getParsedStringValue(
 	return parsed, true, nil
 }
 
-func GetValue(ctx context.Context, a kvAdapter, varRef string, varType VariableType, hubName string) (any, bool, error) {
+func GetValue(ctx context.Context, a kvAdapter, varRef string, varType variables.DataType, hubName string) (any, bool, error) {
 	switch varType {
-	case VariableTypeSet:
+	case variables.DataTypeSet:
 		return a.GetSet(ctx, varRef, hubName)
-	case VariableTypeMap:
+	case variables.DataTypeMap:
 		return a.GetMap(ctx, varRef, hubName)
-	case VariableTypeStr:
+	case variables.DataTypeString:
 		return a.GetString(ctx, varRef, hubName)
-	case VariableTypeInt:
+	case variables.DataTypeInt:
 		return getParsedStringValue(ctx, a.GetString, varRef, hubName, "int", func(value string) (any, error) {
 			return strconv.Atoi(value)
 		})
-	case VariableTypeBool:
+	case variables.DataTypeBoolean:
 		return getParsedStringValue(ctx, a.GetString, varRef, hubName, "boolean", func(value string) (any, error) {
 			return strconv.ParseBool(value)
 		})
-	case VariableTypeMetaPriorityList:
+	case variables.DataTypeFloat:
+		return getParsedStringValue(ctx, a.GetString, varRef, hubName, "float", func(value string) (any, error) {
+			return strconv.ParseFloat(value, 64)
+		})
+	case variables.DataTypeMetaPriorityList:
 		return a.GetMetaPriorityList(ctx, varRef, hubName)
-	case VariableTypeMetaHashSet:
+	case variables.DataTypeMetaHashSet:
 		return a.GetMetaHashSet(ctx, varRef, hubName)
 	default:
 		return nil, false, fmt.Errorf("%w %s", errUnsupportedVariableType, varType)

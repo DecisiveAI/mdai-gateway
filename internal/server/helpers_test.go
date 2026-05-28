@@ -76,9 +76,9 @@ func newFakeClientset(t *testing.T) kubernetes.Interface { //nolint:ireturn
 	return fake.NewClientset(&configMap)
 }
 
-func newFakeConfigMapController(t *testing.T, clientset kubernetes.Interface, namespace string) (*datacorekube.ConfigMapController, error) {
+func newFakeConfigMapController(t *testing.T, clientset kubernetes.Interface, namespace string) (*datacorekube.HubConfigMapController, error) {
 	t.Helper()
-	c, err := datacorekube.NewConfigMapController([]string{datacorekube.VariablesSchemaMapType}, namespace, clientset, zap.NewNop())
+	c, err := datacorekube.NewHubConfigMapController([]string{datacorekube.VariablesSchemaMapType}, namespace, clientset, zap.NewNop())
 	if err != nil {
 		return nil, err
 	}

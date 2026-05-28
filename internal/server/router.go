@@ -27,7 +27,7 @@ type HandlerDeps struct {
 	SlowValueReadThreshold time.Duration
 	AuditAdapter           *audit.AuditAdapter
 	EventPublisher         publisher.Publisher
-	ConfigMapController    *datacorekube.ConfigMapController
+	ConfigMapController    *datacorekube.HubConfigMapController
 	Deduper                *adapter.Deduper
 	OpAMPServer            *opamp.OpAMPControlServer
 	K8sClient              kubernetes.Interface

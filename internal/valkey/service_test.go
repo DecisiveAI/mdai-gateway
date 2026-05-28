@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	variables "github.com/mydecisive/mdai-data-core/variables"
 	"github.com/mydecisive/mdai-gateway/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -14,7 +15,7 @@ func TestGetParser(t *testing.T) {
 	testCases := []struct {
 		expectedValue  any
 		name           string
-		varType        VariableType
+		varType        variables.DataType
 		command        CommandType
 		expectedErrMsg string
 		inputJSON      json.RawMessage
@@ -22,7 +23,7 @@ func TestGetParser(t *testing.T) {
 	}{
 		{
 			name:          "SetAdd ValidList",
-			varType:       VariableTypeSet,
+			varType:       variables.DataTypeSet,
 			command:       CommandAdd,
 			inputJSON:     json.RawMessage(`["a", "b"]`),
 			expectErr:     false,
@@ -30,7 +31,7 @@ func TestGetParser(t *testing.T) {
 		},
 		{
 			name:          "MapAdd ValidMap",
-			varType:       VariableTypeMap,
+			varType:       variables.DataTypeMap,
 			command:       CommandAdd,
 			inputJSON:     json.RawMessage(`{"key1":"val1"}`),
 			expectErr:     false,
@@ -38,7 +39,7 @@ func TestGetParser(t *testing.T) {
 		},
 		{
 			name:          "IntAdd ValidInt",
-			varType:       VariableTypeInt,
+			varType:       variables.DataTypeInt,
 			command:       CommandAdd,
 			inputJSON:     json.RawMessage(`123`),
 			expectErr:     false,
@@ -46,15 +47,47 @@ func TestGetParser(t *testing.T) {
 		},
 		{
 			name:          "BoolAdd ValidBool",
-			varType:       VariableTypeBool,
+			varType:       variables.DataTypeBoolean,
 			command:       CommandAdd,
 			inputJSON:     json.RawMessage(`true`),
 			expectErr:     false,
 			expectedValue: "true",
 		},
 		{
+			name:          "FloatAdd ValidFloat",
+			varType:       variables.DataTypeFloat,
+			command:       CommandAdd,
+			inputJSON:     json.RawMessage(`1.5`),
+			expectErr:     false,
+			expectedValue: "1.5",
+		},
+		{
+			name:          "FloatAdd IntegerShape",
+			varType:       variables.DataTypeFloat,
+			command:       CommandAdd,
+			inputJSON:     json.RawMessage(`1`),
+			expectErr:     false,
+			expectedValue: "1",
+		},
+		{
+			name:          "FloatAdd TrailingZeroCollapses",
+			varType:       variables.DataTypeFloat,
+			command:       CommandAdd,
+			inputJSON:     json.RawMessage(`1.50`),
+			expectErr:     false,
+			expectedValue: "1.5",
+		},
+		{
+			name:          "FloatAdd NegativeZeroNormalizes",
+			varType:       variables.DataTypeFloat,
+			command:       CommandAdd,
+			inputJSON:     json.RawMessage(`-0`),
+			expectErr:     false,
+			expectedValue: "0",
+		},
+		{
 			name:           "SetAdd InvalidJSON",
-			varType:        VariableTypeSet,
+			varType:        variables.DataTypeSet,
 			command:        CommandAdd,
 			inputJSON:      json.RawMessage(`"not-a-list"`),
 			expectErr:      true,
@@ -62,7 +95,7 @@ func TestGetParser(t *testing.T) {
 		},
 		{
 			name:           "MapAdd InvalidJSON",
-			varType:        VariableTypeMap,
+			varType:        variables.DataTypeMap,
 			command:        CommandAdd,
 			inputJSON:      json.RawMessage(`["not-a-map"]`),
 			expectErr:      true,
@@ -70,11 +103,19 @@ func TestGetParser(t *testing.T) {
 		},
 		{
 			name:           "IntAdd Invalid JSON",
-			varType:        VariableTypeInt,
+			varType:        variables.DataTypeInt,
 			command:        CommandAdd,
 			inputJSON:      json.RawMessage(`"not-an-int"`),
 			expectErr:      true,
 			expectedErrMsg: "int expected",
+		},
+		{
+			name:           "FloatAdd InvalidJSON",
+			varType:        variables.DataTypeFloat,
+			command:        CommandAdd,
+			inputJSON:      json.RawMessage(`"not-a-float"`),
+			expectErr:      true,
+			expectedErrMsg: "float expected",
 		},
 	}
 
@@ -97,7 +138,7 @@ func TestGetParser(t *testing.T) {
 	})
 
 	t.Run("UnsupportedCommand", func(t *testing.T) {
-		_, err := GetParser(VariableTypeSet, "invalid-command")
+		_, err := GetParser(variables.DataTypeSet, "invalid-command")
 		require.Error(t, err)
 	})
 }
@@ -106,7 +147,7 @@ func TestGetValue(t *testing.T) {
 	tests := []struct {
 		name          string
 		key           string
-		varType       VariableType
+		varType       variables.DataType
 		hubName       string
 		mockSetup     func(m *mocks.MockKVAdapter)
 		expected      any
@@ -181,7 +222,7 @@ func TestGetValue(t *testing.T) {
 		{
 			name:    "meta priority list value",
 			key:     "foo_meta_list",
-			varType: VariableTypeMetaPriorityList,
+			varType: variables.DataTypeMetaPriorityList,
 			hubName: "hub",
 			mockSetup: func(m *mocks.MockKVAdapter) {
 				m.On("GetMetaPriorityList", mock.Anything, "foo_meta_list", "hub").
@@ -194,7 +235,7 @@ func TestGetValue(t *testing.T) {
 		{
 			name:    "meta hash set value",
 			key:     "foo_meta_hash",
-			varType: VariableTypeMetaHashSet,
+			varType: variables.DataTypeMetaHashSet,
 			hubName: "hub",
 			mockSetup: func(m *mocks.MockKVAdapter) {
 				m.On("GetMetaHashSet", mock.Anything, "foo_meta_hash", "hub").
@@ -207,7 +248,7 @@ func TestGetValue(t *testing.T) {
 		{
 			name:    "missing value returns found false",
 			key:     "missing",
-			varType: VariableTypeStr,
+			varType: variables.DataTypeString,
 			hubName: "hub",
 			mockSetup: func(m *mocks.MockKVAdapter) {
 				m.On("GetString", mock.Anything, "missing", "hub").

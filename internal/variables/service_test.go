@@ -3,7 +3,7 @@ package variables
 import (
 	"testing"
 
-	"github.com/mydecisive/mdai-gateway/internal/valkey"
+	variables "github.com/mydecisive/mdai-data-core/variables"
 	"github.com/stretchr/testify/require"
 )
 
@@ -49,7 +49,7 @@ func TestGetVariable(t *testing.T) {
 		name         string
 		varName      string
 		hubVariables map[string]string
-		wantType     valkey.VariableType
+		wantType     variables.DataType
 		wantErr      error
 		wantErrText  string
 		wantRefs     []string
@@ -73,7 +73,7 @@ func TestGetVariable(t *testing.T) {
 			hubVariables: map[string]string{
 				"var1": `{"type":"manual","dataType":"boolean","storageType":"mdai-valkey","variableRefs":["foo"]}`,
 			},
-			wantType: valkey.VariableTypeBool,
+			wantType: variables.DataTypeBoolean,
 			wantRefs: []string{"foo"},
 			isManual: true,
 		},
@@ -83,7 +83,7 @@ func TestGetVariable(t *testing.T) {
 			hubVariables: map[string]string{
 				"var1": `{"type":"computed","dataType":"set","storageType":"mdai-valkey"}`,
 			},
-			wantType: valkey.VariableTypeSet,
+			wantType: variables.DataTypeSet,
 			isManual: false,
 		},
 		{

@@ -118,8 +118,8 @@ func TestHandleGetVariables(t *testing.T) {
 	getTests := []struct {
 		expected  any
 		valkey    func(t *testing.T, m *valkeymock.Client)
-		cmprepare func(t *testing.T, cs kubernetes.Interface, cmController *datacorekube.ConfigMapController)
-		cmcleanup func(t *testing.T, cs kubernetes.Interface, cmController *datacorekube.ConfigMapController)
+		cmprepare func(t *testing.T, cs kubernetes.Interface, cmController *datacorekube.HubConfigMapController)
+		cmcleanup func(t *testing.T, cs kubernetes.Interface, cmController *datacorekube.HubConfigMapController)
 		name      string
 		target    string
 		status    int
@@ -328,14 +328,14 @@ func TestHandleGetVariables(t *testing.T) {
 			target:   "/variables/values/hub/mdaihub-sample/var/data_unsupported_type",
 			status:   http.StatusInternalServerError,
 			expected: "failed to read variable value",
-			cmprepare: func(t *testing.T, clientset kubernetes.Interface, cmController *datacorekube.ConfigMapController) {
+			cmprepare: func(t *testing.T, clientset kubernetes.Interface, cmController *datacorekube.HubConfigMapController) {
 				t.Helper()
 
 				updateSchemaConfigMap(t, clientset, cmController, func(cm *corev1.ConfigMap) {
 					cm.Data["data_unsupported_type"] = `{"type":"manual","dataType":"booleaninttstring","storageType":"mdai-valkey"}`
 				})
 			},
-			cmcleanup: func(t *testing.T, cs kubernetes.Interface, cmController *datacorekube.ConfigMapController) {
+			cmcleanup: func(t *testing.T, cs kubernetes.Interface, cmController *datacorekube.HubConfigMapController) {
 				t.Helper()
 
 				updateSchemaConfigMap(t, cs, cmController, func(cm *corev1.ConfigMap) {

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/mydecisive/mdai-gateway/internal/valkey"
+	variables "github.com/mydecisive/mdai-data-core/variables"
 )
 
 const (
@@ -25,7 +25,7 @@ type Definition struct {
 	Name         string
 	Schema       Schema
 	Type         string
-	DataType     valkey.VariableType
+	DataType     variables.DataType
 	StorageType  string
 	VariableRefs []string
 }
@@ -130,7 +130,7 @@ func parseDefinition(varName string, rawSchema string) (Definition, error) {
 		Name:         varName,
 		Schema:       schema,
 		Type:         schemaType,
-		DataType:     valkey.VariableType(dataType),
+		DataType:     variables.DataType(dataType),
 		StorageType:  storageType,
 		VariableRefs: variableRefs,
 	}, nil

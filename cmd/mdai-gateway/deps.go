@@ -138,8 +138,8 @@ func startConfigMapController(
 	clientset kubernetes.Interface,
 	configMapTypes []string,
 	namespace string,
-) (*datacorekube.ConfigMapController, error) {
-	controller, err := datacorekube.NewConfigMapController(configMapTypes, namespace, clientset, logger)
+) (*datacorekube.HubConfigMapController, error) {
+	controller, err := datacorekube.NewHubConfigMapController(configMapTypes, namespace, clientset, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create ConfigMap controller: %w", err)
 	}
