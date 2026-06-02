@@ -9,11 +9,11 @@ import (
 	"github.com/mydecisive/mdai-data-core/audit"
 	"github.com/mydecisive/mdai-data-core/eventing/publisher"
 	datacorekube "github.com/mydecisive/mdai-data-core/kube"
+	datacorevariables "github.com/mydecisive/mdai-data-core/variables"
 	"github.com/mydecisive/mdai-gateway/internal/adapter"
 	"github.com/mydecisive/mdai-gateway/internal/connection"
 	"github.com/mydecisive/mdai-gateway/internal/integration"
 	"github.com/mydecisive/mdai-gateway/internal/opamp"
-	gatewayvalkey "github.com/mydecisive/mdai-gateway/internal/valkey"
 	promv1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/valkey-io/valkey-go"
 	"go.uber.org/zap"
@@ -23,7 +23,7 @@ import (
 type HandlerDeps struct {
 	Logger                 *zap.Logger
 	ValkeyClient           valkey.Client
-	VariableReader         *gatewayvalkey.Reader
+	VariableReader         *datacorevariables.ValkeyAdapter
 	SlowValueReadThreshold time.Duration
 	AuditAdapter           *audit.AuditAdapter
 	EventPublisher         publisher.Publisher

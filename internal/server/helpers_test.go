@@ -13,9 +13,9 @@ import (
 	"github.com/mydecisive/mdai-data-core/eventing"
 	"github.com/mydecisive/mdai-data-core/eventing/publisher"
 	datacorekube "github.com/mydecisive/mdai-data-core/kube"
+	datacorevariables "github.com/mydecisive/mdai-data-core/variables"
 	"github.com/mydecisive/mdai-gateway/internal/adapter"
 	"github.com/mydecisive/mdai-gateway/internal/opamp"
-	gatewayvalkey "github.com/mydecisive/mdai-gateway/internal/valkey"
 	"github.com/mydecisive/mdai-gateway/internal/variables"
 	"github.com/stretchr/testify/require"
 	valkeymock "github.com/valkey-io/valkey-go/mock"
@@ -138,7 +138,7 @@ func setupMocks(t *testing.T, clientset kubernetes.Interface) HandlerDeps {
 	ctrl := gomock.NewController(t)
 	valkeyClient := valkeymock.NewClient(ctrl)
 	logger := zap.NewNop()
-	variableReader := gatewayvalkey.NewReader(valkeyClient, logger)
+	variableReader := datacorevariables.NewValkeyAdapter(valkeyClient, logger)
 	auditAdapter := audit.NewAuditAdapter(zap.NewNop(), valkeyClient)
 	eventPublisher := fakePublisher{}
 
@@ -169,7 +169,7 @@ func setupReadOnlyMocks(t *testing.T, clientset kubernetes.Interface) HandlerDep
 	ctrl := gomock.NewController(t)
 	valkeyClient := valkeymock.NewClient(ctrl)
 	logger := zap.NewNop()
-	variableReader := gatewayvalkey.NewReader(valkeyClient, logger)
+	variableReader := datacorevariables.NewValkeyAdapter(valkeyClient, logger)
 	auditAdapter := audit.NewAuditAdapter(zap.NewNop(), valkeyClient)
 
 	cmController, err := newFakeConfigMapController(t, clientset, "mdai")

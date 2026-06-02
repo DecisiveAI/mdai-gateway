@@ -189,18 +189,11 @@ func TestHandleGetVariables(t *testing.T) {
 			target: "/variables/values/hub/mdaihub-sample/var/data_set",
 			status: http.StatusOK,
 			expected: map[string][]string{
-				"data_set": {
-					"manual_service_1",
-					"manual_service_2",
-					"manual_service_3",
-				},
+				"data_set": {"manual_service_1", "manual_service_2", "manual_service_3"},
 			},
 			valkey: func(t *testing.T, m *valkeymock.Client) {
 				t.Helper()
 				key := "variable/mdaihub-sample/data_set"
-				m.EXPECT().
-					Do(gomock.Any(), valkeymock.Match("EXISTS", key)).
-					Return(valkeymock.Result(valkeymock.ValkeyInt64(1)))
 				m.EXPECT().
 					Do(gomock.Any(), valkeymock.Match("SMEMBERS", key)).
 					Return(valkeymock.Result(
@@ -216,18 +209,11 @@ func TestHandleGetVariables(t *testing.T) {
 			target: "/variables/values/hub/mdaihub-sample/var/data_map",
 			status: http.StatusOK,
 			expected: map[string]map[string]string{
-				"data_map": {
-					"attrib.1": "value1",
-					"attrib.2": "value2",
-					"attrib.3": "value3",
-				},
+				"data_map": {"attrib.1": "value1", "attrib.2": "value2", "attrib.3": "value3"},
 			},
 			valkey: func(t *testing.T, m *valkeymock.Client) {
 				t.Helper()
 				key := "variable/mdaihub-sample/data_map"
-				m.EXPECT().
-					Do(gomock.Any(), valkeymock.Match("EXISTS", key)).
-					Return(valkeymock.Result(valkeymock.ValkeyInt64(1)))
 				m.EXPECT().
 					Do(gomock.Any(), valkeymock.Match("HGETALL", key)).
 					Return(valkeymock.Result(valkeymock.ValkeyMap(map[string]valkey.ValkeyMessage{
@@ -261,8 +247,8 @@ func TestHandleGetVariables(t *testing.T) {
 				t.Helper()
 				key := "variable/mdaihub-sample/data_set"
 				m.EXPECT().
-					Do(gomock.Any(), valkeymock.Match("EXISTS", key)).
-					Return(valkeymock.Result(valkeymock.ValkeyInt64(0)))
+					Do(gomock.Any(), valkeymock.Match("SMEMBERS", key)).
+					Return(valkeymock.Result(valkeymock.ValkeyArray()))
 			},
 		},
 		{
@@ -274,8 +260,8 @@ func TestHandleGetVariables(t *testing.T) {
 				t.Helper()
 				key := "variable/mdaihub-sample/data_map"
 				m.EXPECT().
-					Do(gomock.Any(), valkeymock.Match("EXISTS", key)).
-					Return(valkeymock.Result(valkeymock.ValkeyInt64(0)))
+					Do(gomock.Any(), valkeymock.Match("HGETALL", key)).
+					Return(valkeymock.Result(valkeymock.ValkeyMap(map[string]valkey.ValkeyMessage{})))
 			},
 		},
 		{
@@ -375,6 +361,58 @@ func TestHandleGetVariables(t *testing.T) {
 	}
 }
 
+func TestHandleGetVariables_AppliesDefaultOnNotFound(t *testing.T) {
+	clientset := newFakeClientset(t)
+	deps := setupReadOnlyMocks(t, clientset)
+
+	updateSchemaConfigMap(t, clientset, deps.ConfigMapController, func(cm *corev1.ConfigMap) {
+		cm.Data["sampling_rate"] = `{"type":"manual","dataType":"int","storageType":"mdai-valkey","default":100,"serializeAs":[{"name":"SAMPLING_RATE"}]}`
+	})
+	t.Cleanup(func() {
+		updateSchemaConfigMap(t, clientset, deps.ConfigMapController, func(cm *corev1.ConfigMap) {
+			delete(cm.Data, "sampling_rate")
+		})
+	})
+
+	deps.ValkeyClient.(*valkeymock.Client).EXPECT(). //nolint:forcetypeassert
+								Do(gomock.Any(), valkeymock.Match("GET", "variable/mdaihub-sample/sampling_rate")).
+								Return(valkeymock.Result(valkeymock.ValkeyNil()))
+
+	mux := NewRouter(t.Context(), deps)
+	req := httptest.NewRequest(http.MethodGet, "/variables/values/hub/mdaihub-sample/var/sampling_rate", http.NoBody)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.JSONEq(t, `{"sampling_rate":100}`, rr.Body.String())
+}
+
+func TestHandleGetVariables_StoredValueWinsOverDefault(t *testing.T) {
+	clientset := newFakeClientset(t)
+	deps := setupReadOnlyMocks(t, clientset)
+
+	updateSchemaConfigMap(t, clientset, deps.ConfigMapController, func(cm *corev1.ConfigMap) {
+		cm.Data["sampling_rate"] = `{"type":"manual","dataType":"int","storageType":"mdai-valkey","default":100,"serializeAs":[{"name":"SAMPLING_RATE"}]}`
+	})
+	t.Cleanup(func() {
+		updateSchemaConfigMap(t, clientset, deps.ConfigMapController, func(cm *corev1.ConfigMap) {
+			delete(cm.Data, "sampling_rate")
+		})
+	})
+
+	deps.ValkeyClient.(*valkeymock.Client).EXPECT(). //nolint:forcetypeassert
+								Do(gomock.Any(), valkeymock.Match("GET", "variable/mdaihub-sample/sampling_rate")).
+								Return(valkeymock.Result(valkeymock.ValkeyBlobString("50")))
+
+	mux := NewRouter(t.Context(), deps)
+	req := httptest.NewRequest(http.MethodGet, "/variables/values/hub/mdaihub-sample/var/sampling_rate", http.NoBody)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.JSONEq(t, `{"sampling_rate":50}`, rr.Body.String())
+}
+
 func TestHandleGetHubVariableValues(t *testing.T) {
 	tests := []struct {
 		expected any
@@ -413,18 +451,12 @@ func TestHandleGetHubVariableValues(t *testing.T) {
 					Do(gomock.Any(), valkeymock.Match("GET", "variable/mdaihub-sample/computed_string")).
 					Return(valkeymock.Result(valkeymock.ValkeyBlobString("derived")))
 				m.EXPECT().
-					Do(gomock.Any(), valkeymock.Match("EXISTS", "variable/mdaihub-sample/data_set")).
-					Return(valkeymock.Result(valkeymock.ValkeyInt64(1)))
-				m.EXPECT().
 					Do(gomock.Any(), valkeymock.Match("SMEMBERS", "variable/mdaihub-sample/data_set")).
 					Return(valkeymock.Result(valkeymock.ValkeyArray(
 						valkeymock.ValkeyBlobString("manual_service_1"),
 						valkeymock.ValkeyBlobString("manual_service_2"),
 						valkeymock.ValkeyBlobString("manual_service_3"),
 					)))
-				m.EXPECT().
-					Do(gomock.Any(), valkeymock.Match("EXISTS", "variable/mdaihub-sample/data_map")).
-					Return(valkeymock.Result(valkeymock.ValkeyInt64(1)))
 				m.EXPECT().
 					Do(gomock.Any(), valkeymock.Match("HGETALL", "variable/mdaihub-sample/data_map")).
 					Return(valkeymock.Result(valkeymock.ValkeyMap(map[string]valkey.ValkeyMessage{

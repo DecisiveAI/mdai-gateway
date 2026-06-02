@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/mydecisive/mdai-data-core/eventing"
+	datacorevariables "github.com/mydecisive/mdai-data-core/variables"
 	"github.com/mydecisive/mdai-gateway/internal/adapter"
 	"github.com/mydecisive/mdai-gateway/internal/httputil"
 	"github.com/mydecisive/mdai-gateway/internal/nats"
@@ -95,7 +96,7 @@ func handleGetVariables(ctx context.Context, deps HandlerDeps) http.HandlerFunc 
 			return
 		}
 
-		valkeyValue, duration, err := readVariableValueObserved(
+		value, duration, err := readVariableValueObserved(
 			ctx,
 			logger,
 			deps.VariableReader,
@@ -108,7 +109,7 @@ func handleGetVariables(ctx context.Context, deps HandlerDeps) http.HandlerFunc 
 		}
 		logSlowValueRead(logger, deps.SlowValueReadThreshold, duration)
 
-		response := map[string]any{varName: valkeyValue}
+		response := map[string]any{varName: value}
 		httputil.WriteJSONResponse(w, logger, http.StatusOK, response)
 	}
 }
@@ -281,7 +282,7 @@ func logRequestedVariableSchemaError(logger *zap.Logger, err error) {
 func readHubVariableValues(
 	ctx context.Context,
 	logger *zap.Logger,
-	reader *valkey.Reader,
+	reader *datacorevariables.ValkeyAdapter,
 	hubName string,
 	definitions variables.HubDefinitions,
 ) (map[string]any, time.Duration, error) {
@@ -301,13 +302,13 @@ func readHubVariableValues(
 func readVariableValueObserved(
 	ctx context.Context,
 	logger *zap.Logger,
-	reader *valkey.Reader,
+	reader *datacorevariables.ValkeyAdapter,
 	hubName string,
 	variable variables.Definition,
 ) (any, time.Duration, error) {
 	logger = logger.With(zap.String("dataType", string(variable.DataType)))
 	start := time.Now()
-	value, found, err := readVariableValue(ctx, reader, hubName, variable)
+	value, _, err := readVariableValue(ctx, reader, hubName, variable)
 	duration := time.Since(start)
 	if err != nil {
 		logger.Error("Failed to read variable value",
@@ -316,10 +317,6 @@ func readVariableValueObserved(
 		)
 		return nil, duration, err
 	}
-	if !found {
-		return nil, duration, nil
-	}
-
 	return value, duration, nil
 }
 
@@ -331,10 +328,21 @@ func logSlowValueRead(logger *zap.Logger, threshold time.Duration, duration time
 	logger.Warn("Slow variable value read", zap.Int64("duration_ms", duration.Milliseconds()))
 }
 
-func readVariableValue(ctx context.Context, reader *valkey.Reader, hubName string, variable variables.Definition) (any, bool, error) {
+func readVariableValue(ctx context.Context, reader *datacorevariables.ValkeyAdapter, hubName string, variable variables.Definition) (any, bool, error) {
 	if variable.StorageType != variables.StorageTypeValkey {
 		return nil, false, fmt.Errorf("unsupported storage type %q", variable.StorageType)
 	}
 
-	return valkey.GetValue(ctx, reader, variable.Name, variable.DataType, hubName)
+	res, err := datacorevariables.Resolve(ctx, reader, hubName, variable.Name, variable.DataType, variable.Default)
+	if err != nil {
+		return nil, false, err
+	}
+	if !res.Found {
+		return nil, false, nil
+	}
+	typed, err := res.Typed()
+	if err != nil {
+		return nil, false, fmt.Errorf("typed conversion for %s: %w", variable.Name, err)
+	}
+	return typed, true, nil
 }

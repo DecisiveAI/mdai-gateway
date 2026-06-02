@@ -14,10 +14,10 @@ import (
 	datacorekube "github.com/mydecisive/mdai-data-core/kube"
 	"github.com/mydecisive/mdai-data-core/service"
 	datacorevalkey "github.com/mydecisive/mdai-data-core/valkey"
+	"github.com/mydecisive/mdai-data-core/variables"
 	"github.com/mydecisive/mdai-gateway/internal/adapter"
 	"github.com/mydecisive/mdai-gateway/internal/opamp"
 	"github.com/mydecisive/mdai-gateway/internal/server"
-	gatewayvalkey "github.com/mydecisive/mdai-gateway/internal/valkey"
 	"github.com/prometheus/client_golang/api"
 	promv1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"go.uber.org/zap"
@@ -53,7 +53,7 @@ func initDependencies(ctx context.Context) (deps server.HandlerDeps, cleanup fun
 	if err != nil {
 		appLogger.Fatal("failed to initialize valkey client", zap.Error(err))
 	}
-	variableReader := gatewayvalkey.NewReader(valkeyClient, appLogger)
+	variableReader := variables.NewValkeyAdapter(valkeyClient, appLogger)
 
 	auditAdapter := audit.NewAuditAdapter(appLogger, valkeyClient)
 
