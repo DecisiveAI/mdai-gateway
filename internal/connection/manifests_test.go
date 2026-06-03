@@ -60,11 +60,7 @@ func TestRenderManifestFormats(t *testing.T) {
 			require.NoError(t, err)
 
 			expectedFiles := []string{
-				fmt.Sprintf("lb-collector.%s", format),
-				fmt.Sprintf("log-collector.%s", format),
-				fmt.Sprintf("trace-collector.%s", format),
-				fmt.Sprintf("observer.%s", format),
-				fmt.Sprintf("monitor.%s", format),
+				fmt.Sprintf("collector.%s", format),
 				fmt.Sprintf("hub.%s", format),
 				fmt.Sprintf("validator.%s", format),
 				fmt.Sprintf("secret.%s", format),
@@ -173,7 +169,7 @@ func TestRenderSecretManifest(t *testing.T) {
 	})
 }
 
-func TestRenderLBCollectorManifest(t *testing.T) {
+func TestRenderCollectorManifest(t *testing.T) {
 	t.Run("Full Configuration with Pipelines", func(t *testing.T) {
 		templateData := ArgoTemplateData{
 			AppName:        "test-app",
@@ -189,7 +185,7 @@ func TestRenderLBCollectorManifest(t *testing.T) {
 
 		manifests, err := renderCollectorDeploymentManifests(&templateData, YAMLOutputFormat)
 		require.NoError(t, err)
-		collectorBytes := (manifests)["lb-collector.yaml"]
+		collectorBytes := (manifests)["collector.yaml"]
 
 		var otel map[string]any
 		require.NoError(t, yaml.Unmarshal(collectorBytes, &otel))
@@ -199,17 +195,26 @@ func TestRenderLBCollectorManifest(t *testing.T) {
 		assert.Equal(t, "connection-collector", labels.(map[string]any)["hub.mydecisive.ai/role"])
 
 		spec := otel["spec"].(map[string]any)
+		_, hasEnv := spec["env"]
+		assert.True(t, hasEnv, "Env block should exist for Datadog integration")
 
 		otelConfigRaw, hasOtelConfig := getNestedField(spec, "config")
 		assert.True(t, hasOtelConfig, "OTEL config should exist")
 		otelConfig := otelConfigRaw.(map[string]any)
+
+		// Check Datadog Exporter
+		apiBlock, found := getNestedField(otelConfig, "exporters", "datadog", "api")
+		require.True(t, found, "Datadog API exporter should be configured")
+		apiMap := apiBlock.(map[string]any)
+		assert.Equal(t, "${env:DD_API_KEY}", apiMap["key"])
+		assert.Equal(t, "${env:DD_SITE}", apiMap["site"])
 
 		connectionName, hasConnectionName := getNestedField(otelConfig, "service", "telemetry", "resource", "mdai_connection")
 		assert.True(t, hasConnectionName, "Connection name should be configured")
 		assert.Equal(t, "test-app", connectionName)
 		serviceName, hasServiceName := getNestedField(otelConfig, "service", "telemetry", "resource", "service.name")
 		assert.True(t, hasServiceName, "Service name should be configured")
-		assert.Equal(t, "test-app-lb-collector", serviceName)
+		assert.Equal(t, "test-app-collector", serviceName)
 
 		metricsReaders, hasMetricsReaders := getNestedField(otelConfig, "service", "telemetry", "metrics", "readers")
 		assert.True(t, hasMetricsReaders, "Metrics reader should be configured")
@@ -240,7 +245,7 @@ func TestRenderLBCollectorManifest(t *testing.T) {
 
 		manifests, err := renderCollectorDeploymentManifests(&templateData, YAMLOutputFormat)
 		require.NoError(t, err)
-		collectorBytes := (manifests)["lb-collector.yaml"]
+		collectorBytes := (manifests)["collector.yaml"]
 
 		var otel map[string]any
 		require.NoError(t, yaml.Unmarshal(collectorBytes, &otel))
@@ -269,116 +274,6 @@ func TestRenderLBCollectorManifest(t *testing.T) {
 	})
 }
 
-func TestRenderLogCollectorManifest(t *testing.T) {
-	templateData := ArgoTemplateData{
-		AppName:        "test-app",
-		IsArgoSideload: true,
-		ConnectionData: OctantConnectionData{
-			TelemetryTypes: []telemetry.MLT{telemetry.Logs, telemetry.Traces},
-		},
-		DatadogIntegrationData: &integration.DataDogIntegrationData{
-			APIKey: "fake-key",
-			DDUrl:  "fake-url",
-		},
-	}
-
-	manifests, err := renderCollectorDeploymentManifests(&templateData, YAMLOutputFormat)
-	require.NoError(t, err)
-	collectorBytes := (manifests)["log-collector.yaml"]
-
-	var otel map[string]any
-	require.NoError(t, yaml.Unmarshal(collectorBytes, &otel))
-
-	_, hasLabels := getNestedField(otel, "metadata", "labels")
-	assert.True(t, hasLabels)
-
-	spec := otel["spec"].(map[string]any)
-	_, hasEnv := spec["env"]
-	assert.True(t, hasEnv, "Env block should exist for Datadog integration")
-
-	otelConfigRaw, hasOtelConfig := getNestedField(spec, "config")
-	assert.True(t, hasOtelConfig, "OTEL config should exist")
-	otelConfig := otelConfigRaw.(map[string]any)
-
-	// Check Datadog Exporter
-	apiBlock, found := getNestedField(otelConfig, "exporters", "datadog", "api")
-	require.True(t, found, "Datadog API exporter should be configured")
-	apiMap := apiBlock.(map[string]any)
-	assert.Equal(t, "${env:DD_API_KEY}", apiMap["key"])
-	assert.Equal(t, "${env:DD_SITE}", apiMap["site"])
-
-	connectionName, hasConnectionName := getNestedField(otelConfig, "service", "telemetry", "resource", "mdai_connection")
-	assert.True(t, hasConnectionName, "Connection name should be configured")
-	assert.Equal(t, "test-app", connectionName)
-	serviceName, hasServiceName := getNestedField(otelConfig, "service", "telemetry", "resource", "service.name")
-	assert.True(t, hasServiceName, "Service name should be configured")
-	assert.Equal(t, "test-app-log-sampling-collector", serviceName)
-
-	metricsReaders, hasMetricsReaders := getNestedField(otelConfig, "service", "telemetry", "metrics", "readers")
-	assert.True(t, hasMetricsReaders, "Metrics reader should be configured")
-	metricsReadersSlice := metricsReaders.([]any)
-	assert.Len(t, metricsReadersSlice, 1)
-	includedLabels, hasIncludedLabels := getNestedField(metricsReadersSlice[0].(map[string]any), "pull", "exporter", "prometheus", "with_resource_constant_labels", "included")
-	assert.True(t, hasIncludedLabels, "Prometheus pull exporter included labels should be configured")
-	assert.Contains(t, includedLabels, "mdai_connection")
-	assert.Contains(t, includedLabels, "service.name")
-}
-
-func TestRenderTraceCollectorManifest(t *testing.T) {
-	templateData := ArgoTemplateData{
-		AppName:        "test-app",
-		IsArgoSideload: true,
-		ConnectionData: OctantConnectionData{
-			TelemetryTypes: []telemetry.MLT{telemetry.Logs, telemetry.Traces},
-		},
-		DatadogIntegrationData: &integration.DataDogIntegrationData{
-			APIKey: "fake-key",
-			DDUrl:  "fake-url",
-		},
-	}
-
-	manifests, err := renderCollectorDeploymentManifests(&templateData, YAMLOutputFormat)
-	require.NoError(t, err)
-	collectorBytes := (manifests)["trace-collector.yaml"]
-
-	var otel map[string]any
-	require.NoError(t, yaml.Unmarshal(collectorBytes, &otel))
-
-	_, hasLabels := getNestedField(otel, "metadata", "labels")
-	assert.True(t, hasLabels)
-
-	spec := otel["spec"].(map[string]any)
-	_, hasEnv := spec["env"]
-	assert.True(t, hasEnv, "Env block should exist for Datadog integration")
-
-	otelConfigRaw, hasOtelConfig := getNestedField(spec, "config")
-	assert.True(t, hasOtelConfig, "OTEL config should exist")
-	otelConfig := otelConfigRaw.(map[string]any)
-
-	// Check Datadog Exporter
-	apiBlock, found := getNestedField(otelConfig, "exporters", "datadog", "api")
-	require.True(t, found, "Datadog API exporter should be configured")
-	apiMap := apiBlock.(map[string]any)
-	assert.Equal(t, "${env:DD_API_KEY}", apiMap["key"])
-	assert.Equal(t, "${env:DD_SITE}", apiMap["site"])
-
-	connectionName, hasConnectionName := getNestedField(otelConfig, "service", "telemetry", "resource", "mdai_connection")
-	assert.True(t, hasConnectionName, "Connection name should be configured")
-	assert.Equal(t, "test-app", connectionName)
-	serviceName, hasServiceName := getNestedField(otelConfig, "service", "telemetry", "resource", "service.name")
-	assert.True(t, hasServiceName, "Service name should be configured")
-	assert.Equal(t, "test-app-trace-sampling-collector", serviceName)
-
-	metricsReaders, hasMetricsReaders := getNestedField(otelConfig, "service", "telemetry", "metrics", "readers")
-	assert.True(t, hasMetricsReaders, "Metrics reader should be configured")
-	metricsReadersSlice := metricsReaders.([]any)
-	assert.Len(t, metricsReadersSlice, 1)
-	includedLabels, hasIncludedLabels := getNestedField(metricsReadersSlice[0].(map[string]any), "pull", "exporter", "prometheus", "with_resource_constant_labels", "included")
-	assert.True(t, hasIncludedLabels, "Prometheus pull exporter included labels should be configured")
-	assert.Contains(t, includedLabels, "mdai_connection")
-	assert.Contains(t, includedLabels, "service.name")
-}
-
 func TestRenderValidatorManifest(t *testing.T) {
 	t.Run("With Signals", func(t *testing.T) {
 		templateData := ArgoTemplateData{
@@ -401,54 +296,6 @@ func TestRenderValidatorManifest(t *testing.T) {
 		spec := validator["spec"].(map[string]any)
 		collectorRef := spec["collectorRef"].(map[string]any)
 		assert.Equal(t, "test-app", collectorRef["name"])
-	})
-}
-
-func TestRenderMonitorManifest(t *testing.T) {
-	t.Run("With Signals", func(t *testing.T) {
-		templateData := ArgoTemplateData{
-			AppName: "test-app",
-			ConnectionData: OctantConnectionData{
-				TelemetryTypes: []telemetry.MLT{telemetry.Logs, telemetry.Metrics},
-			},
-			DatadogIntegrationData: &integration.DataDogIntegrationData{
-				DDUrl: "https://datadoghq.com",
-			},
-		}
-
-		manifests, err := renderCollectorDeploymentManifests(&templateData, YAMLOutputFormat)
-		require.NoError(t, err)
-		bytes := (manifests)["monitor.yaml"]
-
-		var data map[string]any
-		require.NoError(t, yaml.Unmarshal(bytes, &data))
-
-		assert.Contains(t, data, "spec")
-	})
-}
-
-func TestRenderObserverManifest(t *testing.T) {
-	t.Run("With Signals", func(t *testing.T) {
-		templateData := ArgoTemplateData{
-			AppName: "test-app",
-			ConnectionData: OctantConnectionData{
-				TelemetryTypes: []telemetry.MLT{telemetry.Logs, telemetry.Metrics},
-			},
-			DatadogIntegrationData: &integration.DataDogIntegrationData{
-				DDUrl: "https://datadoghq.com",
-			},
-		}
-
-		manifests, err := renderCollectorDeploymentManifests(&templateData, YAMLOutputFormat)
-		require.NoError(t, err)
-		bytes := (manifests)["observer.yaml"]
-
-		var data map[string]any
-		require.NoError(t, yaml.Unmarshal(bytes, &data))
-
-		spec := data["spec"].(map[string]any)
-		assert.Len(t, spec["observers"], 2)
-		assert.Contains(t, spec, "observerResource")
 	})
 }
 
@@ -509,18 +356,10 @@ func TestCreateExportableArgoManifests(t *testing.T) {
 	manifests, err := CreateExportableArgoManifests("test-namespace", "test-app", connection, YAMLOutputFormat)
 	require.NoError(t, err)
 
-	_, hasLBCollector := manifests["lb-collector.yaml"]
-	assert.True(t, hasLBCollector, "lb-collector.yaml should exist")
-	_, hasLogCollector := manifests["log-collector.yaml"]
-	assert.True(t, hasLogCollector, "log-collector.yaml should exist")
-	_, hasTraceCollector := manifests["trace-collector.yaml"]
-	assert.True(t, hasTraceCollector, "trace-collector.yaml should exist")
+	_, hasCollector := manifests["collector.yaml"]
+	assert.True(t, hasCollector, "collector.yaml should exist")
 	_, hasHub := manifests["hub.yaml"]
 	assert.True(t, hasHub, "hub.yaml should exist")
-	_, hasObserver := manifests["observer.yaml"]
-	assert.True(t, hasObserver, "observer.yaml should exist")
-	_, hasMonitor := manifests["monitor.yaml"]
-	assert.True(t, hasMonitor, "monitor.yaml should exist")
 	_, hasSecret := manifests["secret.yaml"]
 	assert.True(t, hasSecret, "secret.yaml should exist")
 	_, hasValidator := manifests["validator.yaml"]
