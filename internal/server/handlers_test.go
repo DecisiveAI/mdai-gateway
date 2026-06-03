@@ -226,8 +226,8 @@ func TestHandleGetVariables(t *testing.T) {
 		{
 			name:     "String_NoValue",
 			target:   "/variables/values/hub/mdaihub-sample/var/data_string",
-			status:   http.StatusOK,
-			expected: map[string]any{"data_string": nil},
+			status:   http.StatusNotFound,
+			expected: "variable has no value",
 			valkey: func(t *testing.T, m *valkeymock.Client) {
 				t.Helper()
 				key := "variable/mdaihub-sample/data_string"
@@ -241,8 +241,8 @@ func TestHandleGetVariables(t *testing.T) {
 		{
 			name:     "Set_NoValue",
 			target:   "/variables/values/hub/mdaihub-sample/var/data_set",
-			status:   http.StatusOK,
-			expected: map[string]any{"data_set": nil},
+			status:   http.StatusNotFound,
+			expected: "variable has no value",
 			valkey: func(t *testing.T, m *valkeymock.Client) {
 				t.Helper()
 				key := "variable/mdaihub-sample/data_set"
@@ -254,8 +254,8 @@ func TestHandleGetVariables(t *testing.T) {
 		{
 			name:     "Map_NoValue",
 			target:   "/variables/values/hub/mdaihub-sample/var/data_map",
-			status:   http.StatusOK,
-			expected: map[string]any{"data_map": nil},
+			status:   http.StatusNotFound,
+			expected: "variable has no value",
 			valkey: func(t *testing.T, m *valkeymock.Client) {
 				t.Helper()
 				key := "variable/mdaihub-sample/data_map"
@@ -523,29 +523,19 @@ func (XaddMatcher) String() string {
 
 func TestHandleDeleteVariables(t *testing.T) {
 	deleteTests := []struct {
-		name string
-		body string
+		name         string
+		body         string
+		expectedData string // expected JSON for the event payload's "data" field
 	}{
-		{
-			name: "string",
-			body: `{"data":"data_string"}`,
-		},
-		{
-			name: "boolean",
-			body: `{"data":true}`,
-		},
-		{
-			name: "int",
-			body: `{"data":123}`,
-		},
-		{
-			name: "set",
-			body: `{"data":["data_set"]}`,
-		},
-		{
-			name: "map",
-			body: `{"data": ["attrib.111"]}`,
-		},
+		// Scalars: DELETE ignores the body and publishes data:null.
+		{name: "string", body: `{"data":"data_string"}`, expectedData: "null"},
+		{name: "string-no-body", body: ``, expectedData: "null"},
+		{name: "string-wrong-type-body", body: `{"data":123}`, expectedData: "null"},
+		{name: "boolean", body: `{"data":true}`, expectedData: "null"},
+		{name: "int", body: `{"data":123}`, expectedData: "null"},
+		// Collections: DELETE still parses the body (element-level removal).
+		{name: "set", body: `{"data":["data_set"]}`, expectedData: `["data_set"]`},
+		{name: "map", body: `{"data": ["attrib.111"]}`, expectedData: `["attrib.111"]`},
 	}
 
 	clientset := newFakeClientset(t)
@@ -555,7 +545,16 @@ func TestHandleDeleteVariables(t *testing.T) {
 
 	for _, tt := range deleteTests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodDelete, "/variables/hub/mdaihub-sample/var/data_"+tt.name, bytes.NewBufferString(tt.body))
+			urlVar := tt.name
+			// Subtests share the data_<dataType> URL convention used by setupMocks.
+			for _, dt := range []string{"string", "boolean", "int", "set", "map"} {
+				if strings.HasPrefix(tt.name, dt) {
+					urlVar = dt
+					break
+				}
+			}
+
+			req := httptest.NewRequest(http.MethodDelete, "/variables/hub/mdaihub-sample/var/data_"+urlVar, bytes.NewBufferString(tt.body))
 			req.Header.Set("Content-Type", "application/json")
 
 			mockClient, ok := deps.ValkeyClient.(*valkeymock.Client)
@@ -578,7 +577,7 @@ func TestHandleDeleteVariables(t *testing.T) {
 			assert.Equal(t, "manual_variables_api", result.Source)
 			assert.Equal(t, "var.remove", result.Name)
 			assert.Equal(t, "mdaihub-sample", result.HubName)
-			assert.JSONEq(t, fmt.Sprintf(`{"variableRef":%q,"dataType":%q,"operation":"remove","data":%v}`, "data_"+tt.name, tt.name, stringifyData(t, tt.body)), result.Payload)
+			assert.JSONEq(t, fmt.Sprintf(`{"variableRef":%q,"dataType":%q,"operation":"remove","data":%s}`, "data_"+urlVar, urlVar, tt.expectedData), result.Payload)
 			assert.NotEmpty(t, result.ID)
 			assert.NotZero(t, result.Timestamp)
 			assert.WithinDuration(t, time.Now(), result.Timestamp, time.Minute)
@@ -747,31 +746,13 @@ func TestHandleSetVariables_InvalidRequestPayload(t *testing.T) {
 }
 
 func TestHandleDeleteVariables_InvalidRequestPayload(t *testing.T) {
+	// Scalar DELETEs intentionally accept any body (covered by TestHandleDeleteVariables).
+	// Only collection DELETEs continue to validate the body shape.
 	setTests := []struct {
 		name     string
 		body     string
 		expected string
 	}{
-		{
-			name:     "string",
-			body:     `{"data":true}`,
-			expected: "Invalid request payload: String expected\n",
-		},
-		{
-			name:     "boolean",
-			body:     `{"data":"true"}`,
-			expected: "Invalid request payload: Boolean expected\n",
-		},
-		{
-			name:     "int",
-			body:     `{"data":"123"}`,
-			expected: "Invalid request payload: Int expected\n",
-		},
-		{
-			name:     "int",
-			body:     `{"data":12.3}`,
-			expected: "Invalid request payload: Int expected\n",
-		},
 		{
 			name:     "set",
 			body:     `{"data":"set"}`,

@@ -160,9 +160,8 @@ response:
 {"meta_hash_set":"service|critical"}
 {"meta_priority_list":["default","service_list"]}
 {"computed_string":"derived value"}
-{"data_string":null}
 ```
-If the variable exists in schema but has no backing value in storage yet, the API returns `null`.
+If the variable exists in the schema but has neither a stored value nor a declared default, the API returns `404 Not Found` with body `"variable has no value"`. The bulk endpoint (`GET /variables/values/hub/{hubName}`) keeps the `{name: null}` shape for absent variables so the response covers every declared variable in one map.
 
 ### Set variable value(s)
 request:
@@ -219,37 +218,33 @@ Only variables with schema `type: "manual"` can be deleted. Computed and meta va
 ```
 "only manual variables can be updated or deleted"
 ```
-#### payloads:
-string:
-```
-{"data": variableValue}
-```
-examples: ```{"data": "string_value"}```
 
+DELETE means different things depending on the variable's `dataType`:
 
-boolean:
-```
-{"data": variableValue}
-```
-examples: ```{"data": true}```
+| dataType | Semantics | Body |
+|---|---|---|
+| `string`, `int`, `float`, `boolean` | Whole-key removal. The variable's stored value is deleted; subsequent reads fall back to the declared `default` (if any) or return `404`. | Not required. Any JSON body sent is ignored. |
+| `set` | Element-level `SREM`. Removes the listed elements from the stored set. The set itself is removed by Valkey only when its last element is removed. | Required: `{"data": ["elementValue", …]}`. |
+| `map` | Element-level `HDEL`. Removes the listed keys from the stored hash. The hash itself is removed by Valkey only when its last key is removed. | Required: `{"data": ["elementKey", …]}`. |
 
+There is no whole-key delete for `set` or `map` via this endpoint — to clear a collection entirely, remove its elements.
 
-integer:
-```
-{"data": variableValue}
-```
-examples: ```{"data": 123}```
+#### Examples
 
+Scalars (no body needed):
+```
+DELETE /variables/hub/my-hub/var/sampling_rate
+DELETE /variables/hub/my-hub/var/enabled
+```
 
-set:
+Set (element-level):
 ```
-{"data":[elementValue]}
+DELETE /variables/hub/my-hub/var/services
+{"data": ["service1", "service2"]}
 ```
-example: ```{"data":["service1", "service2"]}```
 
-
-map:
+Map (element-level):
 ```
-{"data":[elementKey]}
+DELETE /variables/hub/my-hub/var/attribs
+{"data": ["attrib.111", "attrib.222"]}
 ```
-example: ```{"data":["attrib.111", "attrib.222"]}```
