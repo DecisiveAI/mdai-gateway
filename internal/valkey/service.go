@@ -65,21 +65,18 @@ var parsers = map[variables.DataType]map[CommandType]ParseFn{
 		CommandAdd: parseMap,
 		CommandDel: parseSet,
 	},
+	// Scalars have no CommandDel parser: a scalar DELETE removes the whole key and carries no body.
 	variables.DataTypeString: {
 		CommandAdd: parseString,
-		CommandDel: parseString,
 	},
 	variables.DataTypeInt: {
 		CommandAdd: parseInt,
-		CommandDel: parseInt,
 	},
 	variables.DataTypeBoolean: {
 		CommandAdd: parseBoolean,
-		CommandDel: parseBoolean,
 	},
 	variables.DataTypeFloat: {
 		CommandAdd: parseFloat,
-		CommandDel: parseFloat,
 	},
 }
 

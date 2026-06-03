@@ -24,10 +24,8 @@ const (
 	getSingleVariableEndpoint = "GET /variables/values/hub/{hubName}/var/{varName}"
 )
 
-// errCorruptStoredValue marks a variable whose stored value exists but cannot be parsed
-// into its declared dataType. This is out-of-band data corruption (the gateway's write
-// path canonicalizes every value), not a server fault, so it maps to 422 on the
-// single-variable endpoint and to a null entry on the bulk endpoint.
+// errCorruptStoredValue marks a stored value that can't be parsed into its declared dataType
+// (out-of-band corruption): 422 on the single-variable endpoint, a null entry on the bulk one.
 var errCorruptStoredValue = errors.New("stored value is not valid for its data type")
 
 func handleListAllVariables(_ context.Context, deps HandlerDeps) http.HandlerFunc {
@@ -309,8 +307,7 @@ func readHubVariableValues(
 		varLogger := logger.With(zap.String("variableName", variable.Name))
 		value, _, _, err := readVariableValueObserved(ctx, varLogger, reader, hubName, variable)
 		if err != nil {
-			// A single corrupt value must not fail the whole listing: encode it as null
-			// (same as an absent value) so every other variable still returns.
+			// One corrupt value must not fail the whole listing; encode it as null, like an absent one.
 			if errors.Is(err, errCorruptStoredValue) {
 				varLogger.Warn("Encoding variable with corrupt stored value as null", zap.Error(err))
 				values[variable.Name] = nil

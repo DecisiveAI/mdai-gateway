@@ -330,9 +330,6 @@ func TestHandleGetVariables(t *testing.T) {
 			},
 		},
 		{
-			// A value that exists but cannot be parsed into its declared type is data
-			// corruption (writable only out-of-band; the gateway's write path canonicalizes).
-			// It is the client's data, not a server fault, so the contract is 422 — not 500.
 			name:     "Int_CorruptStoredValue",
 			target:   "/variables/values/hub/mdaihub-sample/var/data_int",
 			status:   http.StatusUnprocessableEntity,
@@ -523,9 +520,6 @@ func TestHandleGetHubVariableValues(t *testing.T) {
 	}
 }
 
-// A single variable whose stored value is corrupt must not take down the whole hub
-// listing: the offending variable is encoded as null, every other variable still returns,
-// and the request stays 200.
 func TestHandleGetHubVariableValues_CorruptValueDoesNotFailWholeRequest(t *testing.T) {
 	clientset := newFakeClientset(t)
 	deps := setupReadOnlyMocks(t, clientset)
