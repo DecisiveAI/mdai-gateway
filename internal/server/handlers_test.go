@@ -329,6 +329,22 @@ func TestHandleGetVariables(t *testing.T) {
 				})
 			},
 		},
+		{
+			// A value that exists but cannot be parsed into its declared type is data
+			// corruption (writable only out-of-band; the gateway's write path canonicalizes).
+			// It is the client's data, not a server fault, so the contract is 422 — not 500.
+			name:     "Int_CorruptStoredValue",
+			target:   "/variables/values/hub/mdaihub-sample/var/data_int",
+			status:   http.StatusUnprocessableEntity,
+			expected: "stored value is not valid for its data type",
+			valkey: func(t *testing.T, m *valkeymock.Client) {
+				t.Helper()
+				key := "variable/mdaihub-sample/data_int"
+				m.EXPECT().
+					Do(gomock.Any(), valkeymock.Match("GET", key)).
+					Return(valkeymock.Result(valkeymock.ValkeyBlobString("not-an-int")))
+			},
+		},
 	}
 
 	clientset := newFakeClientset(t)
@@ -505,6 +521,39 @@ func TestHandleGetHubVariableValues(t *testing.T) {
 			assert.JSONEq(t, string(expectedBody), rr.Body.String())
 		})
 	}
+}
+
+// A single variable whose stored value is corrupt must not take down the whole hub
+// listing: the offending variable is encoded as null, every other variable still returns,
+// and the request stays 200.
+func TestHandleGetHubVariableValues_CorruptValueDoesNotFailWholeRequest(t *testing.T) {
+	clientset := newFakeClientset(t)
+	deps := setupReadOnlyMocks(t, clientset)
+
+	// Reduce the sample schema to two manual scalars so the bulk read touches only these.
+	updateSchemaConfigMap(t, clientset, deps.ConfigMapController, func(cm *corev1.ConfigMap) {
+		for k := range cm.Data {
+			delete(cm.Data, k)
+		}
+		cm.Data["ok_string"] = `{"type":"manual","dataType":"string","storageType":"mdai-valkey"}`
+		cm.Data["bad_int"] = `{"type":"manual","dataType":"int","storageType":"mdai-valkey"}`
+	})
+
+	m := deps.ValkeyClient.(*valkeymock.Client) //nolint:forcetypeassert
+	m.EXPECT().
+		Do(gomock.Any(), valkeymock.Match("GET", "variable/mdaihub-sample/ok_string")).
+		Return(valkeymock.Result(valkeymock.ValkeyBlobString("hello"))).AnyTimes()
+	m.EXPECT().
+		Do(gomock.Any(), valkeymock.Match("GET", "variable/mdaihub-sample/bad_int")).
+		Return(valkeymock.Result(valkeymock.ValkeyBlobString("not-an-int"))).AnyTimes()
+
+	mux := NewRouter(t.Context(), deps)
+	req := httptest.NewRequest(http.MethodGet, "/variables/values/hub/mdaihub-sample", http.NoBody)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.JSONEq(t, `{"ok_string":"hello","bad_int":null}`, rr.Body.String())
 }
 
 type XaddMatcher struct{}

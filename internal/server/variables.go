@@ -24,6 +24,12 @@ const (
 	getSingleVariableEndpoint = "GET /variables/values/hub/{hubName}/var/{varName}"
 )
 
+// errCorruptStoredValue marks a variable whose stored value exists but cannot be parsed
+// into its declared dataType. This is out-of-band data corruption (the gateway's write
+// path canonicalizes every value), not a server fault, so it maps to 422 on the
+// single-variable endpoint and to a null entry on the bulk endpoint.
+var errCorruptStoredValue = errors.New("stored value is not valid for its data type")
+
 func handleListAllVariables(_ context.Context, deps HandlerDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		hubsVariables, err := deps.ConfigMapController.GetAllHubsVariablesSchemaConfigMapData()
@@ -104,6 +110,10 @@ func handleGetVariables(ctx context.Context, deps HandlerDeps) http.HandlerFunc 
 			variable,
 		)
 		if err != nil {
+			if errors.Is(err, errCorruptStoredValue) {
+				httputil.WriteJSONResponse(w, logger, http.StatusUnprocessableEntity, errCorruptStoredValue.Error())
+				return
+			}
 			httputil.WriteJSONResponse(w, logger, http.StatusInternalServerError, "failed to read variable value")
 			return
 		}
@@ -296,8 +306,16 @@ func readHubVariableValues(
 	start := time.Now()
 	for _, variable := range definitions {
 		// Bulk endpoint encodes absent variables as null in the response map; 404 applies only to the single-variable endpoint.
-		value, _, _, err := readVariableValueObserved(ctx, logger.With(zap.String("variableName", variable.Name)), reader, hubName, variable)
+		varLogger := logger.With(zap.String("variableName", variable.Name))
+		value, _, _, err := readVariableValueObserved(ctx, varLogger, reader, hubName, variable)
 		if err != nil {
+			// A single corrupt value must not fail the whole listing: encode it as null
+			// (same as an absent value) so every other variable still returns.
+			if errors.Is(err, errCorruptStoredValue) {
+				varLogger.Warn("Encoding variable with corrupt stored value as null", zap.Error(err))
+				values[variable.Name] = nil
+				continue
+			}
 			return nil, time.Since(start), err
 		}
 		values[variable.Name] = value
@@ -349,7 +367,7 @@ func readVariableValue(ctx context.Context, reader *datacorevariables.ValkeyAdap
 	}
 	typed, err := res.Typed()
 	if err != nil {
-		return nil, false, fmt.Errorf("typed conversion for %s: %w", variable.Name, err)
+		return nil, false, fmt.Errorf("%w (variable %q): %v", errCorruptStoredValue, variable.Name, err)
 	}
 	return typed, true, nil
 }
