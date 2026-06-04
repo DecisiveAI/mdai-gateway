@@ -4,7 +4,7 @@ go 1.25.0
 
 require (
 	github.com/google/uuid v1.6.0
-	github.com/mydecisive/mdai-data-core v0.4.1
+	github.com/mydecisive/mdai-data-core v0.4.2
 	github.com/open-telemetry/opamp-go v0.23.0
 	github.com/prometheus/alertmanager v0.31.1
 	github.com/prometheus/client_golang v1.23.2
