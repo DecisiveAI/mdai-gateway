@@ -100,7 +100,7 @@ func handleGetVariables(ctx context.Context, deps HandlerDeps) http.HandlerFunc 
 			return
 		}
 
-		value, found, duration, err := readVariableValueObserved(
+		read, err := readVariableValueObserved(
 			ctx,
 			logger,
 			deps.VariableReader,
@@ -115,14 +115,14 @@ func handleGetVariables(ctx context.Context, deps HandlerDeps) http.HandlerFunc 
 			httputil.WriteJSONResponse(w, logger, http.StatusInternalServerError, "failed to read variable value")
 			return
 		}
-		logSlowValueRead(logger, deps.SlowValueReadThreshold, duration)
+		logSlowValueRead(logger, deps.SlowValueReadThreshold, read.duration)
 
-		if !found {
+		if !read.found {
 			httputil.WriteJSONResponse(w, logger, http.StatusNotFound, "variable has no value")
 			return
 		}
 
-		response := map[string]any{varName: value}
+		response := map[string]any{varName: read.value}
 		httputil.WriteJSONResponse(w, logger, http.StatusOK, response)
 	}
 }
@@ -185,7 +185,8 @@ func handleSetDeleteVariables(ctx context.Context, deps HandlerDeps) http.Handle
 
 		// DELETE on a scalar variable takes no body — the URL identifies the key to remove.
 		var payload any
-		if !(command == valkey.CommandDel && isScalarDataType(variable.DataType)) {
+		scalarDelete := command == valkey.CommandDel && isScalarDataType(variable.DataType)
+		if !scalarDelete {
 			var raw map[string]json.RawMessage
 			if err = json.NewDecoder(r.Body).Decode(&raw); err != nil {
 				http.Error(w, "Invalid JSON format in request payload", http.StatusBadRequest)
@@ -195,7 +196,8 @@ func handleSetDeleteVariables(ctx context.Context, deps HandlerDeps) http.Handle
 				http.Error(w, `Invalid request payload. expect {"data": any}`, http.StatusBadRequest)
 				return
 			}
-			parser, err := valkey.GetParser(variable.DataType, command)
+			var parser valkey.ParseFn
+			parser, err = valkey.GetParser(variable.DataType, command)
 			if err != nil {
 				http.Error(w, "Invalid request payload: "+err.Error(), http.StatusBadRequest)
 				return
@@ -305,7 +307,7 @@ func readHubVariableValues(
 	for _, variable := range definitions {
 		// Bulk endpoint encodes absent variables as null in the response map; 404 applies only to the single-variable endpoint.
 		varLogger := logger.With(zap.String("variableName", variable.Name))
-		value, _, _, err := readVariableValueObserved(ctx, varLogger, reader, hubName, variable)
+		read, err := readVariableValueObserved(ctx, varLogger, reader, hubName, variable)
 		if err != nil {
 			// One corrupt value must not fail the whole listing; encode it as null, like an absent one.
 			if errors.Is(err, errCorruptStoredValue) {
@@ -315,10 +317,16 @@ func readHubVariableValues(
 			}
 			return nil, time.Since(start), err
 		}
-		values[variable.Name] = value
+		values[variable.Name] = read.value
 	}
 
 	return values, time.Since(start), nil
+}
+
+type observedRead struct {
+	value    any
+	found    bool
+	duration time.Duration
 }
 
 func readVariableValueObserved(
@@ -327,7 +335,7 @@ func readVariableValueObserved(
 	reader *datacorevariables.ValkeyAdapter,
 	hubName string,
 	variable variables.Definition,
-) (any, bool, time.Duration, error) {
+) (observedRead, error) {
 	logger = logger.With(zap.String("dataType", string(variable.DataType)))
 	start := time.Now()
 	value, found, err := readVariableValue(ctx, reader, hubName, variable)
@@ -337,9 +345,9 @@ func readVariableValueObserved(
 			zap.Int64("duration_ms", duration.Milliseconds()),
 			zap.Error(err),
 		)
-		return nil, false, duration, err
+		return observedRead{duration: duration}, err
 	}
-	return value, found, duration, nil
+	return observedRead{value: value, found: found, duration: duration}, nil
 }
 
 func logSlowValueRead(logger *zap.Logger, threshold time.Duration, duration time.Duration) {
@@ -364,7 +372,7 @@ func readVariableValue(ctx context.Context, reader *datacorevariables.ValkeyAdap
 	}
 	typed, err := res.Typed()
 	if err != nil {
-		return nil, false, fmt.Errorf("%w (variable %q): %v", errCorruptStoredValue, variable.Name, err)
+		return nil, false, fmt.Errorf("%w (variable %q): %w", errCorruptStoredValue, variable.Name, err)
 	}
 	return typed, true, nil
 }
@@ -376,7 +384,11 @@ func isScalarDataType(dt datacorevariables.DataType) bool {
 		datacorevariables.DataTypeFloat,
 		datacorevariables.DataTypeBoolean:
 		return true
-	default:
+	case datacorevariables.DataTypeSet,
+		datacorevariables.DataTypeMap,
+		datacorevariables.DataTypeMetaHashSet,
+		datacorevariables.DataTypeMetaPriorityList:
 		return false
 	}
+	return false
 }
