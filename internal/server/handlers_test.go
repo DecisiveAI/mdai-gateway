@@ -118,8 +118,8 @@ func TestHandleGetVariables(t *testing.T) {
 	getTests := []struct {
 		expected  any
 		valkey    func(t *testing.T, m *valkeymock.Client)
-		cmprepare func(t *testing.T, cs kubernetes.Interface, cmController *datacorekube.ConfigMapController)
-		cmcleanup func(t *testing.T, cs kubernetes.Interface, cmController *datacorekube.ConfigMapController)
+		cmprepare func(t *testing.T, cs kubernetes.Interface, cmController *datacorekube.HubConfigMapController)
+		cmcleanup func(t *testing.T, cs kubernetes.Interface, cmController *datacorekube.HubConfigMapController)
 		name      string
 		target    string
 		status    int
@@ -189,18 +189,11 @@ func TestHandleGetVariables(t *testing.T) {
 			target: "/variables/values/hub/mdaihub-sample/var/data_set",
 			status: http.StatusOK,
 			expected: map[string][]string{
-				"data_set": {
-					"manual_service_1",
-					"manual_service_2",
-					"manual_service_3",
-				},
+				"data_set": {"manual_service_1", "manual_service_2", "manual_service_3"},
 			},
 			valkey: func(t *testing.T, m *valkeymock.Client) {
 				t.Helper()
 				key := "variable/mdaihub-sample/data_set"
-				m.EXPECT().
-					Do(gomock.Any(), valkeymock.Match("EXISTS", key)).
-					Return(valkeymock.Result(valkeymock.ValkeyInt64(1)))
 				m.EXPECT().
 					Do(gomock.Any(), valkeymock.Match("SMEMBERS", key)).
 					Return(valkeymock.Result(
@@ -216,18 +209,11 @@ func TestHandleGetVariables(t *testing.T) {
 			target: "/variables/values/hub/mdaihub-sample/var/data_map",
 			status: http.StatusOK,
 			expected: map[string]map[string]string{
-				"data_map": {
-					"attrib.1": "value1",
-					"attrib.2": "value2",
-					"attrib.3": "value3",
-				},
+				"data_map": {"attrib.1": "value1", "attrib.2": "value2", "attrib.3": "value3"},
 			},
 			valkey: func(t *testing.T, m *valkeymock.Client) {
 				t.Helper()
 				key := "variable/mdaihub-sample/data_map"
-				m.EXPECT().
-					Do(gomock.Any(), valkeymock.Match("EXISTS", key)).
-					Return(valkeymock.Result(valkeymock.ValkeyInt64(1)))
 				m.EXPECT().
 					Do(gomock.Any(), valkeymock.Match("HGETALL", key)).
 					Return(valkeymock.Result(valkeymock.ValkeyMap(map[string]valkey.ValkeyMessage{
@@ -240,8 +226,8 @@ func TestHandleGetVariables(t *testing.T) {
 		{
 			name:     "String_NoValue",
 			target:   "/variables/values/hub/mdaihub-sample/var/data_string",
-			status:   http.StatusOK,
-			expected: map[string]any{"data_string": nil},
+			status:   http.StatusNotFound,
+			expected: "variable has no value",
 			valkey: func(t *testing.T, m *valkeymock.Client) {
 				t.Helper()
 				key := "variable/mdaihub-sample/data_string"
@@ -255,27 +241,27 @@ func TestHandleGetVariables(t *testing.T) {
 		{
 			name:     "Set_NoValue",
 			target:   "/variables/values/hub/mdaihub-sample/var/data_set",
-			status:   http.StatusOK,
-			expected: map[string]any{"data_set": nil},
+			status:   http.StatusNotFound,
+			expected: "variable has no value",
 			valkey: func(t *testing.T, m *valkeymock.Client) {
 				t.Helper()
 				key := "variable/mdaihub-sample/data_set"
 				m.EXPECT().
-					Do(gomock.Any(), valkeymock.Match("EXISTS", key)).
-					Return(valkeymock.Result(valkeymock.ValkeyInt64(0)))
+					Do(gomock.Any(), valkeymock.Match("SMEMBERS", key)).
+					Return(valkeymock.Result(valkeymock.ValkeyArray()))
 			},
 		},
 		{
 			name:     "Map_NoValue",
 			target:   "/variables/values/hub/mdaihub-sample/var/data_map",
-			status:   http.StatusOK,
-			expected: map[string]any{"data_map": nil},
+			status:   http.StatusNotFound,
+			expected: "variable has no value",
 			valkey: func(t *testing.T, m *valkeymock.Client) {
 				t.Helper()
 				key := "variable/mdaihub-sample/data_map"
 				m.EXPECT().
-					Do(gomock.Any(), valkeymock.Match("EXISTS", key)).
-					Return(valkeymock.Result(valkeymock.ValkeyInt64(0)))
+					Do(gomock.Any(), valkeymock.Match("HGETALL", key)).
+					Return(valkeymock.Result(valkeymock.ValkeyMap(map[string]valkey.ValkeyMessage{})))
 			},
 		},
 		{
@@ -328,19 +314,32 @@ func TestHandleGetVariables(t *testing.T) {
 			target:   "/variables/values/hub/mdaihub-sample/var/data_unsupported_type",
 			status:   http.StatusInternalServerError,
 			expected: "failed to read variable value",
-			cmprepare: func(t *testing.T, clientset kubernetes.Interface, cmController *datacorekube.ConfigMapController) {
+			cmprepare: func(t *testing.T, clientset kubernetes.Interface, cmController *datacorekube.HubConfigMapController) {
 				t.Helper()
 
 				updateSchemaConfigMap(t, clientset, cmController, func(cm *corev1.ConfigMap) {
 					cm.Data["data_unsupported_type"] = `{"type":"manual","dataType":"booleaninttstring","storageType":"mdai-valkey"}`
 				})
 			},
-			cmcleanup: func(t *testing.T, cs kubernetes.Interface, cmController *datacorekube.ConfigMapController) {
+			cmcleanup: func(t *testing.T, cs kubernetes.Interface, cmController *datacorekube.HubConfigMapController) {
 				t.Helper()
 
 				updateSchemaConfigMap(t, cs, cmController, func(cm *corev1.ConfigMap) {
 					delete(cm.Data, "data_unsupported_type")
 				})
+			},
+		},
+		{
+			name:     "Int_CorruptStoredValue",
+			target:   "/variables/values/hub/mdaihub-sample/var/data_int",
+			status:   http.StatusUnprocessableEntity,
+			expected: "stored value is not valid for its data type",
+			valkey: func(t *testing.T, m *valkeymock.Client) {
+				t.Helper()
+				key := "variable/mdaihub-sample/data_int"
+				m.EXPECT().
+					Do(gomock.Any(), valkeymock.Match("GET", key)).
+					Return(valkeymock.Result(valkeymock.ValkeyBlobString("not-an-int")))
 			},
 		},
 	}
@@ -373,6 +372,58 @@ func TestHandleGetVariables(t *testing.T) {
 			assert.JSONEq(t, string(expectedBody), rr.Body.String())
 		})
 	}
+}
+
+func TestHandleGetVariables_AppliesDefaultOnNotFound(t *testing.T) {
+	clientset := newFakeClientset(t)
+	deps := setupReadOnlyMocks(t, clientset)
+
+	updateSchemaConfigMap(t, clientset, deps.ConfigMapController, func(cm *corev1.ConfigMap) {
+		cm.Data["sampling_rate"] = `{"type":"manual","dataType":"int","storageType":"mdai-valkey","default":100,"serializeAs":[{"name":"SAMPLING_RATE"}]}`
+	})
+	t.Cleanup(func() {
+		updateSchemaConfigMap(t, clientset, deps.ConfigMapController, func(cm *corev1.ConfigMap) {
+			delete(cm.Data, "sampling_rate")
+		})
+	})
+
+	deps.ValkeyClient.(*valkeymock.Client).EXPECT(). //nolint:forcetypeassert
+								Do(gomock.Any(), valkeymock.Match("GET", "variable/mdaihub-sample/sampling_rate")).
+								Return(valkeymock.Result(valkeymock.ValkeyNil()))
+
+	mux := NewRouter(t.Context(), deps)
+	req := httptest.NewRequest(http.MethodGet, "/variables/values/hub/mdaihub-sample/var/sampling_rate", http.NoBody)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.JSONEq(t, `{"sampling_rate":100}`, rr.Body.String())
+}
+
+func TestHandleGetVariables_StoredValueWinsOverDefault(t *testing.T) {
+	clientset := newFakeClientset(t)
+	deps := setupReadOnlyMocks(t, clientset)
+
+	updateSchemaConfigMap(t, clientset, deps.ConfigMapController, func(cm *corev1.ConfigMap) {
+		cm.Data["sampling_rate"] = `{"type":"manual","dataType":"int","storageType":"mdai-valkey","default":100,"serializeAs":[{"name":"SAMPLING_RATE"}]}`
+	})
+	t.Cleanup(func() {
+		updateSchemaConfigMap(t, clientset, deps.ConfigMapController, func(cm *corev1.ConfigMap) {
+			delete(cm.Data, "sampling_rate")
+		})
+	})
+
+	deps.ValkeyClient.(*valkeymock.Client).EXPECT(). //nolint:forcetypeassert
+								Do(gomock.Any(), valkeymock.Match("GET", "variable/mdaihub-sample/sampling_rate")).
+								Return(valkeymock.Result(valkeymock.ValkeyBlobString("50")))
+
+	mux := NewRouter(t.Context(), deps)
+	req := httptest.NewRequest(http.MethodGet, "/variables/values/hub/mdaihub-sample/var/sampling_rate", http.NoBody)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.JSONEq(t, `{"sampling_rate":50}`, rr.Body.String())
 }
 
 func TestHandleGetHubVariableValues(t *testing.T) {
@@ -413,18 +464,12 @@ func TestHandleGetHubVariableValues(t *testing.T) {
 					Do(gomock.Any(), valkeymock.Match("GET", "variable/mdaihub-sample/computed_string")).
 					Return(valkeymock.Result(valkeymock.ValkeyBlobString("derived")))
 				m.EXPECT().
-					Do(gomock.Any(), valkeymock.Match("EXISTS", "variable/mdaihub-sample/data_set")).
-					Return(valkeymock.Result(valkeymock.ValkeyInt64(1)))
-				m.EXPECT().
 					Do(gomock.Any(), valkeymock.Match("SMEMBERS", "variable/mdaihub-sample/data_set")).
 					Return(valkeymock.Result(valkeymock.ValkeyArray(
 						valkeymock.ValkeyBlobString("manual_service_1"),
 						valkeymock.ValkeyBlobString("manual_service_2"),
 						valkeymock.ValkeyBlobString("manual_service_3"),
 					)))
-				m.EXPECT().
-					Do(gomock.Any(), valkeymock.Match("EXISTS", "variable/mdaihub-sample/data_map")).
-					Return(valkeymock.Result(valkeymock.ValkeyInt64(1)))
 				m.EXPECT().
 					Do(gomock.Any(), valkeymock.Match("HGETALL", "variable/mdaihub-sample/data_map")).
 					Return(valkeymock.Result(valkeymock.ValkeyMap(map[string]valkey.ValkeyMessage{
@@ -475,6 +520,36 @@ func TestHandleGetHubVariableValues(t *testing.T) {
 	}
 }
 
+func TestHandleGetHubVariableValues_CorruptValueDoesNotFailWholeRequest(t *testing.T) {
+	clientset := newFakeClientset(t)
+	deps := setupReadOnlyMocks(t, clientset)
+
+	// Reduce the sample schema to two manual scalars so the bulk read touches only these.
+	updateSchemaConfigMap(t, clientset, deps.ConfigMapController, func(cm *corev1.ConfigMap) {
+		for k := range cm.Data {
+			delete(cm.Data, k)
+		}
+		cm.Data["ok_string"] = `{"type":"manual","dataType":"string","storageType":"mdai-valkey"}`
+		cm.Data["bad_int"] = `{"type":"manual","dataType":"int","storageType":"mdai-valkey"}`
+	})
+
+	m := deps.ValkeyClient.(*valkeymock.Client) //nolint:forcetypeassert
+	m.EXPECT().
+		Do(gomock.Any(), valkeymock.Match("GET", "variable/mdaihub-sample/ok_string")).
+		Return(valkeymock.Result(valkeymock.ValkeyBlobString("hello"))).AnyTimes()
+	m.EXPECT().
+		Do(gomock.Any(), valkeymock.Match("GET", "variable/mdaihub-sample/bad_int")).
+		Return(valkeymock.Result(valkeymock.ValkeyBlobString("not-an-int"))).AnyTimes()
+
+	mux := NewRouter(t.Context(), deps)
+	req := httptest.NewRequest(http.MethodGet, "/variables/values/hub/mdaihub-sample", http.NoBody)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.JSONEq(t, `{"ok_string":"hello","bad_int":null}`, rr.Body.String())
+}
+
 type XaddMatcher struct{}
 
 func (XaddMatcher) Matches(x any) bool {
@@ -491,29 +566,19 @@ func (XaddMatcher) String() string {
 
 func TestHandleDeleteVariables(t *testing.T) {
 	deleteTests := []struct {
-		name string
-		body string
+		name         string
+		body         string
+		expectedData string // expected JSON for the event payload's "data" field
 	}{
-		{
-			name: "string",
-			body: `{"data":"data_string"}`,
-		},
-		{
-			name: "boolean",
-			body: `{"data":true}`,
-		},
-		{
-			name: "int",
-			body: `{"data":123}`,
-		},
-		{
-			name: "set",
-			body: `{"data":["data_set"]}`,
-		},
-		{
-			name: "map",
-			body: `{"data": ["attrib.111"]}`,
-		},
+		// Scalars: DELETE ignores the body and publishes data:null.
+		{name: "string", body: `{"data":"data_string"}`, expectedData: "null"},
+		{name: "string-no-body", body: ``, expectedData: "null"},
+		{name: "string-wrong-type-body", body: `{"data":123}`, expectedData: "null"},
+		{name: "boolean", body: `{"data":true}`, expectedData: "null"},
+		{name: "int", body: `{"data":123}`, expectedData: "null"},
+		// Collections: DELETE still parses the body (element-level removal).
+		{name: "set", body: `{"data":["data_set"]}`, expectedData: `["data_set"]`},
+		{name: "map", body: `{"data": ["attrib.111"]}`, expectedData: `["attrib.111"]`},
 	}
 
 	clientset := newFakeClientset(t)
@@ -523,7 +588,16 @@ func TestHandleDeleteVariables(t *testing.T) {
 
 	for _, tt := range deleteTests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodDelete, "/variables/hub/mdaihub-sample/var/data_"+tt.name, bytes.NewBufferString(tt.body))
+			urlVar := tt.name
+			// Subtests share the data_<dataType> URL convention used by setupMocks.
+			for _, dt := range []string{"string", "boolean", "int", "set", "map"} {
+				if strings.HasPrefix(tt.name, dt) {
+					urlVar = dt
+					break
+				}
+			}
+
+			req := httptest.NewRequest(http.MethodDelete, "/variables/hub/mdaihub-sample/var/data_"+urlVar, bytes.NewBufferString(tt.body))
 			req.Header.Set("Content-Type", "application/json")
 
 			mockClient, ok := deps.ValkeyClient.(*valkeymock.Client)
@@ -546,7 +620,7 @@ func TestHandleDeleteVariables(t *testing.T) {
 			assert.Equal(t, "manual_variables_api", result.Source)
 			assert.Equal(t, "var.remove", result.Name)
 			assert.Equal(t, "mdaihub-sample", result.HubName)
-			assert.JSONEq(t, fmt.Sprintf(`{"variableRef":%q,"dataType":%q,"operation":"remove","data":%v}`, "data_"+tt.name, tt.name, stringifyData(t, tt.body)), result.Payload)
+			assert.JSONEq(t, fmt.Sprintf(`{"variableRef":%q,"dataType":%q,"operation":"remove","data":%s}`, "data_"+urlVar, urlVar, tt.expectedData), result.Payload)
 			assert.NotEmpty(t, result.ID)
 			assert.NotZero(t, result.Timestamp)
 			assert.WithinDuration(t, time.Now(), result.Timestamp, time.Minute)
@@ -715,31 +789,13 @@ func TestHandleSetVariables_InvalidRequestPayload(t *testing.T) {
 }
 
 func TestHandleDeleteVariables_InvalidRequestPayload(t *testing.T) {
+	// Scalar DELETEs intentionally accept any body (covered by TestHandleDeleteVariables).
+	// Only collection DELETEs continue to validate the body shape.
 	setTests := []struct {
 		name     string
 		body     string
 		expected string
 	}{
-		{
-			name:     "string",
-			body:     `{"data":true}`,
-			expected: "Invalid request payload: String expected\n",
-		},
-		{
-			name:     "boolean",
-			body:     `{"data":"true"}`,
-			expected: "Invalid request payload: Boolean expected\n",
-		},
-		{
-			name:     "int",
-			body:     `{"data":"123"}`,
-			expected: "Invalid request payload: Int expected\n",
-		},
-		{
-			name:     "int",
-			body:     `{"data":12.3}`,
-			expected: "Invalid request payload: Int expected\n",
-		},
 		{
 			name:     "set",
 			body:     `{"data":"set"}`,

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/mydecisive/mdai-data-core/eventing"
+	datacorevariables "github.com/mydecisive/mdai-data-core/variables"
 	"github.com/mydecisive/mdai-gateway/internal/adapter"
 	"github.com/mydecisive/mdai-gateway/internal/httputil"
 	"github.com/mydecisive/mdai-gateway/internal/nats"
@@ -22,6 +23,10 @@ const (
 	getHubValuesEndpoint      = "GET /variables/values/hub/{hubName}"
 	getSingleVariableEndpoint = "GET /variables/values/hub/{hubName}/var/{varName}"
 )
+
+// errCorruptStoredValue marks a stored value that can't be parsed into its declared dataType
+// (out-of-band corruption): 422 on the single-variable endpoint, a null entry on the bulk one.
+var errCorruptStoredValue = errors.New("stored value is not valid for its data type")
 
 func handleListAllVariables(_ context.Context, deps HandlerDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -95,7 +100,7 @@ func handleGetVariables(ctx context.Context, deps HandlerDeps) http.HandlerFunc 
 			return
 		}
 
-		valkeyValue, duration, err := readVariableValueObserved(
+		read, err := readVariableValueObserved(
 			ctx,
 			logger,
 			deps.VariableReader,
@@ -103,12 +108,21 @@ func handleGetVariables(ctx context.Context, deps HandlerDeps) http.HandlerFunc 
 			variable,
 		)
 		if err != nil {
+			if errors.Is(err, errCorruptStoredValue) {
+				httputil.WriteJSONResponse(w, logger, http.StatusUnprocessableEntity, errCorruptStoredValue.Error())
+				return
+			}
 			httputil.WriteJSONResponse(w, logger, http.StatusInternalServerError, "failed to read variable value")
 			return
 		}
-		logSlowValueRead(logger, deps.SlowValueReadThreshold, duration)
+		logSlowValueRead(logger, deps.SlowValueReadThreshold, read.duration)
 
-		response := map[string]any{varName: valkeyValue}
+		if !read.found {
+			httputil.WriteJSONResponse(w, logger, http.StatusNotFound, "variable has no value")
+			return
+		}
+
+		response := map[string]any{varName: read.value}
 		httputil.WriteJSONResponse(w, logger, http.StatusOK, response)
 	}
 }
@@ -164,32 +178,35 @@ func handleSetDeleteVariables(ctx context.Context, deps HandlerDeps) http.Handle
 			return
 		}
 
-		var raw map[string]json.RawMessage
-		if err = json.NewDecoder(r.Body).Decode(&raw); err != nil {
-			http.Error(w, "Invalid JSON format in request payload", http.StatusBadRequest)
-			return
-		}
-
-		if raw["data"] == nil {
-			http.Error(w, `Invalid request payload. expect {"data": any}`, http.StatusBadRequest)
-			return
-		}
-
 		command := valkey.CommandAdd
 		if r.Method == http.MethodDelete {
 			command = valkey.CommandDel
 		}
 
-		parser, err := valkey.GetParser(variable.DataType, command)
-		if err != nil {
-			http.Error(w, "Invalid request payload: "+err.Error(), http.StatusBadRequest)
-			return
-		}
-
-		payload, err := parser(raw["data"])
-		if err != nil {
-			http.Error(w, "Invalid request payload: "+stringutil.UpperFirst(err.Error()), http.StatusBadRequest)
-			return
+		// DELETE on a scalar variable takes no body — the URL identifies the key to remove.
+		var payload any
+		scalarDelete := command == valkey.CommandDel && isScalarDataType(variable.DataType)
+		if !scalarDelete {
+			var raw map[string]json.RawMessage
+			if err = json.NewDecoder(r.Body).Decode(&raw); err != nil {
+				http.Error(w, "Invalid JSON format in request payload", http.StatusBadRequest)
+				return
+			}
+			if raw["data"] == nil {
+				http.Error(w, `Invalid request payload. expect {"data": any}`, http.StatusBadRequest)
+				return
+			}
+			var parser valkey.ParseFn
+			parser, err = valkey.GetParser(variable.DataType, command)
+			if err != nil {
+				http.Error(w, "Invalid request payload: "+err.Error(), http.StatusBadRequest)
+				return
+			}
+			payload, err = parser(raw["data"])
+			if err != nil {
+				http.Error(w, "Invalid request payload: "+stringutil.UpperFirst(err.Error()), http.StatusBadRequest)
+				return
+			}
 		}
 
 		event, err := eventing.NewMdaiEvent(hubName, varName, string(variable.DataType), string(command), payload)
@@ -281,30 +298,44 @@ func logRequestedVariableSchemaError(logger *zap.Logger, err error) {
 func readHubVariableValues(
 	ctx context.Context,
 	logger *zap.Logger,
-	reader *valkey.Reader,
+	reader *datacorevariables.ValkeyAdapter,
 	hubName string,
 	definitions variables.HubDefinitions,
 ) (map[string]any, time.Duration, error) {
 	values := make(map[string]any, len(definitions))
 	start := time.Now()
 	for _, variable := range definitions {
-		value, _, err := readVariableValueObserved(ctx, logger.With(zap.String("variableName", variable.Name)), reader, hubName, variable)
+		// Bulk endpoint encodes absent variables as null in the response map; 404 applies only to the single-variable endpoint.
+		varLogger := logger.With(zap.String("variableName", variable.Name))
+		read, err := readVariableValueObserved(ctx, varLogger, reader, hubName, variable)
 		if err != nil {
+			// One corrupt value must not fail the whole listing; encode it as null, like an absent one.
+			if errors.Is(err, errCorruptStoredValue) {
+				varLogger.Warn("Encoding variable with corrupt stored value as null", zap.Error(err))
+				values[variable.Name] = nil
+				continue
+			}
 			return nil, time.Since(start), err
 		}
-		values[variable.Name] = value
+		values[variable.Name] = read.value
 	}
 
 	return values, time.Since(start), nil
 }
 
+type observedRead struct {
+	value    any
+	found    bool
+	duration time.Duration
+}
+
 func readVariableValueObserved(
 	ctx context.Context,
 	logger *zap.Logger,
-	reader *valkey.Reader,
+	reader *datacorevariables.ValkeyAdapter,
 	hubName string,
 	variable variables.Definition,
-) (any, time.Duration, error) {
+) (observedRead, error) {
 	logger = logger.With(zap.String("dataType", string(variable.DataType)))
 	start := time.Now()
 	value, found, err := readVariableValue(ctx, reader, hubName, variable)
@@ -314,13 +345,9 @@ func readVariableValueObserved(
 			zap.Int64("duration_ms", duration.Milliseconds()),
 			zap.Error(err),
 		)
-		return nil, duration, err
+		return observedRead{duration: duration}, err
 	}
-	if !found {
-		return nil, duration, nil
-	}
-
-	return value, duration, nil
+	return observedRead{value: value, found: found, duration: duration}, nil
 }
 
 func logSlowValueRead(logger *zap.Logger, threshold time.Duration, duration time.Duration) {
@@ -331,10 +358,37 @@ func logSlowValueRead(logger *zap.Logger, threshold time.Duration, duration time
 	logger.Warn("Slow variable value read", zap.Int64("duration_ms", duration.Milliseconds()))
 }
 
-func readVariableValue(ctx context.Context, reader *valkey.Reader, hubName string, variable variables.Definition) (any, bool, error) {
+func readVariableValue(ctx context.Context, reader *datacorevariables.ValkeyAdapter, hubName string, variable variables.Definition) (any, bool, error) {
 	if variable.StorageType != variables.StorageTypeValkey {
 		return nil, false, fmt.Errorf("unsupported storage type %q", variable.StorageType)
 	}
 
-	return valkey.GetValue(ctx, reader, variable.Name, variable.DataType, hubName)
+	res, err := datacorevariables.Resolve(ctx, reader, hubName, variable.Name, variable.DataType, variable.Default)
+	if err != nil {
+		return nil, false, err
+	}
+	if !res.Found {
+		return nil, false, nil
+	}
+	typed, err := res.Typed()
+	if err != nil {
+		return nil, false, fmt.Errorf("%w (variable %q): %w", errCorruptStoredValue, variable.Name, err)
+	}
+	return typed, true, nil
+}
+
+func isScalarDataType(dt datacorevariables.DataType) bool {
+	switch dt {
+	case datacorevariables.DataTypeString,
+		datacorevariables.DataTypeInt,
+		datacorevariables.DataTypeFloat,
+		datacorevariables.DataTypeBoolean:
+		return true
+	case datacorevariables.DataTypeSet,
+		datacorevariables.DataTypeMap,
+		datacorevariables.DataTypeMetaHashSet,
+		datacorevariables.DataTypeMetaPriorityList:
+		return false
+	}
+	return false
 }

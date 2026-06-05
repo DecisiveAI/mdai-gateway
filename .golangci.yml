@@ -144,6 +144,9 @@ linters:
       - path: internal/integration/*
         linters:
           - tagliatelle
+      - path: internal/variables/*
+        linters:
+          - tagliatelle
       - linters:
           - lll
         path: internal/*

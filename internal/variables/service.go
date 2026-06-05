@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/mydecisive/mdai-gateway/internal/valkey"
+	datacorevariables "github.com/mydecisive/mdai-data-core/variables"
 )
 
 const (
@@ -14,8 +14,10 @@ const (
 )
 
 type (
-	// Schema TODO replace with shared type.
-	Schema         map[string]any
+	// Schema is the raw JSON bytes of a single variable's schema entry, as
+	// written by the operator into the schema ConfigMap. It is forwarded
+	// verbatim in list-variables responses.
+	Schema         = json.RawMessage
 	HubVariables   map[string]Schema
 	ByHub          map[string]HubVariables
 	HubDefinitions map[string]Definition
@@ -25,9 +27,10 @@ type Definition struct {
 	Name         string
 	Schema       Schema
 	Type         string
-	DataType     valkey.VariableType
+	DataType     datacorevariables.DataType
 	StorageType  string
 	VariableRefs []string
+	Default      json.RawMessage // nil ⇔ no default declared
 }
 
 var (
@@ -59,8 +62,9 @@ func DecodeHub(rawHubVariables map[string]string) (HubVariables, error) {
 	return hubDefinitionsToSchemas(definitions), nil
 }
 
-// DecodeHubDefinitions fails fast on the first invalid schema to keep error handling simple.
-// If partial decoding is needed in the future, we can introduce a Partial variant that collects errors per variable.
+// DecodeHubDefinitions fails fast on the first invalid schema to keep error
+// handling simple. If partial decoding is needed in the future, we can
+// introduce a Partial variant that collects errors per variable.
 func DecodeHubDefinitions(rawHubVariables map[string]string) (HubDefinitions, error) {
 	out := make(HubDefinitions, len(rawHubVariables))
 	for variableName, rawSchema := range rawHubVariables {
@@ -100,78 +104,52 @@ func hubDefinitionsToSchemas(definitions HubDefinitions) HubVariables {
 	return out
 }
 
-func parseDefinition(varName string, rawSchema string) (Definition, error) {
-	var schema Schema
-	if err := json.Unmarshal([]byte(rawSchema), &schema); err != nil {
+// rawDefinition is the on-the-wire shape of a variable's schema ConfigMap
+// entry. Optional fields use json.RawMessage so they can be either absent or
+// validated with a domain-specific error message after the single decode.
+type rawDefinition struct {
+	Type         string          `json:"type"`
+	DataType     string          `json:"dataType"`
+	StorageType  string          `json:"storageType"`
+	VariableRefs json.RawMessage `json:"variableRefs,omitempty"`
+	Default      json.RawMessage `json:"default,omitempty"`
+}
+
+func parseDefinition(varName, rawSchema string) (Definition, error) {
+	var decoded rawDefinition
+	if err := json.Unmarshal([]byte(rawSchema), &decoded); err != nil {
 		return Definition{}, fmt.Errorf("invalid schema for variable %s: %w", varName, err)
 	}
 
-	schemaType, err := requiredStringField(schema, varName, "type")
-	if err != nil {
-		return Definition{}, err
+	if decoded.Type == "" {
+		return Definition{}, fmt.Errorf("invalid schema for variable %s: missing type", varName)
+	}
+	if decoded.DataType == "" {
+		return Definition{}, fmt.Errorf("invalid schema for variable %s: missing dataType", varName)
+	}
+	if decoded.StorageType == "" {
+		return Definition{}, fmt.Errorf("invalid schema for variable %s: missing storageType", varName)
 	}
 
-	dataType, err := requiredStringField(schema, varName, "dataType")
-	if err != nil {
-		return Definition{}, err
+	var variableRefs []string
+	if decoded.VariableRefs != nil {
+		if err := json.Unmarshal(decoded.VariableRefs, &variableRefs); err != nil {
+			return Definition{}, fmt.Errorf("invalid schema for variable %s: variableRefs must be array of strings", varName)
+		}
 	}
 
-	storageType, err := requiredStringField(schema, varName, "storageType")
-	if err != nil {
-		return Definition{}, err
-	}
-
-	variableRefs, err := optionalStringSliceField(schema, varName, "variableRefs")
-	if err != nil {
-		return Definition{}, err
+	defaultRaw := decoded.Default
+	if decoded.Type != TypeManual {
+		defaultRaw = nil
 	}
 
 	return Definition{
 		Name:         varName,
-		Schema:       schema,
-		Type:         schemaType,
-		DataType:     valkey.VariableType(dataType),
-		StorageType:  storageType,
+		Schema:       json.RawMessage(rawSchema),
+		Type:         decoded.Type,
+		DataType:     datacorevariables.DataType(decoded.DataType),
+		StorageType:  decoded.StorageType,
 		VariableRefs: variableRefs,
+		Default:      defaultRaw,
 	}, nil
-}
-
-func requiredStringField(schema Schema, varName string, fieldName string) (string, error) {
-	value, ok := schema[fieldName]
-	if !ok {
-		return "", fmt.Errorf("invalid schema for variable %s: missing %s", varName, fieldName)
-	}
-
-	stringValue, ok := value.(string)
-	if !ok {
-		return "", fmt.Errorf("invalid schema for variable %s: %s must be string", varName, fieldName)
-	}
-	if stringValue == "" {
-		return "", fmt.Errorf("invalid schema for variable %s: missing %s", varName, fieldName)
-	}
-
-	return stringValue, nil
-}
-
-func optionalStringSliceField(schema Schema, varName string, fieldName string) ([]string, error) {
-	value, ok := schema[fieldName]
-	if !ok {
-		return nil, nil
-	}
-
-	rawValues, ok := value.([]any)
-	if !ok {
-		return nil, fmt.Errorf("invalid schema for variable %s: %s must be array of strings", varName, fieldName)
-	}
-
-	values := make([]string, len(rawValues))
-	for i, rawValue := range rawValues {
-		stringValue, ok := rawValue.(string)
-		if !ok {
-			return nil, fmt.Errorf("invalid schema for variable %s: %s must be array of strings", varName, fieldName)
-		}
-		values[i] = stringValue
-	}
-
-	return values, nil
 }

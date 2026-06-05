@@ -1,9 +1,10 @@
 package variables
 
 import (
+	"encoding/json"
 	"testing"
 
-	"github.com/mydecisive/mdai-gateway/internal/valkey"
+	datacorevariables "github.com/mydecisive/mdai-data-core/variables"
 	"github.com/stretchr/testify/require"
 )
 
@@ -18,19 +19,9 @@ func mustDecodeHub(t *testing.T, rawHubVariables map[string]string) HubVariables
 
 func TestDecodeHub(t *testing.T) {
 	t.Run("successful decode", func(t *testing.T) {
-		schemas := mustDecodeHub(t, map[string]string{
-			"var1": `{"type":"manual","dataType":"string","storageType":"mdai-valkey","serializeAs":[{"name":"VAR1"}]}`,
-		})
-		require.Equal(t, HubVariables{
-			"var1": {
-				"type":        "manual",
-				"dataType":    "string",
-				"storageType": "mdai-valkey",
-				"serializeAs": []any{
-					map[string]any{"name": "VAR1"},
-				},
-			},
-		}, schemas)
+		raw := `{"type":"manual","dataType":"string","storageType":"mdai-valkey","serializeAs":[{"name":"VAR1"}]}`
+		schemas := mustDecodeHub(t, map[string]string{"var1": raw})
+		require.Equal(t, HubVariables{"var1": json.RawMessage(raw)}, schemas)
 	})
 
 	t.Run("invalid json", func(t *testing.T) {
@@ -49,7 +40,7 @@ func TestGetVariable(t *testing.T) {
 		name         string
 		varName      string
 		hubVariables map[string]string
-		wantType     valkey.VariableType
+		wantType     datacorevariables.DataType
 		wantErr      error
 		wantErrText  string
 		wantRefs     []string
@@ -73,7 +64,7 @@ func TestGetVariable(t *testing.T) {
 			hubVariables: map[string]string{
 				"var1": `{"type":"manual","dataType":"boolean","storageType":"mdai-valkey","variableRefs":["foo"]}`,
 			},
-			wantType: valkey.VariableTypeBool,
+			wantType: datacorevariables.DataTypeBoolean,
 			wantRefs: []string{"foo"},
 			isManual: true,
 		},
@@ -83,7 +74,7 @@ func TestGetVariable(t *testing.T) {
 			hubVariables: map[string]string{
 				"var1": `{"type":"computed","dataType":"set","storageType":"mdai-valkey"}`,
 			},
-			wantType: valkey.VariableTypeSet,
+			wantType: datacorevariables.DataTypeSet,
 			isManual: false,
 		},
 		{
@@ -115,4 +106,30 @@ func TestGetVariable(t *testing.T) {
 			require.Equal(t, tt.isManual, definition.IsManual())
 		})
 	}
+}
+
+func TestGetVariable_DefaultExtraction(t *testing.T) {
+	t.Run("manual variable carries declared default", func(t *testing.T) {
+		definition, err := GetVariable("var1", map[string]string{
+			"var1": `{"type":"manual","dataType":"int","storageType":"mdai-valkey","default":100}`,
+		})
+		require.NoError(t, err)
+		require.JSONEq(t, `100`, string(definition.Default))
+	})
+
+	t.Run("manual variable without default has nil Default", func(t *testing.T) {
+		definition, err := GetVariable("var1", map[string]string{
+			"var1": `{"type":"manual","dataType":"int","storageType":"mdai-valkey"}`,
+		})
+		require.NoError(t, err)
+		require.Nil(t, definition.Default)
+	})
+
+	t.Run("computed variable ignores any declared default", func(t *testing.T) {
+		definition, err := GetVariable("var1", map[string]string{
+			"var1": `{"type":"computed","dataType":"set","storageType":"mdai-valkey","default":["x"]}`,
+		})
+		require.NoError(t, err)
+		require.Nil(t, definition.Default)
+	})
 }

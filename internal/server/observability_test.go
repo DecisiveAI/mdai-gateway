@@ -221,7 +221,7 @@ func setupObservedReadOnlyMocks(t *testing.T, clientset kubernetes.Interface) (H
 func updateSchemaConfigMap(
 	t *testing.T,
 	clientset kubernetes.Interface,
-	cmController *datacorekube.ConfigMapController,
+	cmController *datacorekube.HubConfigMapController,
 	mutate func(cm *corev1.ConfigMap),
 ) {
 	t.Helper()
