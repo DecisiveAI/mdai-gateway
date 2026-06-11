@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/mydecisive/mdai-data-core/eventing"
 	"github.com/mydecisive/mdai-data-core/eventing/config"
 	"github.com/prometheus/alertmanager/template"
@@ -38,7 +37,7 @@ func NewPromAlertWrapper(v template.Data, l *zap.Logger, d *Deduper) *PromAlertW
 
 func (w *PromAlertWrapper) ToMdaiEvents() ([]EventPerSubject, int, error) {
 	skipped := 0
-	alerts := w.Alerts // we don't need sorting within the same payload since it's deduplicated by fingerprint
+	alerts := w.Alerts
 
 	// The shared deduper is only peeked here; commit happens after successful publish
 	// (see Deduper.UpdateIfNewer). batchLatest provides the within-payload dedupe.
@@ -130,11 +129,7 @@ func (w *PromAlertWrapper) toMdaiEvent(alert template.Alert, key string, changeT
 		return eventing.MdaiEvent{}, fmt.Errorf("marshal payload: %w", err)
 	}
 
-	correlationIDCore := alert.Fingerprint
-	if correlationIDCore == "" {
-		correlationIDCore = uuid.New().String()
-	}
-	correlationID := fmt.Sprintf("%d-%s", time.Now().UnixMilli(), correlationIDCore)
+	correlationID := fmt.Sprintf("%d-%s", time.Now().UnixMilli(), alert.Fingerprint)
 
 	event := eventing.MdaiEvent{
 		// Deterministic ID becomes the Nats-Msg-Id, so JetStream drops duplicate

@@ -45,7 +45,7 @@ Downstream consumers of alert events are expected to tolerate duplicate triggers
 ## Constraints
 
 - **State is in-memory and per-replica.** Multiple gateway replicas each keep their own dedupe map; running more than one replica multiplies the duplicate window. Durable shared state (e.g. Valkey-backed) is a known option, deliberately not taken to keep a synchronous dependency out of the alert hot path.
-- **The map has no TTL.** Entries accumulate one per unique fingerprint for the lifetime of the pod (`deduper.go` carries a TODO to add a TTL matching Alertmanager's 12h default). Fingerprint cardinality equals distinct alert label sets, so growth is slow in practice but unbounded.
+- **The map has no TTL.** Entries accumulate one per unique key for the lifetime of the pod (`deduper.go` carries a TODO to add a TTL matching Alertmanager's 12h default). Key cardinality equals distinct alert label sets per hub, so growth is slow in practice but unbounded.
 - **Equal timestamps are skipped.** "Strictly newer" means a legitimate re-fire with an identical `StartsAt` (sub-second flap collapsed by Prometheus) is indistinguishable from a repeat and is dropped.
 
 ## Scope
