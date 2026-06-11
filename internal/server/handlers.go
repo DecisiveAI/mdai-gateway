@@ -58,6 +58,10 @@ func handlePromAlertsPost(deps HandlerDeps) http.HandlerFunc {
 			http.Error(w, "request must contain a single JSON object", http.StatusBadRequest)
 			return
 		}
+		if msg.Data == nil {
+			http.Error(w, "invalid Alertmanager payload", http.StatusBadRequest)
+			return
+		}
 
 		deps.Logger.Debug("Received /alerts/alertmanager POST", zap.Any("msg", msg))
 
@@ -76,7 +80,7 @@ func handlePrometheusAlerts(ctx context.Context, logger *zap.Logger, w http.Resp
 	eventPerSubjects, skipped, err := wrappedAlertData.ToMdaiEvents()
 	if err != nil {
 		logger.Error("Failed to adapt Prometheus Alert to MDAI Events", zap.Error(err))
-		http.Error(w, "Failed to adapt Prometheus Alert to MDAI Events", http.StatusInternalServerError)
+		http.Error(w, "Failed to adapt Prometheus Alert to MDAI Events", http.StatusBadRequest)
 		return
 	}
 

@@ -183,7 +183,7 @@ func TestToMdaiEventsDoesNotCommitDedupeState(t *testing.T) {
 	require.Len(t, events, 1)
 	require.Equal(t, 0, skipped)
 
-	_, committed := deduper.PeekLast("abc123")
+	_, committed := deduper.PeekLast(dedupeKey("prod-cluster", "abc123"))
 	require.False(t, committed, "adaptation must not mark the alert as seen before publish")
 
 	// Simulate the retry after a failed publish: the same payload must adapt again.

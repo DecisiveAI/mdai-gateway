@@ -16,13 +16,13 @@ func NewDeduper() *Deduper { return &Deduper{last: make(map[string]time.Time)} }
 // a failed publish leaves the alert eligible for Alertmanager's retry. Concurrent
 // deliveries may both pass the peek and publish twice; duplicates are preferred over
 // dropping an alert.
-func (d *Deduper) UpdateIfNewer(fingerprint string, changeTime time.Time) bool {
+func (d *Deduper) UpdateIfNewer(key string, changeTime time.Time) bool {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if prev, ok := d.last[fingerprint]; ok && !changeTime.After(prev) {
+	if prev, ok := d.last[key]; ok && !changeTime.After(prev) {
 		return false
 	}
-	d.last[fingerprint] = changeTime
+	d.last[key] = changeTime
 	return true
 }
 

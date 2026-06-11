@@ -18,7 +18,7 @@ A delivery is accepted only if its change time is **strictly newer** than the st
 - A `repeat_interval` re-notification of an unchanged firing alert carries the same `StartsAt` and is skipped.
 - A firing → resolved transition carries `EndsAt` (later than `StartsAt`) and passes.
 - A resolved alert that fires again carries a new `StartsAt` and passes.
-- An alert without a fingerprint rejects the whole payload (`ErrMissingFingerprint`); Alertmanager always sets fingerprints in practice.
+- An alert without a fingerprint rejects the whole payload (`ErrMissingFingerprint`) with `400`, as does any other adaptation failure (e.g. a missing `hub_name` annotation): the defect is permanent, so the response must not trigger Alertmanager's 5xx retry. Alertmanager always sets fingerprints in practice.
 
 The skipped count is reported in the webhook response (`"skipped"`), distinct from `"successful"`.
 
