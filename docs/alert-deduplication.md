@@ -34,11 +34,11 @@ Committing during adaptation instead would permanently swallow alerts: a retry o
 
 ## Delivery guarantees
 
-The pipeline is **at-least-once**. Duplicates are possible and accepted; loss is not:
+The pipeline is **at-least-once**. Duplicates are rare but possible; loss is not:
 
-- Two concurrent deliveries of the same alert can both pass the peek before either commits, publishing twice.
-- A pod restart clears the in-memory state, admitting one duplicate per active alert on the next delivery.
-- NATS JetStream does **not** deduplicate these events: the `Nats-Msg-Id` header is set from the event's random UUID, so broker-side dedup never matches. Setting it deterministically (e.g. `fingerprint-changeTime`) would close the concurrent-delivery race, at the cost of changing the event-ID-unique-per-delivery assumption; this is deliberately not done today.
+- Alert event IDs are deterministic — `<fingerprint>-<changeTime unix nanos>` — and the publisher sets the `Nats-Msg-Id` header from the event ID. JetStream drops a re-publish of the same alert state within the stream's duplicate window (2 minutes by default). This covers concurrent deliveries racing past the peek (Alertmanager retries against a slow gateway, HA Alertmanager double sends) and retries after a lost publish acknowledgment.
+- Duplicates separated by more than the duplicate window still pass: a pod restart clears the in-memory state, and the next re-notification of a still-firing alert (typically a `repeat_interval` resend, hours later) carries the same ID but falls outside the window and is re-published.
+- Because the ID is deterministic, a duplicate that escapes the window reaches consumers with the same event ID as the original. The correlation ID remains unique per delivery.
 
 Downstream consumers of alert events are expected to tolerate duplicate triggers.
 
