@@ -80,11 +80,7 @@ func handlePrometheusAlerts(ctx context.Context, logger *zap.Logger, w http.Resp
 		return
 	}
 
-	commitDedupe := func(eps adapter.EventPerSubject) {
-		deduper.UpdateIfNewer(eps.Event.SourceID, eps.Event.Timestamp)
-	}
-
-	successCount, err := nats.PublishEvents(ctx, logger, p, eventPerSubjects, auditAdapter, commitDedupe)
+	successCount, err := nats.PublishEvents(ctx, logger, p, eventPerSubjects, auditAdapter, wrappedAlertData.CommitPublished)
 	switch {
 	case err != nil:
 		logger.Error("Failed to publish some alert events", zap.Error(err),

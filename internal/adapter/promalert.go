@@ -65,7 +65,7 @@ func (w *PromAlertWrapper) ToMdaiEvents() ([]EventPerSubject, int, error) {
 			continue
 		}
 		batchLatest[alert.Fingerprint] = changeTime
-		event, err := w.toMdaiEvent(alert)
+		event, err := w.toMdaiEvent(alert, changeTime)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -92,7 +92,12 @@ func subjectFromAlert(alert template.Alert, hubName string) eventing.MdaiEventSu
 	}
 }
 
-func (w *PromAlertWrapper) toMdaiEvent(alert template.Alert) (eventing.MdaiEvent, error) {
+// CommitPublished marks a published alert as delivered, completing the peek in ToMdaiEvents.
+func (w *PromAlertWrapper) CommitPublished(eps EventPerSubject) {
+	w.deduper.UpdateIfNewer(eps.Event.SourceID, eps.Event.Timestamp)
+}
+
+func (w *PromAlertWrapper) toMdaiEvent(alert template.Alert, changeTime time.Time) (eventing.MdaiEvent, error) {
 	annotations := alert.Annotations
 
 	payload := struct {
@@ -122,7 +127,7 @@ func (w *PromAlertWrapper) toMdaiEvent(alert template.Alert) (eventing.MdaiEvent
 		Name:          alert.Annotations[AlertName] + "." + alert.Status,
 		Source:        eventing.PrometheusAlertsEventSource,
 		SourceID:      alert.Fingerprint,
-		Timestamp:     changeTime(alert),
+		Timestamp:     changeTime,
 		HubName:       annotations[hubName],
 		Payload:       string(payloadJSON),
 		CorrelationID: correlationID,

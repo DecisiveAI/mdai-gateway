@@ -175,8 +175,9 @@ func TestToMdaiEventsDoesNotCommitDedupeState(t *testing.T) {
 	}
 	input := template.Data{Alerts: []template.Alert{alert}}
 	deduper := NewDeduper()
+	wrapper := NewPromAlertWrapper(input, zap.NewNop(), deduper)
 
-	events, skipped, err := NewPromAlertWrapper(input, zap.NewNop(), deduper).ToMdaiEvents()
+	events, skipped, err := wrapper.ToMdaiEvents()
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	require.Equal(t, 0, skipped)
@@ -191,7 +192,7 @@ func TestToMdaiEventsDoesNotCommitDedupeState(t *testing.T) {
 	require.Equal(t, 0, skipped)
 
 	// Once committed (successful publish), the same payload is skipped as stale.
-	deduper.UpdateIfNewer("abc123", changeTime(alert))
+	wrapper.CommitPublished(events[0])
 	events, skipped, err = NewPromAlertWrapper(input, zap.NewNop(), deduper).ToMdaiEvents()
 	require.NoError(t, err)
 	require.Empty(t, events)
