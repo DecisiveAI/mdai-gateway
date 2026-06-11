@@ -1028,6 +1028,52 @@ func TestUpdateEventsHandler(t *testing.T) {
 	assert.JSONEq(t, post4Response, rr.Body.String())
 }
 
+// A failed NATS publish must produce a 5xx (so Alertmanager retries) and must not
+// commit dedupe state (so the retry is published rather than skipped as stale).
+func TestAlerts_PublishFailureReturns5xxAndAllowsRetry(t *testing.T) {
+	alertPostBody := readPayloadFromFile(t, alert1)
+	clientset := newFakeClientset(t)
+	deps := setupMocks(t, clientset)
+
+	pub := &togglePublisher{}
+	pub.fail.Store(true)
+	deps.EventPublisher = pub
+
+	mockClient, ok := deps.ValkeyClient.(*valkeymock.Client)
+	require.True(t, ok)
+	mockClient.EXPECT().Do(gomock.Any(), XaddMatcher{}).Return(valkeymock.Result(valkeymock.ValkeyString(""))).AnyTimes()
+
+	mux := NewRouter(t.Context(), deps)
+
+	// First delivery: NATS down, every publish fails.
+	req := httptest.NewRequest(http.MethodPost, "/alerts/alertmanager", bytes.NewBuffer(alertPostBody))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	assert.GreaterOrEqual(t, rr.Code, http.StatusInternalServerError,
+		"failed publish must return 5xx so Alertmanager retries; got %d", rr.Code)
+
+	// Alertmanager retries the same payload once NATS is back: all alerts must publish.
+	pub.fail.Store(false)
+	req = httptest.NewRequest(http.MethodPost, "/alerts/alertmanager", bytes.NewBuffer(alertPostBody))
+	req.Header.Set("Content-Type", "application/json")
+	rr = httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusCreated, rr.Code)
+	assert.JSONEq(t, `{"message":"Processed Prometheus alerts", "skipped":0, "successful":3, "total":3}`+"\n", rr.Body.String())
+
+	// A second, identical delivery is now deduplicated.
+	req = httptest.NewRequest(http.MethodPost, "/alerts/alertmanager", bytes.NewBuffer(alertPostBody))
+	req.Header.Set("Content-Type", "application/json")
+	rr = httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusCreated, rr.Code)
+	assert.JSONEq(t, `{"message":"Processed Prometheus alerts", "skipped":3, "successful":0, "total":3}`+"\n", rr.Body.String())
+}
+
 func TestAlerts_Failuers(t *testing.T) {
 	clientset := newFakeClientset(t)
 	deps := setupReadOnlyMocks(t, clientset)

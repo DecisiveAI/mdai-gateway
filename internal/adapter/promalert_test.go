@@ -157,6 +157,47 @@ func TestPrometheusAlertWithoutFingerprint(t *testing.T) {
 	require.Equal(t, 0, skipped)
 }
 
+// Adaptation must not commit dedupe state, or a failed publish would swallow
+// Alertmanager's retry (same fingerprint, same change time) as stale.
+func TestToMdaiEventsDoesNotCommitDedupeState(t *testing.T) {
+	now := time.Now()
+
+	alert := template.Alert{
+		Annotations: template.KV{
+			"alert_name":    "DiskUsageHigh",
+			"hub_name":      "prod-cluster",
+			"current_value": "92%",
+		},
+		Labels:      template.KV{"severity": "critical"},
+		Status:      "firing",
+		StartsAt:    now.Add(-1 * time.Minute),
+		Fingerprint: "abc123",
+	}
+	input := template.Data{Alerts: []template.Alert{alert}}
+	deduper := NewDeduper()
+
+	events, skipped, err := NewPromAlertWrapper(input, zap.NewNop(), deduper).ToMdaiEvents()
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	require.Equal(t, 0, skipped)
+
+	_, committed := deduper.PeekLast("abc123")
+	require.False(t, committed, "adaptation must not mark the alert as seen before publish")
+
+	// Simulate the retry after a failed publish: the same payload must adapt again.
+	events, skipped, err = NewPromAlertWrapper(input, zap.NewNop(), deduper).ToMdaiEvents()
+	require.NoError(t, err)
+	require.Len(t, events, 1, "retry of an unpublished alert must not be deduplicated")
+	require.Equal(t, 0, skipped)
+
+	// Once committed (successful publish), the same payload is skipped as stale.
+	deduper.UpdateIfNewer("abc123", changeTime(alert))
+	events, skipped, err = NewPromAlertWrapper(input, zap.NewNop(), deduper).ToMdaiEvents()
+	require.NoError(t, err)
+	require.Empty(t, events)
+	require.Equal(t, 1, skipped)
+}
+
 func TestLatePrometheusAlert(t *testing.T) {
 	now := time.Now()
 

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -39,6 +40,22 @@ func (fakePublisher) Close() error {
 }
 
 var _ publisher.Publisher = fakePublisher{}
+
+// togglePublisher fails every Publish while fail is set, simulating a NATS outage.
+type togglePublisher struct {
+	fail atomic.Bool
+}
+
+func (p *togglePublisher) Publish(context.Context, eventing.MdaiEvent, eventing.MdaiEventSubject) error {
+	if p.fail.Load() {
+		return errors.New("nats unavailable")
+	}
+	return nil
+}
+
+func (*togglePublisher) Close() error { return nil }
+
+var _ publisher.Publisher = (*togglePublisher)(nil)
 
 const testSlowValueReadThreshold = 250 * time.Millisecond
 

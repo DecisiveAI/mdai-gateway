@@ -224,7 +224,7 @@ func handleSetDeleteVariables(ctx context.Context, deps HandlerDeps) http.Handle
 			zap.String("subject", subject.String()),
 		)
 
-		if _, err := nats.PublishEvents(ctx, deps.Logger, deps.EventPublisher, []adapter.EventPerSubject{{Event: *event, Subject: subject}}, deps.AuditAdapter); err != nil {
+		if _, err := nats.PublishEvents(ctx, deps.Logger, deps.EventPublisher, []adapter.EventPerSubject{{Event: *event, Subject: subject}}, deps.AuditAdapter, nil); err != nil {
 			deps.Logger.Error("Failed to publish MdaiEvent", zap.Error(err))
 			http.Error(w, "Failed to publish event", http.StatusInternalServerError)
 			return

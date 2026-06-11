@@ -39,6 +39,10 @@ func (w *PromAlertWrapper) ToMdaiEvents() ([]EventPerSubject, int, error) {
 	skipped := 0
 	alerts := w.Alerts // we don't need sorting within the same payload since it's deduplicated by fingerprint
 
+	// The shared deduper is only peeked here; commit happens after successful publish
+	// (see Deduper.UpdateIfNewer). batchLatest provides the within-payload dedupe.
+	batchLatest := make(map[string]time.Time)
+
 	eventsPerSubject := make([]EventPerSubject, 0, len(alerts))
 	for _, alert := range alerts {
 		if alert.Fingerprint == "" {
@@ -46,7 +50,11 @@ func (w *PromAlertWrapper) ToMdaiEvents() ([]EventPerSubject, int, error) {
 				alert.Annotations[AlertName], alert.Status)
 		}
 		changeTime := changeTime(alert)
-		if isNewer, lastTime := w.deduper.UpdateIfNewer(alert.Fingerprint, changeTime); !isNewer {
+		lastTime, seen := w.deduper.PeekLast(alert.Fingerprint)
+		if batchTime, ok := batchLatest[alert.Fingerprint]; ok && (!seen || batchTime.After(lastTime)) {
+			lastTime, seen = batchTime, true
+		}
+		if seen && !changeTime.After(lastTime) {
 			skipped++
 			w.Logger.Info(
 				"Skipping stale alert",
@@ -56,6 +64,7 @@ func (w *PromAlertWrapper) ToMdaiEvents() ([]EventPerSubject, int, error) {
 			)
 			continue
 		}
+		batchLatest[alert.Fingerprint] = changeTime
 		event, err := w.toMdaiEvent(alert)
 		if err != nil {
 			return nil, 0, err

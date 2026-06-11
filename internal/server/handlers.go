@@ -80,11 +80,16 @@ func handlePrometheusAlerts(ctx context.Context, logger *zap.Logger, w http.Resp
 		return
 	}
 
-	successCount, err := nats.PublishEvents(ctx, logger, p, eventPerSubjects, auditAdapter)
+	commitDedupe := func(eps adapter.EventPerSubject) {
+		deduper.UpdateIfNewer(eps.Event.SourceID, eps.Event.Timestamp)
+	}
+
+	successCount, err := nats.PublishEvents(ctx, logger, p, eventPerSubjects, auditAdapter, commitDedupe)
 	switch {
 	case err != nil:
-		w.WriteHeader(http.StatusAccepted)
-		_, _ = fmt.Fprintf(w, "Published %d/%d eventPerSubjects; some failed", successCount, len(eventPerSubjects))
+		logger.Error("Failed to publish some alert events", zap.Error(err),
+			zap.Int("successful", successCount), zap.Int("total", len(eventPerSubjects)))
+		http.Error(w, fmt.Sprintf("published %d/%d events; delivery failed, expecting retry", successCount, len(eventPerSubjects)), http.StatusInternalServerError)
 		return
 	default:
 		response := httputil.PrometheusAlertResponse{

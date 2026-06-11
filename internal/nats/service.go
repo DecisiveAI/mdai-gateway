@@ -12,7 +12,9 @@ import (
 	"go.uber.org/zap"
 )
 
-func PublishEvents(ctx context.Context, logger *zap.Logger, p publisher.Publisher, eventsPerSubjects []adapter.EventPerSubject, auditAdapter *audit.AuditAdapter) (int, error) {
+// PublishEvents publishes each event and returns how many succeeded. onPublished,
+// when non-nil, fires per successfully published event, never for failed ones.
+func PublishEvents(ctx context.Context, logger *zap.Logger, p publisher.Publisher, eventsPerSubjects []adapter.EventPerSubject, auditAdapter *audit.AuditAdapter, onPublished func(adapter.EventPerSubject)) (int, error) {
 	var (
 		successCount int
 		errs         []error
@@ -34,6 +36,9 @@ func PublishEvents(ctx context.Context, logger *zap.Logger, p publisher.Publishe
 
 		if err == nil {
 			successCount++
+			if onPublished != nil {
+				onPublished(eventPerSubject)
+			}
 			continue
 		}
 

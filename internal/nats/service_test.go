@@ -118,9 +118,14 @@ func TestPublishEvents(t *testing.T) {
 		mockPub := &mocks.MockPublisher{}
 		mockPub.On("Publish", mock.Anything, event, subject).Return(nil).Once()
 
-		success, err := PublishEvents(ctx, logger, mockPub, []adapter.EventPerSubject{{Event: event, Subject: subject}}, auditAdapter)
+		var published []adapter.EventPerSubject
+		onPublished := func(eps adapter.EventPerSubject) { published = append(published, eps) }
+
+		success, err := PublishEvents(ctx, logger, mockPub, []adapter.EventPerSubject{{Event: event, Subject: subject}}, auditAdapter, onPublished)
 		require.NoError(t, err)
 		assert.Equal(t, 1, success)
+		require.Len(t, published, 1, "onPublished must fire for each successful publish")
+		assert.Equal(t, event, published[0].Event)
 
 		mockPub.AssertExpectations(t)
 	})
@@ -129,10 +134,14 @@ func TestPublishEvents(t *testing.T) {
 		mockPub := &mocks.MockPublisher{}
 		mockPub.On("Publish", mock.Anything, event, subject).Return(errors.New("fail")).Once()
 
-		success, err := PublishEvents(ctx, logger, mockPub, []adapter.EventPerSubject{{Event: event, Subject: subject}}, auditAdapter)
+		var published []adapter.EventPerSubject
+		onPublished := func(eps adapter.EventPerSubject) { published = append(published, eps) }
+
+		success, err := PublishEvents(ctx, logger, mockPub, []adapter.EventPerSubject{{Event: event, Subject: subject}}, auditAdapter, onPublished)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "fail")
 		assert.Equal(t, 0, success)
+		assert.Empty(t, published, "onPublished must not fire for failed publishes")
 
 		mockPub.AssertExpectations(t)
 	})
@@ -144,7 +153,7 @@ func TestPublishEvents(t *testing.T) {
 
 		mockPub.On("Publish", ctx, event, subject).Return(ctx.Err()).Once()
 
-		success, err := PublishEvents(ctx, logger, mockPub, []adapter.EventPerSubject{{Event: event, Subject: subject}}, auditAdapter)
+		success, err := PublishEvents(ctx, logger, mockPub, []adapter.EventPerSubject{{Event: event, Subject: subject}}, auditAdapter, nil)
 		require.ErrorIs(t, err, context.Canceled)
 		assert.Equal(t, 0, success)
 

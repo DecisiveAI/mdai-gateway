@@ -11,8 +11,7 @@ import (
 )
 
 func isNewer(d *Deduper, fingerprint string, changeTime time.Time) bool {
-	updated, _ := d.UpdateIfNewer(fingerprint, changeTime)
-	return updated
+	return d.UpdateIfNewer(fingerprint, changeTime)
 }
 
 func TestDeduper_IsNewer_Basic(t *testing.T) {
@@ -107,7 +106,7 @@ func TestDeduper_Concurrent(t *testing.T) {
 		ts := timestamps[index]
 		go func(ts time.Time) {
 			defer waitGroup.Done()
-			_, _ = deduper.UpdateIfNewer(key, ts)
+			_ = deduper.UpdateIfNewer(key, ts)
 		}(ts)
 	}
 	waitGroup.Wait()
@@ -135,7 +134,7 @@ func TestDeduper_Concurrent_MultipleKeys(t *testing.T) {
 			ts := base.Add(time.Duration(idx) * time.Nanosecond)
 			go func(key string, ts time.Time) {
 				defer wg.Done()
-				_, _ = deduper.UpdateIfNewer(key, ts)
+				_ = deduper.UpdateIfNewer(key, ts)
 			}(k, ts)
 		}
 	}

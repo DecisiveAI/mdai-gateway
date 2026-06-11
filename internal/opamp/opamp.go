@@ -202,6 +202,6 @@ func (ctrl *OpAMPControlServer) publishCompletionEvent(ctx context.Context, agen
 			Subject: subject,
 		},
 	}
-	_, publishErr := nats.PublishEvents(ctx, ctrl.logger, ctrl.eventPublisher, eventsPerSubject, ctrl.auditAdapter)
+	_, publishErr := nats.PublishEvents(ctx, ctrl.logger, ctrl.eventPublisher, eventsPerSubject, ctrl.auditAdapter, nil)
 	return publishErr
 }
