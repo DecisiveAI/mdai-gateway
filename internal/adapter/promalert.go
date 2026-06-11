@@ -51,8 +51,9 @@ func (w *PromAlertWrapper) ToMdaiEvents() ([]EventPerSubject, int, error) {
 				alert.Annotations[AlertName], alert.Status)
 		}
 		changeTime := changeTime(alert)
-		lastTime, seen := w.deduper.PeekLast(alert.Fingerprint)
-		if batchTime, ok := batchLatest[alert.Fingerprint]; ok && (!seen || batchTime.After(lastTime)) {
+		key := dedupeKey(alert.Annotations[hubName], alert.Fingerprint)
+		lastTime, seen := w.deduper.PeekLast(key)
+		if batchTime, ok := batchLatest[key]; ok && (!seen || batchTime.After(lastTime)) {
 			lastTime, seen = batchTime, true
 		}
 		if seen && !changeTime.After(lastTime) {
@@ -65,7 +66,7 @@ func (w *PromAlertWrapper) ToMdaiEvents() ([]EventPerSubject, int, error) {
 			)
 			continue
 		}
-		batchLatest[alert.Fingerprint] = changeTime
+		batchLatest[key] = changeTime
 		event, err := w.toMdaiEvent(alert, changeTime)
 		if err != nil {
 			return nil, 0, err
@@ -95,8 +96,13 @@ func subjectFromAlert(alert template.Alert, hubName string) eventing.MdaiEventSu
 
 // CommitPublished marks a published alert as delivered, completing the peek in ToMdaiEvents.
 func (w *PromAlertWrapper) CommitPublished(eps EventPerSubject) {
-	w.deduper.UpdateIfNewer(eps.Event.SourceID, eps.Event.Timestamp)
+	w.deduper.UpdateIfNewer(dedupeKey(eps.Event.HubName, eps.Event.SourceID), eps.Event.Timestamp)
 }
+
+// dedupeKey qualifies the fingerprint with the hub: fingerprints hash only the
+// label set, and hub_name is an annotation, so hubs can share a fingerprint.
+// "/" cannot appear in a hub name, keeping distinct pairs distinct.
+func dedupeKey(hub, fingerprint string) string { return hub + "/" + fingerprint }
 
 func (w *PromAlertWrapper) toMdaiEvent(alert template.Alert, changeTime time.Time) (eventing.MdaiEvent, error) {
 	annotations := alert.Annotations
@@ -127,7 +133,7 @@ func (w *PromAlertWrapper) toMdaiEvent(alert template.Alert, changeTime time.Tim
 	event := eventing.MdaiEvent{
 		// Deterministic ID becomes the Nats-Msg-Id, so JetStream drops duplicate
 		// deliveries of the same alert state within the stream's duplicate window.
-		ID:            alert.Fingerprint + "-" + strconv.FormatInt(changeTime.UnixNano(), 10),
+		ID:            dedupeKey(annotations[hubName], alert.Fingerprint) + "-" + strconv.FormatInt(changeTime.UnixNano(), 10),
 		Name:          alert.Annotations[AlertName] + "." + alert.Status,
 		Source:        eventing.PrometheusAlertsEventSource,
 		SourceID:      alert.Fingerprint,

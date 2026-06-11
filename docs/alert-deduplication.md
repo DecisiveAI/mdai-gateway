@@ -8,7 +8,7 @@ Alertmanager re-sends notifications for the same alert state: on its `repeat_int
 
 ## Dedupe key and comparison
 
-Each alert is keyed by its **fingerprint** — Alertmanager's hash of the alert's label set — mapped to the latest seen **change time**:
+Each alert is keyed by `<hub>/<fingerprint>` — the hub name qualifying Alertmanager's hash of the alert's label set — mapped to the latest seen **change time**. The hub qualifier is required because `hub_name` is an annotation, not a fingerprinted label: alerts from different hubs can share a fingerprint and are distinct alerts. The change time is:
 
 - firing alerts use `StartsAt`
 - resolved alerts use `EndsAt`
@@ -36,7 +36,7 @@ Committing during adaptation instead would permanently swallow alerts: a retry o
 
 The pipeline is **at-least-once**. Duplicates are rare but possible; loss is not:
 
-- Alert event IDs are deterministic — `<fingerprint>-<changeTime unix nanos>` — and the publisher sets the `Nats-Msg-Id` header from the event ID. JetStream drops a re-publish of the same alert state within the stream's duplicate window (2 minutes by default). This covers concurrent deliveries racing past the peek (Alertmanager retries against a slow gateway, HA Alertmanager double sends) and retries after a lost publish acknowledgment.
+- Alert event IDs are deterministic — `<hub>/<fingerprint>-<changeTime unix nanos>` — and the publisher sets the `Nats-Msg-Id` header from the event ID. JetStream drops a re-publish of the same alert state within the stream's duplicate window (2 minutes by default). This covers concurrent deliveries racing past the peek (Alertmanager retries against a slow gateway, HA Alertmanager double sends) and retries after a lost publish acknowledgment.
 - Duplicates separated by more than the duplicate window still pass: a pod restart clears the in-memory state, and the next re-notification of a still-firing alert (typically a `repeat_interval` resend, hours later) carries the same ID but falls outside the window and is re-published.
 - Because the ID is deterministic, a duplicate that escapes the window reaches consumers with the same event ID as the original. The correlation ID remains unique per delivery.
 

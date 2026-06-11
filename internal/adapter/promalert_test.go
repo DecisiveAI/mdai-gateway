@@ -200,6 +200,49 @@ func TestToMdaiEventsDoesNotCommitDedupeState(t *testing.T) {
 	require.Equal(t, 1, skipped)
 }
 
+// Fingerprints hash only the label set, and hub_name is an annotation — two hubs
+// can produce the same fingerprint. Dedup identity must include the hub.
+func TestToMdaiEventsDeduplicatesPerHub(t *testing.T) {
+	now := time.Now()
+	hubAlert := func(hub string) template.Alert {
+		return template.Alert{
+			Annotations: template.KV{
+				"alert_name":    "DiskUsageHigh",
+				"hub_name":      hub,
+				"current_value": "92%",
+			},
+			Labels:      template.KV{"severity": "critical"},
+			Status:      "firing",
+			StartsAt:    now.Add(-1 * time.Minute),
+			Fingerprint: "abc123",
+		}
+	}
+	payload := func(hub string) template.Data {
+		return template.Data{Alerts: []template.Alert{hubAlert(hub)}}
+	}
+	deduper := NewDeduper()
+
+	// Hub A's alert publishes and commits.
+	wrapperA := NewPromAlertWrapper(payload("hub-a"), zap.NewNop(), deduper)
+	eventsA, _, err := wrapperA.ToMdaiEvents()
+	require.NoError(t, err)
+	require.Len(t, eventsA, 1)
+	wrapperA.CommitPublished(eventsA[0])
+
+	// Hub B shares fingerprint and change time but is a different alert.
+	eventsB, skipped, err := NewPromAlertWrapper(payload("hub-b"), zap.NewNop(), deduper).ToMdaiEvents()
+	require.NoError(t, err)
+	require.Len(t, eventsB, 1, "an alert from another hub must not be deduplicated")
+	require.Equal(t, 0, skipped)
+	require.NotEqual(t, eventsA[0].Event.ID, eventsB[0].Event.ID,
+		"event IDs must differ across hubs or JetStream drops one as a broker-side duplicate")
+
+	// Hub A's re-delivery is still recognized as stale.
+	_, skipped, err = NewPromAlertWrapper(payload("hub-a"), zap.NewNop(), deduper).ToMdaiEvents()
+	require.NoError(t, err)
+	require.Equal(t, 1, skipped)
+}
+
 // The event ID doubles as the Nats-Msg-Id, so identical deliveries of the same
 // alert state must produce identical IDs for JetStream's duplicate window to match.
 func TestToMdaiEventsDeterministicEventID(t *testing.T) {
@@ -224,7 +267,7 @@ func TestToMdaiEventsDeterministicEventID(t *testing.T) {
 	second, _, err := NewPromAlertWrapper(input, zap.NewNop(), NewDeduper()).ToMdaiEvents()
 	require.NoError(t, err)
 
-	wantID := "abc123-" + strconv.FormatInt(alert.StartsAt.UnixNano(), 10)
+	wantID := "prod-cluster/abc123-" + strconv.FormatInt(alert.StartsAt.UnixNano(), 10)
 	require.Equal(t, wantID, first[0].Event.ID)
 	require.Equal(t, wantID, second[0].Event.ID, "re-delivery of the same alert state must reuse the ID")
 
@@ -233,7 +276,7 @@ func TestToMdaiEventsDeterministicEventID(t *testing.T) {
 	resolved.Status = "resolved"
 	resolvedEvents, _, err := NewPromAlertWrapper(template.Data{Alerts: []template.Alert{resolved}}, zap.NewNop(), NewDeduper()).ToMdaiEvents()
 	require.NoError(t, err)
-	require.Equal(t, "abc123-"+strconv.FormatInt(alert.EndsAt.UnixNano(), 10), resolvedEvents[0].Event.ID)
+	require.Equal(t, "prod-cluster/abc123-"+strconv.FormatInt(alert.EndsAt.UnixNano(), 10), resolvedEvents[0].Event.ID)
 	require.NotEqual(t, first[0].Event.ID, resolvedEvents[0].Event.ID)
 }
 
