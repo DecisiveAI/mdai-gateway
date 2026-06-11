@@ -56,7 +56,7 @@ func (w *PromAlertWrapper) ToMdaiEvents() ([]EventPerSubject, int, error) {
 		if batchTime, ok := batchLatest[key]; ok && (!seen || batchTime.After(lastTime)) {
 			lastTime, seen = batchTime, true
 		}
-		if seen && !changeTime.After(lastTime) {
+		if seen && isStale(changeTime, lastTime) {
 			skipped++
 			w.Logger.Info(
 				"Skipping stale alert",
@@ -67,7 +67,7 @@ func (w *PromAlertWrapper) ToMdaiEvents() ([]EventPerSubject, int, error) {
 			continue
 		}
 		batchLatest[key] = changeTime
-		event, err := w.toMdaiEvent(alert, changeTime)
+		event, err := w.toMdaiEvent(alert, key, changeTime)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -76,8 +76,10 @@ func (w *PromAlertWrapper) ToMdaiEvents() ([]EventPerSubject, int, error) {
 		w.Logger.Debug("subject for alert", zap.String("alert_name", alert.Annotations[AlertName]), zap.String("subject", subj.String()))
 
 		eventPerSubject := EventPerSubject{
-			Event:   event,
-			Subject: subj,
+			Event:      event,
+			Subject:    subj,
+			DedupeKey:  key,
+			ChangeTime: changeTime,
 		}
 
 		eventsPerSubject = append(eventsPerSubject, eventPerSubject)
@@ -96,7 +98,7 @@ func subjectFromAlert(alert template.Alert, hubName string) eventing.MdaiEventSu
 
 // CommitPublished marks a published alert as delivered, completing the peek in ToMdaiEvents.
 func (w *PromAlertWrapper) CommitPublished(eps EventPerSubject) {
-	w.deduper.UpdateIfNewer(dedupeKey(eps.Event.HubName, eps.Event.SourceID), eps.Event.Timestamp)
+	w.deduper.UpdateIfNewer(eps.DedupeKey, eps.ChangeTime)
 }
 
 // dedupeKey qualifies the fingerprint with the hub: fingerprints hash only the
@@ -104,7 +106,11 @@ func (w *PromAlertWrapper) CommitPublished(eps EventPerSubject) {
 // "/" cannot appear in a hub name, keeping distinct pairs distinct.
 func dedupeKey(hub, fingerprint string) string { return hub + "/" + fingerprint }
 
-func (w *PromAlertWrapper) toMdaiEvent(alert template.Alert, changeTime time.Time) (eventing.MdaiEvent, error) {
+func alertEventID(key string, changeTime time.Time) string {
+	return key + "-" + strconv.FormatInt(changeTime.UnixNano(), 10)
+}
+
+func (w *PromAlertWrapper) toMdaiEvent(alert template.Alert, key string, changeTime time.Time) (eventing.MdaiEvent, error) {
 	annotations := alert.Annotations
 
 	payload := struct {
@@ -133,7 +139,7 @@ func (w *PromAlertWrapper) toMdaiEvent(alert template.Alert, changeTime time.Tim
 	event := eventing.MdaiEvent{
 		// Deterministic ID becomes the Nats-Msg-Id, so JetStream drops duplicate
 		// deliveries of the same alert state within the stream's duplicate window.
-		ID:            dedupeKey(annotations[hubName], alert.Fingerprint) + "-" + strconv.FormatInt(changeTime.UnixNano(), 10),
+		ID:            alertEventID(key, changeTime),
 		Name:          alert.Annotations[AlertName] + "." + alert.Status,
 		Source:        eventing.PrometheusAlertsEventSource,
 		SourceID:      alert.Fingerprint,

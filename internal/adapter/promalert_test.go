@@ -200,6 +200,37 @@ func TestToMdaiEventsDoesNotCommitDedupeState(t *testing.T) {
 	require.Equal(t, 1, skipped)
 }
 
+func TestCommitPublishedUsesPeekedChangeTime(t *testing.T) {
+	alert := template.Alert{
+		Annotations: template.KV{
+			"alert_name": "DiskUsageHigh",
+			"hub_name":   "prod-cluster",
+		},
+		Labels:      template.KV{"severity": "critical"},
+		Status:      "firing",
+		Fingerprint: "abc123",
+		// StartsAt deliberately zero: changeTime peeks as the zero time.
+	}
+	deduper := NewDeduper()
+	wrapper := NewPromAlertWrapper(template.Data{Alerts: []template.Alert{alert}}, zap.NewNop(), deduper)
+
+	events, _, err := wrapper.ToMdaiEvents()
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	wrapper.CommitPublished(events[0])
+
+	committed, seen := deduper.PeekLast(dedupeKey("prod-cluster", "abc123"))
+	require.True(t, seen)
+	require.True(t, committed.IsZero(), "commit must store the peeked change time, got %v", committed)
+
+	// A real delivery whose StartsAt predates the commit instant must still pass.
+	alert.StartsAt = time.Now().Add(-1 * time.Minute)
+	events, skipped, err := NewPromAlertWrapper(template.Data{Alerts: []template.Alert{alert}}, zap.NewNop(), deduper).ToMdaiEvents()
+	require.NoError(t, err)
+	require.Len(t, events, 1, "a legitimate later delivery must not be skipped as stale")
+	require.Equal(t, 0, skipped)
+}
+
 // Fingerprints hash only the label set, and hub_name is an annotation — two hubs
 // can produce the same fingerprint. Dedup identity must include the hub.
 func TestToMdaiEventsDeduplicatesPerHub(t *testing.T) {

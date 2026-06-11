@@ -19,12 +19,14 @@ func NewDeduper() *Deduper { return &Deduper{last: make(map[string]time.Time)} }
 func (d *Deduper) UpdateIfNewer(key string, changeTime time.Time) bool {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if prev, ok := d.last[key]; ok && !changeTime.After(prev) {
+	if prev, ok := d.last[key]; ok && isStale(changeTime, prev) {
 		return false
 	}
 	d.last[key] = changeTime
 	return true
 }
+
+func isStale(changeTime, last time.Time) bool { return !changeTime.After(last) }
 
 func (d *Deduper) PeekLast(key string) (time.Time, bool) {
 	d.mu.Lock()

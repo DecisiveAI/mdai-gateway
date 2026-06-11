@@ -27,7 +27,7 @@ The skipped count is reported in the webhook response (`"skipped"`), distinct fr
 Dedupe state is read and written at different points in the request, and the separation is load-bearing:
 
 1. **Peek (adaptation).** `ToMdaiEvents` checks each alert against the shared `Deduper` via `PeekLast` without modifying it. Within-payload duplicates are handled by a local per-batch map, since the shared state cannot see them yet.
-2. **Commit (publish success).** `nats.PublishEvents` invokes an `onPublished` callback for each event that NATS accepted. The callback is the adapter's `CommitPublished`, which records the fingerprint and change time (`UpdateIfNewer`) — both halves of the dedupe key contract live in the adapter. Failed publishes commit nothing.
+2. **Commit (publish success).** `nats.PublishEvents` invokes an `onPublished` callback for each event that NATS accepted. The callback is the adapter's `CommitPublished`, which records the dedupe key and change time captured on the event at adaptation (`EventPerSubject.DedupeKey`/`ChangeTime`) — commit stores exactly the values the peek compared. Failed publishes commit nothing.
 3. **Failure (response).** If any publish fails, the handler returns `500`. Alertmanager retries the whole notification; alerts that published successfully are now committed and skip as stale, so the retry re-publishes exactly the failed ones.
 
 Committing during adaptation instead would permanently swallow alerts: a retry of a failed publish carries the same fingerprint and change time and would be skipped as stale, while the 5xx is required because Alertmanager treats any 2xx as delivered and never retries.
