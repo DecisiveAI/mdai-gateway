@@ -2,6 +2,7 @@ package adapter
 
 import (
 	"encoding/json"
+	"strconv"
 	"testing"
 	"time"
 
@@ -197,6 +198,43 @@ func TestToMdaiEventsDoesNotCommitDedupeState(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, events)
 	require.Equal(t, 1, skipped)
+}
+
+// The event ID doubles as the Nats-Msg-Id, so identical deliveries of the same
+// alert state must produce identical IDs for JetStream's duplicate window to match.
+func TestToMdaiEventsDeterministicEventID(t *testing.T) {
+	now := time.Now()
+
+	alert := template.Alert{
+		Annotations: template.KV{
+			"alert_name":    "DiskUsageHigh",
+			"hub_name":      "prod-cluster",
+			"current_value": "92%",
+		},
+		Labels:      template.KV{"severity": "critical"},
+		Status:      "firing",
+		StartsAt:    now.Add(-1 * time.Minute),
+		EndsAt:      now,
+		Fingerprint: "abc123",
+	}
+	input := template.Data{Alerts: []template.Alert{alert}}
+
+	first, _, err := NewPromAlertWrapper(input, zap.NewNop(), NewDeduper()).ToMdaiEvents()
+	require.NoError(t, err)
+	second, _, err := NewPromAlertWrapper(input, zap.NewNop(), NewDeduper()).ToMdaiEvents()
+	require.NoError(t, err)
+
+	wantID := "abc123-" + strconv.FormatInt(alert.StartsAt.UnixNano(), 10)
+	require.Equal(t, wantID, first[0].Event.ID)
+	require.Equal(t, wantID, second[0].Event.ID, "re-delivery of the same alert state must reuse the ID")
+
+	// A resolved delivery is a new state (EndsAt) and must not collide.
+	resolved := alert
+	resolved.Status = "resolved"
+	resolvedEvents, _, err := NewPromAlertWrapper(template.Data{Alerts: []template.Alert{resolved}}, zap.NewNop(), NewDeduper()).ToMdaiEvents()
+	require.NoError(t, err)
+	require.Equal(t, "abc123-"+strconv.FormatInt(alert.EndsAt.UnixNano(), 10), resolvedEvents[0].Event.ID)
+	require.NotEqual(t, first[0].Event.ID, resolvedEvents[0].Event.ID)
 }
 
 func TestLatePrometheusAlert(t *testing.T) {

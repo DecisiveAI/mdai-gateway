@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -124,6 +125,9 @@ func (w *PromAlertWrapper) toMdaiEvent(alert template.Alert, changeTime time.Tim
 	correlationID := fmt.Sprintf("%d-%s", time.Now().UnixMilli(), correlationIDCore)
 
 	event := eventing.MdaiEvent{
+		// Deterministic ID becomes the Nats-Msg-Id, so JetStream drops duplicate
+		// deliveries of the same alert state within the stream's duplicate window.
+		ID:            alert.Fingerprint + "-" + strconv.FormatInt(changeTime.UnixNano(), 10),
 		Name:          alert.Annotations[AlertName] + "." + alert.Status,
 		Source:        eventing.PrometheusAlertsEventSource,
 		SourceID:      alert.Fingerprint,
