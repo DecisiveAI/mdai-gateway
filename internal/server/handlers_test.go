@@ -1144,6 +1144,44 @@ func TestAlerts_NilDataReturns400(t *testing.T) {
 	}
 }
 
+// Unknown fields in the Alertmanager payload (e.g. added by a newer Alertmanager
+// than the pinned client) are ignored rather than rejected, so a single new field
+// at the envelope or alert level does not drop the whole batch.
+func TestAlerts_UnknownFieldsIgnored(t *testing.T) {
+	const alertBody = `{
+		"receiver": "webhook",
+		"status": "firing",
+		"futureEnvelopeField": "ignored",
+		"alerts": [
+			{
+				"status": "firing",
+				"labels": {"alertname": "logBytesOutTooHighBySvc"},
+				"annotations": {"alert_name": "logBytesOutTooHighBySvc", "hub_name": "mdaihub-sample"},
+				"startsAt": "2025-08-03T10:02:26.739266876+02:00",
+				"endsAt": "0001-01-01T00:00:00Z",
+				"fingerprint": "fp-service-a-1",
+				"futureAlertField": "ignored"
+			}
+		]
+	}`
+
+	clientset := newFakeClientset(t)
+	deps := setupMocks(t, clientset)
+	mux := NewRouter(t.Context(), deps)
+
+	mockClient, ok := deps.ValkeyClient.(*valkeymock.Client)
+	require.True(t, ok)
+	mockClient.EXPECT().Do(gomock.Any(), XaddMatcher{}).Return(valkeymock.Result(valkeymock.ValkeyString(""))).AnyTimes()
+
+	req := httptest.NewRequest(http.MethodPost, "/alerts/alertmanager", bytes.NewBufferString(alertBody))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusCreated, rr.Code)
+	assert.JSONEq(t, `{"message":"Processed Prometheus alerts", "skipped":0, "successful":1, "total":1}`+"\n", rr.Body.String())
+}
+
 func TestAlerts_Failuers(t *testing.T) {
 	clientset := newFakeClientset(t)
 	deps := setupReadOnlyMocks(t, clientset)

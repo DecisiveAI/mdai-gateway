@@ -41,7 +41,8 @@ func handlePromAlertsPost(deps HandlerDeps) http.HandlerFunc {
 
 		var msg webhook.Message
 		dec := json.NewDecoder(r.Body)
-		dec.DisallowUnknownFields()
+		// Unknown fields are ignored: Alertmanager's webhook payload can gain fields
+		// across versions, and rejecting the whole batch over one would drop real alerts.
 
 		if err := dec.Decode(&msg); err != nil {
 			var mbe *http.MaxBytesError
