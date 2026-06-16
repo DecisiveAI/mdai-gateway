@@ -1028,6 +1028,160 @@ func TestUpdateEventsHandler(t *testing.T) {
 	assert.JSONEq(t, post4Response, rr.Body.String())
 }
 
+// A failed NATS publish must produce a 5xx (so Alertmanager retries) and must not
+// commit dedupe state (so the retry is published rather than skipped as stale).
+func TestAlerts_PublishFailureReturns5xxAndAllowsRetry(t *testing.T) {
+	alertPostBody := readPayloadFromFile(t, alert1)
+	clientset := newFakeClientset(t)
+	deps := setupMocks(t, clientset)
+
+	pub := &togglePublisher{}
+	pub.fail.Store(true)
+	deps.EventPublisher = pub
+
+	mockClient, ok := deps.ValkeyClient.(*valkeymock.Client)
+	require.True(t, ok)
+	mockClient.EXPECT().Do(gomock.Any(), XaddMatcher{}).Return(valkeymock.Result(valkeymock.ValkeyString(""))).AnyTimes()
+
+	mux := NewRouter(t.Context(), deps)
+
+	// First delivery: NATS down, every publish fails.
+	req := httptest.NewRequest(http.MethodPost, "/alerts/alertmanager", bytes.NewBuffer(alertPostBody))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	assert.GreaterOrEqual(t, rr.Code, http.StatusInternalServerError,
+		"failed publish must return 5xx so Alertmanager retries; got %d", rr.Code)
+
+	// Alertmanager retries the same payload once NATS is back: all alerts must publish.
+	pub.fail.Store(false)
+	req = httptest.NewRequest(http.MethodPost, "/alerts/alertmanager", bytes.NewBuffer(alertPostBody))
+	req.Header.Set("Content-Type", "application/json")
+	rr = httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusCreated, rr.Code)
+	assert.JSONEq(t, `{"message":"Processed Prometheus alerts", "skipped":0, "successful":3, "total":3}`+"\n", rr.Body.String())
+
+	// A second, identical delivery is now deduplicated.
+	req = httptest.NewRequest(http.MethodPost, "/alerts/alertmanager", bytes.NewBuffer(alertPostBody))
+	req.Header.Set("Content-Type", "application/json")
+	rr = httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusCreated, rr.Code)
+	assert.JSONEq(t, `{"message":"Processed Prometheus alerts", "skipped":3, "successful":0, "total":3}`+"\n", rr.Body.String())
+}
+
+func TestAlerts_AdaptationFailureReturns400(t *testing.T) {
+	const alertBody = `{
+		"receiver": "webhook",
+		"status": "firing",
+		"alerts": [
+			{
+				"status": "firing",
+				"labels": {"alertname": "logBytesOutTooHighBySvc"},
+				"annotations": {%s},
+				"startsAt": "2025-08-03T10:02:26.739266876+02:00",
+				"endsAt": "0001-01-01T00:00:00Z",
+				"fingerprint": %q
+			}
+		]
+	}`
+
+	tests := []struct {
+		name        string
+		annotations string
+		fingerprint string
+	}{
+		{
+			name:        "missing fingerprint",
+			annotations: `"alert_name": "logBytesOutTooHighBySvc", "hub_name": "mdaihub-sample"`,
+			fingerprint: "",
+		},
+		{
+			name:        "missing hub_name annotation",
+			annotations: `"alert_name": "logBytesOutTooHighBySvc"`,
+			fingerprint: "fp-service-a-1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clientset := newFakeClientset(t)
+			deps := setupReadOnlyMocks(t, clientset)
+			mux := NewRouter(t.Context(), deps)
+
+			body := fmt.Sprintf(alertBody, tt.annotations, tt.fingerprint)
+			req := httptest.NewRequest(http.MethodPost, "/alerts/alertmanager", bytes.NewBufferString(body))
+			req.Header.Set("Content-Type", "application/json")
+			rr := httptest.NewRecorder()
+			mux.ServeHTTP(rr, req)
+
+			assert.Equal(t, http.StatusBadRequest, rr.Code,
+				"adaptation failure is permanent, so it must not trigger Alertmanager retries; got %d", rr.Code)
+		})
+	}
+}
+
+// webhook.Message embeds *template.Data, so a JSON body without alert fields
+// decodes successfully with a nil Data; the handler must reject it, not panic.
+func TestAlerts_NilDataReturns400(t *testing.T) {
+	for _, body := range []string{`{}`, `{"version":"4"}`} {
+		t.Run(body, func(t *testing.T) {
+			clientset := newFakeClientset(t)
+			deps := setupReadOnlyMocks(t, clientset)
+			mux := NewRouter(t.Context(), deps)
+
+			req := httptest.NewRequest(http.MethodPost, "/alerts/alertmanager", bytes.NewBufferString(body))
+			req.Header.Set("Content-Type", "application/json")
+			rr := httptest.NewRecorder()
+			mux.ServeHTTP(rr, req)
+
+			assert.Equal(t, http.StatusBadRequest, rr.Code)
+		})
+	}
+}
+
+// Unknown fields in the Alertmanager payload (e.g. added by a newer Alertmanager
+// than the pinned client) are ignored rather than rejected, so a single new field
+// at the envelope or alert level does not drop the whole batch.
+func TestAlerts_UnknownFieldsIgnored(t *testing.T) {
+	const alertBody = `{
+		"receiver": "webhook",
+		"status": "firing",
+		"futureEnvelopeField": "ignored",
+		"alerts": [
+			{
+				"status": "firing",
+				"labels": {"alertname": "logBytesOutTooHighBySvc"},
+				"annotations": {"alert_name": "logBytesOutTooHighBySvc", "hub_name": "mdaihub-sample"},
+				"startsAt": "2025-08-03T10:02:26.739266876+02:00",
+				"endsAt": "0001-01-01T00:00:00Z",
+				"fingerprint": "fp-service-a-1",
+				"futureAlertField": "ignored"
+			}
+		]
+	}`
+
+	clientset := newFakeClientset(t)
+	deps := setupMocks(t, clientset)
+	mux := NewRouter(t.Context(), deps)
+
+	mockClient, ok := deps.ValkeyClient.(*valkeymock.Client)
+	require.True(t, ok)
+	mockClient.EXPECT().Do(gomock.Any(), XaddMatcher{}).Return(valkeymock.Result(valkeymock.ValkeyString(""))).AnyTimes()
+
+	req := httptest.NewRequest(http.MethodPost, "/alerts/alertmanager", bytes.NewBufferString(alertBody))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusCreated, rr.Code)
+	assert.JSONEq(t, `{"message":"Processed Prometheus alerts", "skipped":0, "successful":1, "total":1}`+"\n", rr.Body.String())
+}
+
 func TestAlerts_Failuers(t *testing.T) {
 	clientset := newFakeClientset(t)
 	deps := setupReadOnlyMocks(t, clientset)

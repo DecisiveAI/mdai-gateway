@@ -41,7 +41,8 @@ func handlePromAlertsPost(deps HandlerDeps) http.HandlerFunc {
 
 		var msg webhook.Message
 		dec := json.NewDecoder(r.Body)
-		dec.DisallowUnknownFields()
+		// Unknown fields are ignored: Alertmanager's webhook payload can gain fields
+		// across versions, and rejecting the whole batch over one would drop real alerts.
 
 		if err := dec.Decode(&msg); err != nil {
 			var mbe *http.MaxBytesError
@@ -56,6 +57,10 @@ func handlePromAlertsPost(deps HandlerDeps) http.HandlerFunc {
 		// Ensure single JSON value (no trailing junk)
 		if err := dec.Decode(&struct{}{}); err != io.EOF {
 			http.Error(w, "request must contain a single JSON object", http.StatusBadRequest)
+			return
+		}
+		if msg.Data == nil {
+			http.Error(w, "invalid Alertmanager payload", http.StatusBadRequest)
 			return
 		}
 
@@ -76,15 +81,16 @@ func handlePrometheusAlerts(ctx context.Context, logger *zap.Logger, w http.Resp
 	eventPerSubjects, skipped, err := wrappedAlertData.ToMdaiEvents()
 	if err != nil {
 		logger.Error("Failed to adapt Prometheus Alert to MDAI Events", zap.Error(err))
-		http.Error(w, "Failed to adapt Prometheus Alert to MDAI Events", http.StatusInternalServerError)
+		http.Error(w, "Failed to adapt Prometheus Alert to MDAI Events", http.StatusBadRequest)
 		return
 	}
 
-	successCount, err := nats.PublishEvents(ctx, logger, p, eventPerSubjects, auditAdapter)
+	successCount, err := nats.PublishEvents(ctx, logger, p, eventPerSubjects, auditAdapter, wrappedAlertData.CommitPublished)
 	switch {
 	case err != nil:
-		w.WriteHeader(http.StatusAccepted)
-		_, _ = fmt.Fprintf(w, "Published %d/%d eventPerSubjects; some failed", successCount, len(eventPerSubjects))
+		logger.Error("Failed to publish some alert events", zap.Error(err),
+			zap.Int("successful", successCount), zap.Int("total", len(eventPerSubjects)))
+		http.Error(w, fmt.Sprintf("published %d/%d events; delivery failed, expecting retry", successCount, len(eventPerSubjects)), http.StatusInternalServerError)
 		return
 	default:
 		response := httputil.PrometheusAlertResponse{

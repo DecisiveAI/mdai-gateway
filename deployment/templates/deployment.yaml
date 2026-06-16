@@ -4,6 +4,8 @@ metadata:
   name: {{ .Values.deployment.name }}
   namespace: {{ .Release.Namespace }}
 spec:
+  # Alert dedupe state is in-memory and per-replica (docs/alert-deduplication.md);
+  # more than one replica multiplies duplicate alert deliveries.
   replicas: 1
   selector:
     matchLabels:

@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/mydecisive/mdai-data-core/eventing"
 	"github.com/mydecisive/mdai-data-core/eventing/config"
 	"github.com/prometheus/alertmanager/template"
@@ -37,7 +37,11 @@ func NewPromAlertWrapper(v template.Data, l *zap.Logger, d *Deduper) *PromAlertW
 
 func (w *PromAlertWrapper) ToMdaiEvents() ([]EventPerSubject, int, error) {
 	skipped := 0
-	alerts := w.Alerts // we don't need sorting within the same payload since it's deduplicated by fingerprint
+	alerts := w.Alerts
+
+	// The shared deduper is only peeked here; commit happens after successful publish
+	// (see Deduper.UpdateIfNewer). batchLatest provides the within-payload dedupe.
+	batchLatest := make(map[string]time.Time)
 
 	eventsPerSubject := make([]EventPerSubject, 0, len(alerts))
 	for _, alert := range alerts {
@@ -46,7 +50,12 @@ func (w *PromAlertWrapper) ToMdaiEvents() ([]EventPerSubject, int, error) {
 				alert.Annotations[AlertName], alert.Status)
 		}
 		changeTime := changeTime(alert)
-		if isNewer, lastTime := w.deduper.UpdateIfNewer(alert.Fingerprint, changeTime); !isNewer {
+		key := dedupeKey(alert.Annotations[hubName], alert.Fingerprint)
+		lastTime, seen := w.deduper.PeekLast(key)
+		if batchTime, ok := batchLatest[key]; ok && (!seen || batchTime.After(lastTime)) {
+			lastTime, seen = batchTime, true
+		}
+		if seen && isStale(changeTime, lastTime) {
 			skipped++
 			w.Logger.Info(
 				"Skipping stale alert",
@@ -56,7 +65,8 @@ func (w *PromAlertWrapper) ToMdaiEvents() ([]EventPerSubject, int, error) {
 			)
 			continue
 		}
-		event, err := w.toMdaiEvent(alert)
+		batchLatest[key] = changeTime
+		event, err := w.toMdaiEvent(alert, key, changeTime)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -65,8 +75,10 @@ func (w *PromAlertWrapper) ToMdaiEvents() ([]EventPerSubject, int, error) {
 		w.Logger.Debug("subject for alert", zap.String("alert_name", alert.Annotations[AlertName]), zap.String("subject", subj.String()))
 
 		eventPerSubject := EventPerSubject{
-			Event:   event,
-			Subject: subj,
+			Event:      event,
+			Subject:    subj,
+			DedupeKey:  key,
+			ChangeTime: changeTime,
 		}
 
 		eventsPerSubject = append(eventsPerSubject, eventPerSubject)
@@ -83,7 +95,21 @@ func subjectFromAlert(alert template.Alert, hubName string) eventing.MdaiEventSu
 	}
 }
 
-func (w *PromAlertWrapper) toMdaiEvent(alert template.Alert) (eventing.MdaiEvent, error) {
+// CommitPublished marks a published alert as delivered, completing the peek in ToMdaiEvents.
+func (w *PromAlertWrapper) CommitPublished(eps EventPerSubject) {
+	w.deduper.UpdateIfNewer(eps.DedupeKey, eps.ChangeTime)
+}
+
+// dedupeKey qualifies the fingerprint with the hub: fingerprints hash only the
+// label set, and hub_name is an annotation, so hubs can share a fingerprint.
+// "/" cannot appear in a hub name, keeping distinct pairs distinct.
+func dedupeKey(hub, fingerprint string) string { return hub + "/" + fingerprint }
+
+func alertEventID(key string, changeTime time.Time) string {
+	return key + "-" + strconv.FormatInt(changeTime.UnixNano(), 10)
+}
+
+func (w *PromAlertWrapper) toMdaiEvent(alert template.Alert, key string, changeTime time.Time) (eventing.MdaiEvent, error) {
 	annotations := alert.Annotations
 
 	payload := struct {
@@ -103,17 +129,16 @@ func (w *PromAlertWrapper) toMdaiEvent(alert template.Alert) (eventing.MdaiEvent
 		return eventing.MdaiEvent{}, fmt.Errorf("marshal payload: %w", err)
 	}
 
-	correlationIDCore := alert.Fingerprint
-	if correlationIDCore == "" {
-		correlationIDCore = uuid.New().String()
-	}
-	correlationID := fmt.Sprintf("%d-%s", time.Now().UnixMilli(), correlationIDCore)
+	correlationID := fmt.Sprintf("%d-%s", time.Now().UnixMilli(), alert.Fingerprint)
 
 	event := eventing.MdaiEvent{
+		// Deterministic ID becomes the Nats-Msg-Id, so JetStream drops duplicate
+		// deliveries of the same alert state within the stream's duplicate window.
+		ID:            alertEventID(key, changeTime),
 		Name:          alert.Annotations[AlertName] + "." + alert.Status,
 		Source:        eventing.PrometheusAlertsEventSource,
 		SourceID:      alert.Fingerprint,
-		Timestamp:     changeTime(alert),
+		Timestamp:     changeTime,
 		HubName:       annotations[hubName],
 		Payload:       string(payloadJSON),
 		CorrelationID: correlationID,
