@@ -24,7 +24,7 @@ func TestGetIntegrations(t *testing.T) {
 		integrationMock := integrationmock.NewMockIntegration[integration.DataDogIntegrationData](t)
 		integrationMock.EXPECT().GetIntegrations(mock.Anything, "default").Return(nil, assert.AnError).Times(1)
 
-		req := httptest.NewRequest(http.MethodGet, "/getIntegrations", http.NoBody)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/getIntegrations", http.NoBody)
 		resp := httptest.NewRecorder()
 
 		router := setupDatadogRouter(t, integrationMock)
@@ -50,7 +50,7 @@ func TestGetIntegrations(t *testing.T) {
 		integrationMock := integrationmock.NewMockIntegration[integration.DataDogIntegrationData](t)
 		integrationMock.EXPECT().GetIntegrations(mock.Anything, "default").Return(expectedIntegrations, nil).Times(1)
 
-		req := httptest.NewRequest(http.MethodGet, "/getIntegrations", http.NoBody)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/getIntegrations", http.NoBody)
 		resp := httptest.NewRecorder()
 
 		router := setupDatadogRouter(t, integrationMock)
@@ -76,7 +76,7 @@ func TestPutIntegrationData(t *testing.T) {
 		invalidPayoad, err := json.Marshal("not valid json")
 		require.NoError(t, err)
 
-		req := httptest.NewRequest(http.MethodGet, "/putIntegration/coolIntegration", bytes.NewBuffer(invalidPayoad))
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/putIntegration/coolIntegration", bytes.NewBuffer(invalidPayoad))
 		resp := httptest.NewRecorder()
 
 		router := setupDatadogRouter(t, integrationMock)
@@ -92,7 +92,7 @@ func TestPutIntegrationData(t *testing.T) {
 			APIKey: "abc123",
 			DDUrl:  "http://datadog.example.com",
 		}
-		serializedIntegration, err := json.Marshal(integrationToSave)
+		serializedIntegration, err := json.Marshal(integrationToSave) //nolint:gosec // test fixture only; not a real Datadog credential.
 		require.NoError(t, err)
 
 		integrationMock := integrationmock.NewMockIntegration[integration.DataDogIntegrationData](t)
@@ -104,7 +104,7 @@ func TestPutIntegrationData(t *testing.T) {
 			Return(assert.AnError).
 			Times(1)
 
-		req := httptest.NewRequest(http.MethodPut, "/putIntegration/coolIntegration", bytes.NewBuffer(serializedIntegration))
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPut, "/putIntegration/coolIntegration", bytes.NewBuffer(serializedIntegration))
 		resp := httptest.NewRecorder()
 
 		router := setupDatadogRouter(t, integrationMock)
@@ -120,7 +120,7 @@ func TestPutIntegrationData(t *testing.T) {
 			APIKey: "abc123",
 			DDUrl:  "http://datadog.example.com",
 		}
-		serializedIntegration, err := json.Marshal(integrationToSave)
+		serializedIntegration, err := json.Marshal(integrationToSave) //nolint:gosec // test fixture only; not a real Datadog credential.
 		require.NoError(t, err)
 
 		integrationMock := integrationmock.NewMockIntegration[integration.DataDogIntegrationData](t)
@@ -132,7 +132,7 @@ func TestPutIntegrationData(t *testing.T) {
 			Return(nil).
 			Times(1)
 
-		req := httptest.NewRequest(http.MethodPut, "/putIntegration/coolIntegration", bytes.NewBuffer(serializedIntegration))
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPut, "/putIntegration/coolIntegration", bytes.NewBuffer(serializedIntegration))
 		resp := httptest.NewRecorder()
 
 		router := setupDatadogRouter(t, integrationMock)
@@ -151,7 +151,7 @@ func TestDeleteIntegration(t *testing.T) {
 		integrationMock := integrationmock.NewMockIntegration[integration.DataDogIntegrationData](t)
 		integrationMock.EXPECT().DeleteIntegration(mock.Anything, "default", "coolIntegration").Return(assert.AnError).Times(1)
 
-		req := httptest.NewRequest(http.MethodDelete, "/deleteIntegration/coolIntegration", http.NoBody)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodDelete, "/deleteIntegration/coolIntegration", http.NoBody)
 		resp := httptest.NewRecorder()
 
 		router := setupDatadogRouter(t, integrationMock)
@@ -166,7 +166,7 @@ func TestDeleteIntegration(t *testing.T) {
 		integrationMock := integrationmock.NewMockIntegration[integration.DataDogIntegrationData](t)
 		integrationMock.EXPECT().DeleteIntegration(mock.Anything, "default", "coolIntegration").Return(nil).Times(1)
 
-		req := httptest.NewRequest(http.MethodGet, "/deleteIntegration/coolIntegration", http.NoBody)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/deleteIntegration/coolIntegration", http.NoBody)
 		resp := httptest.NewRecorder()
 
 		router := setupDatadogRouter(t, integrationMock)

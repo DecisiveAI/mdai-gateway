@@ -94,7 +94,7 @@ func TestGetConnectionByName(t *testing.T) {
 	defer ts.Close()
 
 	validConnection := OctantConnectionData{
-		SourceType: "datadog",
+		SourceType: datadogDestinationType,
 		TelemetryTypes: []telemetry.MLT{
 			telemetry.Logs,
 			telemetry.Traces,
@@ -234,9 +234,9 @@ func TestSaveConnection(t *testing.T) {
 	defer ts.Close()
 
 	newConnection := OctantConnectionData{
-		SourceType: "datadog",
+		SourceType: datadogDestinationType,
 		Destinations: []OctantConnectionDestination{
-			{DestinationType: "datadog", IntegrationName: "dd-test"},
+			{DestinationType: datadogDestinationType, IntegrationName: "dd-test"},
 		},
 		TelemetryTypes: []telemetry.MLT{
 			telemetry.Logs,
@@ -345,7 +345,7 @@ func TestSaveConnection_Error_ArgoPushFailed(t *testing.T) {
 
 	connection := OctantConnectionData{
 		Destinations: []OctantConnectionDestination{
-			{DestinationType: "datadog", IntegrationName: "dd-1"},
+			{DestinationType: datadogDestinationType, IntegrationName: "dd-1"},
 		},
 		Deployment: &Deployment{
 			Type: ArgoSideloadDeploymentType,
@@ -375,7 +375,7 @@ func TestDeleteConnection(t *testing.T) {
 	defer ts.Close()
 
 	existingConnection := OctantConnectionData{
-		SourceType: "datadog",
+		SourceType: datadogDestinationType,
 		Deployment: &Deployment{
 			Type:            ArgoSideloadDeploymentType,
 			IntegrationName: "argo-test",
@@ -522,7 +522,7 @@ func TestGetConnectionStatus_Success(t *testing.T) {
 	t.Parallel()
 
 	validConnection := OctantConnectionData{
-		SourceType: "datadog",
+		SourceType: datadogDestinationType,
 		TelemetryTypes: []telemetry.MLT{
 			telemetry.Logs,
 		},

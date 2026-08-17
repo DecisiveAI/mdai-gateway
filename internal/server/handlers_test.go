@@ -100,7 +100,7 @@ func TestHandleListVariables(t *testing.T) {
 
 	for _, tt := range listTests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodGet, tt.target, http.NoBody)
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, tt.target, http.NoBody)
 			rr := httptest.NewRecorder()
 
 			mux.ServeHTTP(rr, req)
@@ -360,7 +360,7 @@ func TestHandleGetVariables(t *testing.T) {
 				defer tt.cmcleanup(t, clientset, deps.ConfigMapController)
 			}
 
-			req := httptest.NewRequest(http.MethodGet, tt.target, http.NoBody)
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, tt.target, http.NoBody)
 			rr := httptest.NewRecorder()
 
 			mux.ServeHTTP(rr, req)
@@ -392,7 +392,7 @@ func TestHandleGetVariables_AppliesDefaultOnNotFound(t *testing.T) {
 								Return(valkeymock.Result(valkeymock.ValkeyNil()))
 
 	mux := NewRouter(t.Context(), deps)
-	req := httptest.NewRequest(http.MethodGet, "/variables/values/hub/mdaihub-sample/var/sampling_rate", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/variables/values/hub/mdaihub-sample/var/sampling_rate", http.NoBody)
 	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
 
@@ -418,7 +418,7 @@ func TestHandleGetVariables_StoredValueWinsOverDefault(t *testing.T) {
 								Return(valkeymock.Result(valkeymock.ValkeyBlobString("50")))
 
 	mux := NewRouter(t.Context(), deps)
-	req := httptest.NewRequest(http.MethodGet, "/variables/values/hub/mdaihub-sample/var/sampling_rate", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/variables/values/hub/mdaihub-sample/var/sampling_rate", http.NoBody)
 	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
 
@@ -506,7 +506,7 @@ func TestHandleGetHubVariableValues(t *testing.T) {
 				tt.valkey(t, deps.ValkeyClient.(*valkeymock.Client)) //nolint:forcetypeassert
 			}
 
-			req := httptest.NewRequest(http.MethodGet, tt.target, http.NoBody)
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, tt.target, http.NoBody)
 			rr := httptest.NewRecorder()
 
 			mux.ServeHTTP(rr, req)
@@ -542,7 +542,7 @@ func TestHandleGetHubVariableValues_CorruptValueDoesNotFailWholeRequest(t *testi
 		Return(valkeymock.Result(valkeymock.ValkeyBlobString("not-an-int"))).AnyTimes()
 
 	mux := NewRouter(t.Context(), deps)
-	req := httptest.NewRequest(http.MethodGet, "/variables/values/hub/mdaihub-sample", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/variables/values/hub/mdaihub-sample", http.NoBody)
 	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
 
@@ -597,7 +597,8 @@ func TestHandleDeleteVariables(t *testing.T) {
 				}
 			}
 
-			req := httptest.NewRequest(http.MethodDelete, "/variables/hub/mdaihub-sample/var/data_"+urlVar, bytes.NewBufferString(tt.body))
+			ctx := t.Context()
+			req := httptest.NewRequestWithContext(ctx, http.MethodDelete, "/variables/hub/mdaihub-sample/var/data_"+urlVar, bytes.NewBufferString(tt.body))
 			req.Header.Set("Content-Type", "application/json")
 
 			mockClient, ok := deps.ValkeyClient.(*valkeymock.Client)
@@ -662,7 +663,8 @@ func TestHandleSetVariables(t *testing.T) {
 
 	for _, tt := range setTests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodPost, "/variables/hub/mdaihub-sample/var/data_"+tt.name, bytes.NewBufferString(tt.body))
+			ctx := t.Context()
+			req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/variables/hub/mdaihub-sample/var/data_"+tt.name, bytes.NewBufferString(tt.body))
 			req.Header.Set("Content-Type", "application/json")
 
 			mockClient, ok := deps.ValkeyClient.(*valkeymock.Client)
@@ -709,7 +711,7 @@ func TestHandleSetVariables_PublishFailureHidesInternalError(t *testing.T) {
 	}
 	mockClient.EXPECT().Do(ctx, XaddMatcher{}).Return(valkeymock.Result(valkeymock.ValkeyString(""))).Times(1)
 
-	req := httptest.NewRequest(http.MethodPost, "/variables/hub/mdaihub-sample/var/data_string", bytes.NewBufferString(`{"data":"value"}`))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/variables/hub/mdaihub-sample/var/data_string", bytes.NewBufferString(`{"data":"value"}`))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -775,7 +777,7 @@ func TestHandleSetVariables_InvalidRequestPayload(t *testing.T) {
 
 	for _, tt := range setTests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodPost, "/variables/hub/mdaihub-sample/var/data_"+tt.name, bytes.NewBufferString(tt.body))
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/variables/hub/mdaihub-sample/var/data_"+tt.name, bytes.NewBufferString(tt.body))
 			req.Header.Set("Content-Type", "application/json")
 
 			rr := httptest.NewRecorder()
@@ -824,7 +826,7 @@ func TestHandleDeleteVariables_InvalidRequestPayload(t *testing.T) {
 
 	for _, tt := range setTests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodDelete, "/variables/hub/mdaihub-sample/var/data_"+tt.name, bytes.NewBufferString(tt.body))
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodDelete, "/variables/hub/mdaihub-sample/var/data_"+tt.name, bytes.NewBufferString(tt.body))
 			req.Header.Set("Content-Type", "application/json")
 
 			rr := httptest.NewRecorder()
@@ -844,7 +846,7 @@ func TestHandleSetDeleteVariables_NonExistentHub(t *testing.T) {
 
 	for _, method := range []string{http.MethodPost, http.MethodDelete} {
 		t.Run(method, func(t *testing.T) {
-			req := httptest.NewRequest(method, "/variables/hub/nonexistent_hub/var/data_string", bytes.NewBufferString(`{"data":"value"}`))
+			req := httptest.NewRequestWithContext(t.Context(), method, "/variables/hub/nonexistent_hub/var/data_string", bytes.NewBufferString(`{"data":"value"}`))
 			req.Header.Set("Content-Type", "application/json")
 
 			rr := httptest.NewRecorder()
@@ -905,7 +907,7 @@ func TestHandleSetDeleteVariables_RejectsNonManual(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(tt.method, tt.target, bytes.NewBufferString(tt.body))
+			req := httptest.NewRequestWithContext(t.Context(), tt.method, tt.target, bytes.NewBufferString(tt.body))
 			req.Header.Set("Content-Type", "application/json")
 
 			rr := httptest.NewRecorder()
@@ -980,7 +982,7 @@ func TestUpdateEventsHandler(t *testing.T) {
 	clientset := newFakeClientset(t)
 	deps := setupMocks(t, clientset)
 	mux := NewRouter(t.Context(), deps)
-	req := httptest.NewRequest(http.MethodPost, "/alerts/alertmanager", bytes.NewBuffer(alertPostBody1))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/alerts/alertmanager", bytes.NewBuffer(alertPostBody1))
 	req.Header.Set("Content-Type", "application/json")
 
 	mockClient, ok := deps.ValkeyClient.(*valkeymock.Client)
@@ -997,7 +999,7 @@ func TestUpdateEventsHandler(t *testing.T) {
 
 	// one more time with different payload
 	alertPostBody2 := readPayloadFromFile(t, alert2)
-	req = httptest.NewRequest(http.MethodPost, "/alerts/alertmanager", bytes.NewBuffer(alertPostBody2))
+	req = httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/alerts/alertmanager", bytes.NewBuffer(alertPostBody2))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr = httptest.NewRecorder()
@@ -1008,7 +1010,7 @@ func TestUpdateEventsHandler(t *testing.T) {
 
 	// one more time to emulate a scenario when alert was re-created or renamed
 	alertPostBody3 := readPayloadFromFile(t, alert3)
-	req = httptest.NewRequest(http.MethodPost, "/alerts/alertmanager", bytes.NewBuffer(alertPostBody3))
+	req = httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/alerts/alertmanager", bytes.NewBuffer(alertPostBody3))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr = httptest.NewRecorder()
@@ -1018,7 +1020,7 @@ func TestUpdateEventsHandler(t *testing.T) {
 	assert.JSONEq(t, post3Response, rr.Body.String())
 
 	// one more with skipped alerts
-	req = httptest.NewRequest(http.MethodPost, "/alerts/alertmanager", bytes.NewBuffer(alertPostBody3))
+	req = httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/alerts/alertmanager", bytes.NewBuffer(alertPostBody3))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr = httptest.NewRecorder()
@@ -1046,7 +1048,7 @@ func TestAlerts_PublishFailureReturns5xxAndAllowsRetry(t *testing.T) {
 	mux := NewRouter(t.Context(), deps)
 
 	// First delivery: NATS down, every publish fails.
-	req := httptest.NewRequest(http.MethodPost, "/alerts/alertmanager", bytes.NewBuffer(alertPostBody))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/alerts/alertmanager", bytes.NewBuffer(alertPostBody))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
@@ -1056,7 +1058,7 @@ func TestAlerts_PublishFailureReturns5xxAndAllowsRetry(t *testing.T) {
 
 	// Alertmanager retries the same payload once NATS is back: all alerts must publish.
 	pub.fail.Store(false)
-	req = httptest.NewRequest(http.MethodPost, "/alerts/alertmanager", bytes.NewBuffer(alertPostBody))
+	req = httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/alerts/alertmanager", bytes.NewBuffer(alertPostBody))
 	req.Header.Set("Content-Type", "application/json")
 	rr = httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
@@ -1065,7 +1067,7 @@ func TestAlerts_PublishFailureReturns5xxAndAllowsRetry(t *testing.T) {
 	assert.JSONEq(t, `{"message":"Processed Prometheus alerts", "skipped":0, "successful":3, "total":3}`+"\n", rr.Body.String())
 
 	// A second, identical delivery is now deduplicated.
-	req = httptest.NewRequest(http.MethodPost, "/alerts/alertmanager", bytes.NewBuffer(alertPostBody))
+	req = httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/alerts/alertmanager", bytes.NewBuffer(alertPostBody))
 	req.Header.Set("Content-Type", "application/json")
 	rr = httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
@@ -1114,7 +1116,7 @@ func TestAlerts_AdaptationFailureReturns400(t *testing.T) {
 			mux := NewRouter(t.Context(), deps)
 
 			body := fmt.Sprintf(alertBody, tt.annotations, tt.fingerprint)
-			req := httptest.NewRequest(http.MethodPost, "/alerts/alertmanager", bytes.NewBufferString(body))
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/alerts/alertmanager", bytes.NewBufferString(body))
 			req.Header.Set("Content-Type", "application/json")
 			rr := httptest.NewRecorder()
 			mux.ServeHTTP(rr, req)
@@ -1134,7 +1136,7 @@ func TestAlerts_NilDataReturns400(t *testing.T) {
 			deps := setupReadOnlyMocks(t, clientset)
 			mux := NewRouter(t.Context(), deps)
 
-			req := httptest.NewRequest(http.MethodPost, "/alerts/alertmanager", bytes.NewBufferString(body))
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/alerts/alertmanager", bytes.NewBufferString(body))
 			req.Header.Set("Content-Type", "application/json")
 			rr := httptest.NewRecorder()
 			mux.ServeHTTP(rr, req)
@@ -1173,7 +1175,7 @@ func TestAlerts_UnknownFieldsIgnored(t *testing.T) {
 	require.True(t, ok)
 	mockClient.EXPECT().Do(gomock.Any(), XaddMatcher{}).Return(valkeymock.Result(valkeymock.ValkeyString(""))).AnyTimes()
 
-	req := httptest.NewRequest(http.MethodPost, "/alerts/alertmanager", bytes.NewBufferString(alertBody))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/alerts/alertmanager", bytes.NewBufferString(alertBody))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
@@ -1188,7 +1190,7 @@ func TestAlerts_Failuers(t *testing.T) {
 	mux := NewRouter(t.Context(), deps)
 
 	// Prometheus JSON fail
-	req := httptest.NewRequest(http.MethodPost, "/alerts/alertmanager", bytes.NewBufferString(`{"receiver":"foo","alerts": true}`))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/alerts/alertmanager", bytes.NewBufferString(`{"receiver":"foo","alerts": true}`))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -1199,7 +1201,7 @@ func TestAlerts_Failuers(t *testing.T) {
 
 	// io.ReadAll failure
 	mux = NewRouter(t.Context(), deps)
-	req = httptest.NewRequest(http.MethodPost, "/alerts/alertmanager", &errReader{})
+	req = httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/alerts/alertmanager", &errReader{})
 	req.Header.Set("Content-Type", "application/json")
 
 	rr = httptest.NewRecorder()
@@ -1210,7 +1212,7 @@ func TestAlerts_Failuers(t *testing.T) {
 
 	// bad json
 	mux = NewRouter(t.Context(), deps)
-	req = httptest.NewRequest(http.MethodPost, "/alerts/alertmanager", bytes.NewBufferString("foo"))
+	req = httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/alerts/alertmanager", bytes.NewBufferString("foo"))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr = httptest.NewRecorder()
@@ -1226,7 +1228,7 @@ func TestAlerts_NotAllowed(t *testing.T) {
 
 	for _, method := range []string{http.MethodConnect, http.MethodOptions, http.MethodTrace, http.MethodPut, http.MethodPatch, http.MethodDelete} {
 		mux := NewRouter(t.Context(), deps)
-		req := httptest.NewRequest(method, "/alerts/alertmanager", http.NoBody)
+		req := httptest.NewRequestWithContext(t.Context(), method, "/alerts/alertmanager", http.NoBody)
 		req.Header.Set("Content-Type", "application/json")
 
 		rr := httptest.NewRecorder()
@@ -1261,7 +1263,7 @@ func TestAudit_Success(t *testing.T) {
 			),
 		).Times(1)
 
-	req := httptest.NewRequest(http.MethodGet, "/audit", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/audit", http.NoBody)
 	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
 
@@ -1278,7 +1280,7 @@ func TestAudit_Fail(t *testing.T) {
 								Do(gomock.Any(), valkeymock.Match("XREVRANGE", audit.MdaiHubEventHistoryStreamName, "+", "-")).
 								Return(valkeymock.Result(valkeymock.ValkeyBlobString("foo"))).Times(1)
 
-	req := httptest.NewRequest(http.MethodGet, "/audit", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/audit", http.NoBody)
 	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
 
@@ -1292,7 +1294,7 @@ func TestAlets_TrailingJSON(t *testing.T) {
 	mux := NewRouter(t.Context(), deps)
 
 	// trailing JSON after a valid object -> must be rejected
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(t.Context(),
 		http.MethodPost,
 		"/alerts/alertmanager",
 		bytes.NewBufferString(string(readPayloadFromFile(t, alert1))+" {}"), // second top-level JSON value
@@ -1328,7 +1330,7 @@ func TestAlerts_BodyTooLarge(t *testing.T) {
 	body, err := json.Marshal(oversizedAlert)
 	require.NoError(t, err)
 
-	req := httptest.NewRequest(http.MethodPost, "/alerts/alertmanager", bytes.NewReader(body))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/alerts/alertmanager", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
@@ -1346,7 +1348,7 @@ func TestAlerts_WrongContentType(t *testing.T) {
 	body := strings.NewReader(`{"status":"firing","alerts":[]}`)
 
 	// Content-Type wrong -> 415 Unsupported Media Type (middleware)
-	req := httptest.NewRequest(http.MethodPost, "/alerts/alertmanager", body)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/alerts/alertmanager", body)
 	req.Header.Set("Content-Type", "text/plain")
 
 	rr := httptest.NewRecorder()

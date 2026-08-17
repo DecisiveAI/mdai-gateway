@@ -40,7 +40,7 @@ func TestHandleListVariables_MalformedSchema(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.target, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodGet, tt.target, http.NoBody)
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, tt.target, http.NoBody)
 			rr := httptest.NewRecorder()
 
 			mux.ServeHTTP(rr, req)
@@ -62,7 +62,7 @@ func TestHandleGetHubVariableValues_MalformedSchema(t *testing.T) {
 	})
 
 	mux := NewRouter(t.Context(), deps)
-	req := httptest.NewRequest(http.MethodGet, "/variables/values/hub/mdaihub-sample", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/variables/values/hub/mdaihub-sample", http.NoBody)
 	rr := httptest.NewRecorder()
 
 	mux.ServeHTTP(rr, req)
@@ -79,7 +79,7 @@ func TestHandleGetVariables_LogsMalformedRequestedSchema(t *testing.T) {
 	})
 
 	mux := NewRouter(t.Context(), deps)
-	req := httptest.NewRequest(http.MethodGet, "/variables/values/hub/mdaihub-sample/var/broken_var", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/variables/values/hub/mdaihub-sample/var/broken_var", http.NoBody)
 	rr := httptest.NewRecorder()
 
 	mux.ServeHTTP(rr, req)
@@ -103,7 +103,7 @@ func TestHandleGetVariables_LogsValkeyReadError(t *testing.T) {
 		Return(valkeymock.ErrorResult(errors.New("boom")))
 
 	mux := NewRouter(t.Context(), deps)
-	req := httptest.NewRequest(http.MethodGet, "/variables/values/hub/mdaihub-sample/var/data_string", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/variables/values/hub/mdaihub-sample/var/data_string", http.NoBody)
 	rr := httptest.NewRecorder()
 
 	mux.ServeHTTP(rr, req)
@@ -133,7 +133,7 @@ func TestHandleGetHubVariableValues_LogsValkeyReadError(t *testing.T) {
 		Return(valkeymock.ErrorResult(errors.New("boom")))
 
 	mux := NewRouter(t.Context(), deps)
-	req := httptest.NewRequest(http.MethodGet, "/variables/values/hub/mdaihub-sample", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/variables/values/hub/mdaihub-sample", http.NoBody)
 	rr := httptest.NewRecorder()
 
 	mux.ServeHTTP(rr, req)
@@ -159,7 +159,7 @@ func TestHandleGetVariables_LogsSlowRead(t *testing.T) {
 		Return(valkeymock.Result(valkeymock.ValkeyBlobString("foo")))
 
 	mux := NewRouter(t.Context(), deps)
-	req := httptest.NewRequest(http.MethodGet, "/variables/values/hub/mdaihub-sample/var/data_string", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/variables/values/hub/mdaihub-sample/var/data_string", http.NoBody)
 	rr := httptest.NewRecorder()
 
 	mux.ServeHTTP(rr, req)
@@ -191,7 +191,7 @@ func TestHandleGetHubVariableValues_LogsSlowRead(t *testing.T) {
 		Return(valkeymock.Result(valkeymock.ValkeyBlobString("foo")))
 
 	mux := NewRouter(t.Context(), deps)
-	req := httptest.NewRequest(http.MethodGet, "/variables/values/hub/mdaihub-sample", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/variables/values/hub/mdaihub-sample", http.NoBody)
 	rr := httptest.NewRecorder()
 
 	mux.ServeHTTP(rr, req)

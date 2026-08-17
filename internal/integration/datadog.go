@@ -79,7 +79,7 @@ func (ddi *DataDogIntegration) GetIntegrationByName(ctx context.Context, namespa
 
 // SetIntegration adds or updates the "mdai-gateway-integration" secret for the provided namespace.
 func (ddi *DataDogIntegration) SetIntegration(ctx context.Context, namespace, integrationName string, integrationData DataDogIntegrationData) error {
-	jsonData, err := json.Marshal(integrationData)
+	jsonData, err := json.Marshal(integrationData) //nolint:gosec // API key data is intentionally stored in a Kubernetes Secret payload.
 	if err != nil {
 		return fmt.Errorf("failed to marshal integration data: %w", err)
 	}
