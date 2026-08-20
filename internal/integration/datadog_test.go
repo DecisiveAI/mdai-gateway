@@ -18,7 +18,7 @@ func TestGetIntegrations(t *testing.T) {
 	t.Parallel()
 
 	validInt := DataDogIntegrationData{APIKey: "12345", DDUrl: "https://example.com"}
-	validIntBytes, err := json.Marshal(validInt)
+	validIntBytes, err := json.Marshal(validInt) //nolint:gosec // test fixture only; not a real Datadog credential.
 	require.NoError(t, err)
 
 	t.Run("secret does not exist", func(t *testing.T) {
@@ -89,7 +89,7 @@ func TestGetIntegrationByName(t *testing.T) {
 	t.Parallel()
 
 	validInt := DataDogIntegrationData{APIKey: "12345", DDUrl: "https://example.com"}
-	validIntBytes, err := json.Marshal(validInt)
+	validIntBytes, err := json.Marshal(validInt) //nolint:gosec // test fixture only; not a real Datadog credential.
 	require.NoError(t, err)
 
 	t.Run("secret does not exist", func(t *testing.T) {

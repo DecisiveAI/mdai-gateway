@@ -29,6 +29,7 @@ const (
 	hubNameNonIdentifyingAttributeKey           = "hub_name"
 	instanceIDIdentifyingAttributeKey           = "service.instance.id"
 	replayStatusVariableNonIdentifyingAttribute = "replay_status_variable"
+	replayCompleteEventName                     = "replay-complete"
 )
 
 type OpAMPControlServer struct {
@@ -189,7 +190,7 @@ func (ctrl *OpAMPControlServer) publishCompletionEvent(ctx context.Context, agen
 		ctrl.logger.Error("Failed to marshal Replay Completion Event Payload.", zap.Error(marshalErr))
 	}
 	event := eventing.MdaiEvent{
-		Name:     "replay-complete",
+		Name:     replayCompleteEventName,
 		Source:   eventing.ManualVariablesEventSource,
 		SourceID: agent.instanceID,
 		Payload:  string(payloadBytes),

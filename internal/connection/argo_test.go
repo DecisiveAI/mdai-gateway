@@ -377,7 +377,7 @@ func TestPushArgoApp_Error_HTTPDoFailed(t *testing.T) {
 
 	connData := OctantConnectionData{
 		Destinations: []OctantConnectionDestination{
-			{DestinationType: "datadog", IntegrationName: "dd-1"},
+			{DestinationType: datadogDestinationType, IntegrationName: "dd-1"},
 		},
 		Deployment: &Deployment{IntegrationName: "argo-test"},
 	}

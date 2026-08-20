@@ -116,7 +116,7 @@ func TestRenderSecretManifest(t *testing.T) {
 		templateData := ArgoTemplateData{
 			AppName:        "test-app",
 			IsArgoSideload: true,
-			DatadogIntegrationData: &integration.DataDogIntegrationData{
+			DatadogIntegrationData: &integration.DataDogIntegrationData{ //nolint:gosec // exportable manifests use a placeholder, not a real credential.
 				APIKey: "fake-dd-api-key",
 				DDUrl:  "https://datadoghq.com",
 			},
@@ -203,7 +203,7 @@ func TestRenderCollectorManifest(t *testing.T) {
 		otelConfig := otelConfigRaw.(map[string]any)
 
 		// Check Datadog Exporter
-		apiBlock, found := getNestedField(otelConfig, "exporters", "datadog", "api")
+		apiBlock, found := getNestedField(otelConfig, "exporters", datadogDestinationType, "api")
 		require.True(t, found, "Datadog API exporter should be configured")
 		apiMap := apiBlock.(map[string]any)
 		assert.Equal(t, "${env:DD_API_KEY}", apiMap["key"])
@@ -229,7 +229,7 @@ func TestRenderCollectorManifest(t *testing.T) {
 		for _, tel := range []string{"logs", "traces"} {
 			receivers, found := getNestedField(otelConfig, "service", "pipelines", tel, "receivers")
 			require.True(t, found, "Pipeline %s should exist", tel)
-			assert.Contains(t, receivers.([]any), "datadog", "Pipeline should include datadog receiver")
+			assert.Contains(t, receivers.([]any), datadogDestinationType, "Pipeline should include datadog receiver")
 		}
 	})
 
@@ -266,7 +266,7 @@ func TestRenderCollectorManifest(t *testing.T) {
 		assert.True(t, hasOtelConfig, "OTEL config should exist")
 		otelConfig := otelConfigRaw.(map[string]any)
 
-		_, foundExporters := getNestedField(otelConfig, "exporters", "datadog", "api")
+		_, foundExporters := getNestedField(otelConfig, "exporters", datadogDestinationType, "api")
 		assert.False(t, foundExporters, "Datadog API exporter should NOT be configured")
 
 		_, foundLogs := getNestedField(otelConfig, "service", "pipelines", "logs")
@@ -346,7 +346,7 @@ func TestCreateExportableArgoManifests(t *testing.T) {
 
 	connection := OctantConnectionData{
 		Destinations: []OctantConnectionDestination{
-			{DestinationType: "datadog", IntegrationName: "test-dd"},
+			{DestinationType: datadogDestinationType, IntegrationName: "test-dd"},
 		},
 		Deployment: &Deployment{
 			Type: ArgoManifestsDeploymentType,
@@ -391,7 +391,7 @@ func TestCreateTemplateData(t *testing.T) {
 
 		connection := OctantConnectionData{
 			Destinations: []OctantConnectionDestination{
-				{DestinationType: "datadog"},
+				{DestinationType: datadogDestinationType},
 				{DestinationType: "dogodat"},
 			},
 		}
@@ -426,7 +426,7 @@ func TestCreateTemplateData(t *testing.T) {
 
 		connection := OctantConnectionData{
 			Destinations: []OctantConnectionDestination{
-				{DestinationType: "datadog", IntegrationName: "broken-integration"},
+				{DestinationType: datadogDestinationType, IntegrationName: "broken-integration"},
 			},
 		}
 

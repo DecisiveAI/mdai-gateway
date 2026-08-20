@@ -1,6 +1,6 @@
 module github.com/mydecisive/mdai-gateway
 
-go 1.25.0
+go 1.26.6
 
 require (
 	github.com/mydecisive/mdai-data-core v0.4.2

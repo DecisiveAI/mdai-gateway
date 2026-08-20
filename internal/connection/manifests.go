@@ -41,6 +41,8 @@ type ManifestOutputFormat string
 const (
 	YAMLOutputFormat ManifestOutputFormat = "yaml"
 	JSONOutputFormat ManifestOutputFormat = "json"
+
+	datadogDestinationType = "datadog"
 )
 
 func (oc *OctantConnection) createTemplateData(ctx context.Context, namespace string, name string, connection OctantConnectionData) (*ArgoTemplateData, error) {
@@ -51,7 +53,7 @@ func (oc *OctantConnection) createTemplateData(ctx context.Context, namespace st
 	var datadogIntegration *integration.DataDogIntegrationData
 	for _, destination := range connection.Destinations {
 		switch destination.DestinationType {
-		case "datadog":
+		case datadogDestinationType:
 			foundDDIntegration, getDDIntErr := oc.datadogClient.GetIntegrationByName(ctx, namespace, destination.IntegrationName)
 			if getDDIntErr != nil {
 				return nil, getDDIntErr
@@ -98,7 +100,7 @@ func CreateExportableTemplateData(namespace string, name string, connection Octa
 		// TODO: Implement multiple destination handling and handling of non-dd integrations
 		return nil, errors.New("pushing argo application with multiple destinations is currently unsupported")
 	}
-	datadogIntegration := integration.DataDogIntegrationData{
+	datadogIntegration := integration.DataDogIntegrationData{ //nolint:gosec // exportable manifests use a placeholder, not a real credential.
 		APIKey: "<YOUR_API_KEY>",
 		DDUrl:  "<YOUR_DD_URL>",
 	}

@@ -240,7 +240,7 @@ func TestDigForCompletionAndExecuteHandler(t *testing.T) {
 			}),
 			expectedEvent: map[string]string{
 				"subject":  "var.hub1.replay-status",
-				"name":     "replay-complete",
+				"name":     replayCompleteEventName,
 				"payload":  `{"variableRef":"replay-status","dataType":"string","operation":"add","data":"{\"replay_name\":\"replay1\",\"replay_status\":\"completed\"}"}`,
 				"source":   "manual_variables_api",
 				"sourceId": "instance1",
@@ -263,7 +263,7 @@ func TestDigForCompletionAndExecuteHandler(t *testing.T) {
 			}),
 			expectedEvent: map[string]string{
 				"subject":  "var.hub1.replay-status",
-				"name":     "replay-complete",
+				"name":     replayCompleteEventName,
 				"payload":  `{"variableRef":"replay-status","dataType":"string","operation":"add","data":"{\"replay_name\":\"replay1\",\"replay_status\":\"failed\"}"}`,
 				"source":   "manual_variables_api",
 				"sourceId": "instance1",
